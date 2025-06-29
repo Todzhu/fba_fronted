@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-white">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
     <!-- 顶部导航栏 -->
-    <header class="bg-white shadow-sm border-b border-gray-100">
+    <header class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-100 transition-all duration-300">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
           <!-- Logo -->
@@ -14,44 +14,56 @@
             </div>
           </div>
 
-          <!-- 搜索框 -->
-          <div class="flex-1 max-w-lg mx-8">
+          <!-- 导航菜单 -->
+          <nav class="hidden md:flex items-center space-x-8">
+            <a href="#" class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-base font-semibold transition-colors">
+              云流程
+            </a>
+            <a href="#" class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-base font-semibold transition-colors">
+              云工具
+            </a>
+            <a href="#" class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-base font-semibold transition-colors">
+              文章复现
+            </a>
+            <a href="#" class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-base font-semibold transition-colors">
+              示例报告
+            </a>
+          </nav>
+
+          <!-- 搜索框和登录注册按钮 -->
+          <div class="flex items-center space-x-4">
+            <!-- 搜索框 -->
             <div class="relative">
               <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search class="h-5 w-5 text-gray-400" />
+                <Search class="h-4 w-4 text-gray-400" />
               </div>
               <input
                 v-model="searchQuery"
                 type="text"
-                placeholder="搜索分析工具..."
-                class="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="搜索工具..."
+                class="block w-64 pl-9 pr-9 py-2 border border-gray-300 rounded-lg text-sm leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <div v-if="searchQuery" class="absolute inset-y-0 right-0 pr-3 flex items-center">
                 <button @click="clearSearch" class="text-gray-400 hover:text-gray-600">
-                  <X class="h-5 w-5" />
+                  <X class="h-4 w-4" />
                 </button>
               </div>
             </div>
-          </div>
-
-          <!-- 登录注册按钮 -->
-          <div class="flex items-center space-x-4">
-            <a href="#" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors">
-              数据管理
+            
+            <!-- 登录注册按钮 -->
+            <a href="/auth/register" class="text-gray-700 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors">
+              注册
             </a>
             <router-link to="/auth/login" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               登录
             </router-link>
-            <!-- <router-link to="/auth/register" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              注册
-            </router-link> -->
           </div>
         </div>
       </div>
     </header>
 
     <!-- 主标题区 -->
-    <section class="bg-gradient-to-br from-blue-50 to-cyan-50 py-16">
+    <section class="bg-gradient-to-br from-blue-50 to-cyan-50 py-16 pt-32">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
           发现强大的生物信息分析工具
@@ -63,7 +75,7 @@
     </section>
 
     <!-- 分类筛选区 -->
-    <section class="bg-white py-8 border-b border-gray-100">
+    <section class="py-8 bg-gradient-to-b from-transparent to-white/50 border-b border-gray-100">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex overflow-x-auto space-x-4 pb-2">
           <button
@@ -84,13 +96,13 @@
     </section>
 
     <!-- 工具展示区 -->
-    <section class="py-12">
+    <section class="py-12 bg-gradient-to-b from-transparent to-white/50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           <div
             v-for="tool in filteredTools"
             :key="tool.id"
-            class="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+            class="bg-white/90 backdrop-blur-sm rounded-xl shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"
           >
             <!-- 工具示例图 -->
             <div class="h-48 bg-gray-100 overflow-hidden">
@@ -142,7 +154,7 @@
     </section>
 
     <!-- 平台介绍 -->
-    <section class="py-16 bg-gray-50">
+    <section class="py-16 bg-gradient-to-r from-gray-50 to-blue-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-12">
           <h2 class="text-3xl font-bold text-gray-900 mb-4">平台介绍</h2>
@@ -180,7 +192,7 @@
     </section>
 
     <!-- 关于我们 -->
-    <section class="py-16 bg-white">
+    <section class="py-16 bg-gradient-to-l from-white to-gray-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div>
@@ -222,7 +234,7 @@
     </section>
 
     <!-- 联系我们 -->
-    <section class="py-16 bg-blue-50">
+    <section class="py-16 bg-gradient-to-br from-blue-50 to-indigo-100">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         <h2 class="text-3xl font-bold text-gray-900 mb-4">联系我们</h2>
         <p class="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
@@ -437,7 +449,7 @@ const tools = ref([
       '基因预测和注释',
       '重复序列识别',
       '比较基因组学分析',
-      '变异检测'
+      '变异���测'
     ],
     useCases: [
       '新物种基因组测序',

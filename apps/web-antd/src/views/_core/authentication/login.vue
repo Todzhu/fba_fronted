@@ -52,9 +52,9 @@ const showNotification = () => {
   });
 };
 
-onMounted(() => {
-  showNotification();
-});
+// onMounted(() => {
+//   showNotification();
+// });
 
 const authStore = useAuthStore();
 
