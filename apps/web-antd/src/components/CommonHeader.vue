@@ -2,15 +2,18 @@
   <header class="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-100 transition-all duration-300">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
-        <!-- Logo -->
-        <div class="flex items-center">
+        <!-- Logo（点击返回首页） -->
+        <router-link
+          to="/index"
+          class="flex items-center group cursor-pointer select-none"
+        >
           <div class="flex-shrink-0 flex items-center">
-            <div class="w-8 h-8 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-lg flex items-center justify-center">
+            <div class="w-8 h-8 bg-gradient-to-br from-blue-600 to-cyan-500 rounded-lg flex items-center justify-center group-hover:shadow group-hover:scale-105 transition-all">
               <span class="text-white font-bold text-sm">BC</span>
             </div>
-            <span class="ml-2 text-xl font-bold text-gray-900">BioCloud</span>
+            <span class="ml-2 text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">BioCloud</span>
           </div>
-        </div>
+        </router-link>
 
         <!-- 导航菜单 -->
         <nav class="hidden md:flex items-center space-x-8">
