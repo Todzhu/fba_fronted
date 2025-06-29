@@ -83,6 +83,7 @@
     "happy-dom": "catalog:",
     "is-ci": "catalog:",
     "lefthook": "catalog:",
+    "less": "^4.3.0",
     "playwright": "catalog:",
     "rimraf": "catalog:",
     "tailwindcss": "catalog:",
@@ -117,5 +118,8 @@
       "canvas",
       "node-gyp"
     ]
+  },
+  "dependencies": {
+    "x-data-spreadsheet": "^1.1.9"
   }
 }
