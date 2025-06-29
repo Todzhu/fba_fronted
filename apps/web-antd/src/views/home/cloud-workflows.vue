@@ -17,20 +17,20 @@
           <!-- 导航菜单 -->
           <nav class="hidden md:flex items-center space-x-8">
             <router-link 
-              to="/"
+              to="/index"
               :class="[
-                'px-3 py-2 rounded-md text-lg font-semibold transition-all duration-200',
-                $route.path === '/'
+                'px-3 py-2 rounded-md text-base font-semibold transition-all duration-200',
+                $route.path === '/index'
                   ? 'bg-blue-100 text-blue-700 shadow-sm'
                   : 'text-gray-800 hover:text-blue-600 hover:bg-gray-50'
               ]"
             >
-              首页
+              云工具
             </router-link>
             <router-link 
               to="/cloud-workflows"
               :class="[
-                'px-3 py-2 rounded-md text-lg font-semibold transition-all duration-200',
+                'px-3 py-2 rounded-md text-base font-semibold transition-all duration-200',
                 $route.path === '/cloud-workflows'
                   ? 'bg-blue-100 text-blue-700 shadow-sm'
                   : 'text-gray-800 hover:text-blue-600 hover:bg-gray-50'
@@ -38,24 +38,39 @@
             >
               云流程
             </router-link>
-            <a 
-              href="#" 
-              class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-lg font-semibold transition-colors"
-            >
-              云工具
-            </a>
-            <a 
-              href="#" 
-              class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-lg font-semibold transition-colors"
+            <router-link 
+              to="/article-reproduction"
+              :class="[
+                'px-3 py-2 rounded-md text-base font-semibold transition-all duration-200',
+                $route.path === '/article-reproduction'
+                  ? 'bg-blue-100 text-blue-700 shadow-sm'
+                  : 'text-gray-800 hover:text-blue-600 hover:bg-gray-50'
+              ]"
             >
               文章复现
-            </a>
-            <a 
-              href="#" 
-              class="text-gray-800 hover:text-blue-600 px-3 py-2 rounded-md text-lg font-semibold transition-colors"
+            </router-link>
+            <router-link 
+              to="/example-reports"
+              :class="[
+                'px-3 py-2 rounded-md text-base font-semibold transition-all duration-200',
+                $route.path === '/example-reports'
+                  ? 'bg-blue-100 text-blue-700 shadow-sm'
+                  : 'text-gray-800 hover:text-blue-600 hover:bg-gray-50'
+              ]"
             >
               示例报告
-            </a>
+            </router-link>
+            <router-link 
+              to="/data-management"
+              :class="[
+                'px-3 py-2 rounded-md text-base font-semibold transition-all duration-200',
+                $route.path === '/data-management'
+                  ? 'bg-blue-100 text-blue-700 shadow-sm'
+                  : 'text-gray-800 hover:text-blue-600 hover:bg-gray-50'
+              ]"
+            >
+              数据管理
+            </router-link>
           </nav>
 
           <!-- 搜索框和登录注册按钮 -->

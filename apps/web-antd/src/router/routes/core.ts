@@ -39,6 +39,66 @@ const coreRoutes: RouteRecordRaw[] = [
     path: '/index',
   },
   /**
+   * 云流程页面路由
+   */
+  {
+    component: () => import('#/views/home/cloud-workflows.vue'),
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      title: '云流程',
+      ignoreAccess: true, // 明确声明忽略权限访问
+    },
+    name: 'CloudWorkflows',
+    path: '/cloud-workflows',
+  },
+  /**
+   * 文章复现页面路由
+   */
+  {
+    component: () => import('#/views/home/article-reproduction.vue'),
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      title: '文章复现',
+      ignoreAccess: true, // 明确声明忽略权限访问
+    },
+    name: 'ArticleReproduction',
+    path: '/article-reproduction',
+  },
+  /**
+   * 示例报告页面路由
+   */
+  {
+    component: () => import('#/views/home/example-reports.vue'),
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      title: '示例报告',
+      ignoreAccess: true, // 明确声明忽略权限访问
+    },
+    name: 'ExampleReports',
+    path: '/example-reports',
+  },
+  /**
+   * 数据管理页面路由
+   */
+  {
+    component: () => import('#/views/home/data-management.vue'),
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      title: '数据管理',
+      ignoreAccess: true, // 明确声明忽略权限访问
+    },
+    name: 'DataManagement',
+    path: '/data-management',
+  },
+  /**
    * 根路由
    * 使用基础布局，作为所有页面的父级容器，子级就不必配置BasicLayout。
    * 此路由必须存在，且不应修改
