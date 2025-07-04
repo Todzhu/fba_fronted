@@ -172,11 +172,7 @@ const selectedFunctionalCategory = ref('')
 
 // Categories
 const primaryCategories = ['全部', '组学通用', '单细胞转录组', '蛋白组学', '其他']
-const functionalCategories = [
-  'ID转换', '富集分析', '可视化绘图', 'h5ad相关', '差异可视化', '亚细胞定位', 
-  '统计分析', '机器学习', '特征筛选', '降维分析', '特征转换', '序列处理', 
-  '功能注释', '互作网络', '互作分析', '统计工具'
-]
+const functionalCategories = ['富集分析', '可视化绘图', 'h5ad相关', '统计分析', '特征转换', '序列处理']
 
 // Sample tools data
 const tools = ref([
