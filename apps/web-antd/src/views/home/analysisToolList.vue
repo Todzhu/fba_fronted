@@ -70,11 +70,20 @@
         >
           <!-- Tool Header -->
           <div class="flex items-start gap-4 mb-4">
-            <div class="w-12 h-12 rounded-lg flex items-center justify-center" :style="{ backgroundColor: tool.iconBg }">
-              <component :is="tool.icon" class="w-6 h-6" :style="{ color: tool.iconColor }" />
+            <div class="w-12 h-12 rounded-lg flex items-center justify-center" :style="{ backgroundColor: tool.icon_bg }">
+              <component :is="tool.icon" class="w-6 h-6" :style="{ color: tool.icon_color }" />
             </div>
             <div class="flex-1">
-              <h3 class="font-semibold text-gray-900 mb-1">{{ tool.name }}</h3>
+              <h3 class="font-semibold text-gray-900 mb-1 flex items-center">
+                {{ tool.name }}
+                <button
+                  @click.stop="toggleFavorite(tool)"
+                  :class="['ml-2', tool.is_favorite ? 'text-yellow-400' : 'text-gray-300', 'hover:text-yellow-500', 'focus:outline-none']"
+                  title="收藏"
+                >
+                  <Star class="w-5 h-5" :fill="tool.is_favorite ? 'currentColor' : 'none'" />
+                </button>
+              </h3>
               <div class="flex gap-2">
                 <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{{ tool.category }}</span>
                 <span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">{{ tool.type }}</span>
@@ -144,12 +153,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { 
-  ChevronDown, 
-  Eye, 
-  Star, 
-  Heart, 
+import { ref, computed, watch, onMounted } from 'vue'
+import {
+  ChevronDown,
+  Eye,
+  Star,
+  Heart,
   Search,
   BarChart3,
   GitBranch,
@@ -162,180 +171,94 @@ import {
   PieChart,
   Activity
 } from 'lucide-vue-next'
+import { fetchAnalysisToolList, fetchAnalysisToolCategories } from '../../api/analysisTool'
 
-// Reactive data
 const searchQuery = ref('')
 const currentPage = ref(1)
-const itemsPerPage = 8
+const itemsPerPage = 10
 const selectedPrimaryCategory = ref('全部')
-const selectedFunctionalCategory = ref('')
+const selectedFunctionalCategory = ref('全部')
 
-// Categories
 const primaryCategories = ['全部', '组学通用', '单细胞转录组', '蛋白组学', '其他']
-const functionalCategories = ['富集分析', '可视化绘图', 'h5ad相关', '统计分析', '特征转换', '序列处理']
+const functionalCategories = ['全部', '富集分析', '可视化绘图', 'h5ad相关', '统计分析', '特征转换', '序列处理']
 
-// Sample tools data
-const tools = ref([
-  {
-    id: 1,
-    name: 'GO富集柱状图',
-    category: '组学通用',
-    type: '富集分析',
-    description: '柱状图可以使用不同的颜色表示不同的GO分类，例如生物学过程、细胞组分和分子功能...',
-    views: 500,
-    likes: 1,
-    icon: BarChart3,
-    iconBg: '#e0f2fe',
-    iconColor: '#0277bd',
-    isFavorite: false
-  },
-  {
-    id: 2,
-    name: '蛋白亚细胞定位',
-    category: '蛋白组学',
-    type: '可视化绘图',
-    description: '亚细胞定位是指某种蛋白质或其他生物分子内的具体位置，真核细胞主要的亚细胞...',
-    views: 492,
-    likes: 4,
-    icon: Target,
-    iconBg: '#fff3e0',
-    iconColor: '#f57c00',
-    isFavorite: true
-  },
-  {
-    id: 3,
-    name: '火山图',
-    category: '组学通用',
-    type: '可视化绘图',
-    description: '火山图（Volcano Plot）是一种用来展示组学数据的图表，可以方便直观地展示两组样品...',
-    views: 1144,
-    likes: 0,
-    icon: TrendingUp,
-    iconBg: '#f3e5f5',
-    iconColor: '#7b1fa2',
-    isFavorite: false
-  },
-  {
-    id: 4,
-    name: '小提琴图',
-    category: '单细胞转录组',
-    type: 'h5ad相关',
-    description: '分析的单细胞转录组数据，经过归一化处理的基因表达小提琴图...',
-    views: 1487,
-    likes: 0,
-    icon: Activity,
-    iconBg: '#e8f5e8',
-    iconColor: '#2e7d32',
-    isFavorite: false
-  },
-  {
-    id: 5,
-    name: 'VENN分析',
-    category: '组学通用',
-    type: '统计分析',
-    description: '韦恩（Venn）图是用于显示不同元素集合的重叠区域的图形，在生物信息学分析中，常用...',
-    views: 639,
-    likes: 0,
-    icon: PieChart,
-    iconBg: '#e1f5fe',
-    iconColor: '#0288d1',
-    isFavorite: true
-  },
-  {
-    id: 6,
-    name: '柱形图',
-    category: '组学通用',
-    type: '可视化绘图',
-    description: '柱状图形图是一种用可视化的个体数据，它包含不同类别之间的数据比较...',
-    views: 191,
-    likes: 0,
-    icon: BarChart3,
-    iconBg: '#fff8e1',
-    iconColor: '#f9a825',
-    isFavorite: false
-  },
-  {
-    id: 7,
-    name: 'Significance A分析',
-    category: '组学通用',
-    type: '统计分析',
-    description: '一般用于比较数据间，是算算实验，间隔内包含的样本数）不满足3次的情况下，比较...',
-    views: 194,
-    likes: 3,
-    icon: Zap,
-    iconBg: '#fce4ec',
-    iconColor: '#c2185b',
-    isFavorite: false
-  },
-  {
-    id: 8,
-    name: '散点图组合',
-    category: '组学通用',
-    type: '统计分析',
-    description: '使用一系列的散点来显示变量自身的标志点的分析，并通过线性回归来更好地它的趋势...',
-    views: 266,
-    likes: 1,
-    icon: GitBranch,
-    iconBg: '#e3f2fd',
-    iconColor: '#1976d2',
-    isFavorite: false
-  }
-])
+const tools = ref([])
+const total = ref(0)
+const loading = ref(false)
 
-// Computed filtered tools
-const filteredTools = computed(() => {
-  let filtered = tools.value
+const iconMap = {
+  BarChart3,
+  GitBranch,
+  Zap,
+  Target,
+  Layers,
+  TrendingUp,
+  Network,
+  Shuffle,
+  PieChart,
+  Activity
+}
 
-  // Filter by primary category
-  if (selectedPrimaryCategory.value !== '全部') {
-    filtered = filtered.filter(tool => tool.category === selectedPrimaryCategory.value)
-  }
+function loadTools() {
+  loading.value = true
+  fetchAnalysisToolList({
+    page: currentPage.value,
+    page_size: itemsPerPage,
+    category: selectedPrimaryCategory.value === '全部' ? '' : selectedPrimaryCategory.value,
+    func_type: selectedFunctionalCategory.value === '全部' ? '' : selectedFunctionalCategory.value,
+    search: searchQuery.value
+  })
+    .then(res => {
+      total.value = res.total
+      tools.value = (res.items || []).map(tool => ({
+        ...tool,
+        icon: iconMap[tool.icon] || BarChart3,
+        icon_bg: tool.icon_bg,
+        icon_color: tool.icon_color,
+        is_favorite: tool.is_favorite
+      }))
+    })
+    .finally(() => {
+      loading.value = false
+    })
+}
 
-  // Filter by functional category (single selection)
-  if (selectedFunctionalCategory.value) {
-    filtered = filtered.filter(tool => tool.type === selectedFunctionalCategory.value)
-  }
-
-  // Filter by search query
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(tool => 
-      tool.name.toLowerCase().includes(query) || 
-      tool.description.toLowerCase().includes(query)
-    )
-  }
-
-  return filtered
+watch([selectedPrimaryCategory, selectedFunctionalCategory, searchQuery], () => {
+  currentPage.value = 1
+  loadTools()
+})
+watch(currentPage, () => {
+  loadTools()
 })
 
-const paginatedTools = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage
-  const end = start + itemsPerPage
-  return filteredTools.value.slice(start, end)
+onMounted(() => {
+  loadTools()
 })
 
-const totalPages = computed(() => {
-  return Math.ceil(filteredTools.value.length / itemsPerPage)
-})
-
+const paginatedTools = computed(() => tools.value)
+const totalPages = computed(() => Math.ceil(total.value / itemsPerPage))
 const visiblePages = computed(() => {
   const pages = []
   const start = Math.max(1, currentPage.value - 2)
   const end = Math.min(totalPages.value, start + 4)
-  
   for (let i = start; i <= end; i++) {
     pages.push(i)
   }
   return pages
 })
 
-// Methods
-const toggleFunctionalCategory = (category) => {
+function toggleFunctionalCategory(category) {
   if (selectedFunctionalCategory.value === category) {
-    selectedFunctionalCategory.value = ''
+    selectedFunctionalCategory.value = '全部'
   } else {
     selectedFunctionalCategory.value = category
   }
+}
+
+function toggleFavorite(tool) {
+  tool.is_favorite = !tool.is_favorite
+  // TODO: Implement actual favorite/unfavorite logic
+  console.log('Toggling favorite for tool:', tool.name, 'is_favorite:', tool.is_favorite)
 }
 </script>
 
