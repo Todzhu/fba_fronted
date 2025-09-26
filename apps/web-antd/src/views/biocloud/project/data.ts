@@ -42,6 +42,27 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       rules: 'selectRequired',
     },
     {
+      component: 'Select',
+      componentProps: {
+        options: [
+          { label: 'Human', value: 'Human' },
+          { label: 'Mouse', value: 'Mouse' }
+        ],
+        placeholder: '请选择物种信息',
+      },
+      fieldName: 'organism',
+      label: '物种',
+      rules: 'selectRequired',
+    },
+    {
+      component: 'Input',
+      componentProps: {
+        placeholder: '请输入组织类型',
+      },
+      fieldName: 'tissue',
+      label: '组织类型'
+    },
+    {
       component: 'Input',
       componentProps: {
         placeholder: '请输入客户姓名',
@@ -57,8 +78,15 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       },
       fieldName: 'custmor_address',
       label: '客户单位',
-      rules: 'required',
     },
+    {
+      component: 'Input',
+      componentProps: {
+        placeholder: '请输入数据地址',
+      },
+      fieldName: 'data_dir',
+      label: '数据地址',
+    }
   ];
 }
 
@@ -121,16 +149,26 @@ export function useColumns(
     {
       field: 'pid',
       title: '项目编号',
-      width: 150,
+      width: 200,
     },
     {
       field: 'pname',
       title: '项目名称',
-      width: 200,
+      width: 300,
     },
     {
       field: 'ptype',
       title: '项目类型',
+      width: 120,
+    },
+    {
+      field: 'organism',
+      title: '物种信息',
+      width: 120,
+    },
+    {
+      field: 'tissue',
+      title: '组织类型',
       width: 120,
     },
     {
@@ -142,6 +180,11 @@ export function useColumns(
       field: 'custmor_address',
       title: '客户单位',
       width: 200,
+    },
+    {
+      field: 'data_dir',
+      title: '数据地址',
+      width: 350,
     },
     {
       field: 'created_time',
@@ -167,6 +210,7 @@ export function useColumns(
       align: 'center',
       fixed: 'right',
       resizable: false,
+      width: 150,
       cellRender: {
         attrs: {
           nameField: 'pid',
