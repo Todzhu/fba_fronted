@@ -22,7 +22,21 @@
         <div class="flex items-center gap-2 mb-4">
           <span class="text-gray-600 font-medium">组学分类</span>
           <div class="flex gap-1">
+            <div v-if="categoriesLoading" class="flex items-center gap-2">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+              <span class="text-sm text-gray-500">加载中...</span>
+            </div>
+            <div v-else-if="categoriesError" class="flex items-center gap-2">
+              <span class="text-sm text-red-500">加载失败</span>
+              <button 
+                @click="loadCategories"
+                class="px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+              >
+                重试
+              </button>
+            </div>
             <button
+              v-else
               v-for="category in primaryCategories"
               :key="category"
               @click="selectedPrimaryCategory = category"
@@ -39,21 +53,35 @@
         </div>
 
         <!-- Functional Categories -->
-        <div class="flex items-start gap-2">
-          <span class="text-gray-600 font-medium mt-2">功能分类</span>
-          <div class="flex flex-wrap gap-2">
+        <div class="flex items-center gap-2 mb-6">
+          <span class="text-gray-600 font-medium">功能分类</span>
+          <div class="flex gap-1 flex-wrap">
+            <div v-if="categoriesLoading" class="flex items-center gap-2">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+              <span class="text-sm text-gray-500">加载中...</span>
+            </div>
+            <div v-else-if="categoriesError" class="flex items-center gap-2">
+              <span class="text-sm text-red-500">加载失败</span>
+              <button 
+                @click="loadCategories"
+                class="px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+              >
+                重试
+              </button>
+            </div>
             <button
-              v-for="func in functionalCategories"
-              :key="func"
-              @click="toggleFunctionalCategory(func)"
+              v-else
+              v-for="category in functionalCategories"
+              :key="category"
+              @click="toggleFunctionalCategory(category)"
               :class="[
-                'px-3 py-1.5 rounded text-sm transition-colors',
-                selectedFunctionalCategory === func
-                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
+                'px-4 py-2 rounded text-sm font-medium transition-colors',
+                selectedFunctionalCategory === category
+                  ? 'bg-green-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               ]"
             >
-              {{ func }}
+              {{ category }}
             </button>
           </div>
         </div>
@@ -171,7 +199,7 @@ import {
   PieChart,
   Activity
 } from 'lucide-vue-next'
-import { fetchAnalysisToolList, fetchAnalysisToolCategories, toggleAnalysisToolFavorite } from '#/api/analysisTool'
+import { fetchAnalysisToolList, fetchAnalysisToolCategories, fetchAnalysisToolFuncTypes, toggleAnalysisToolFavorite } from '#/api/analysisTool'
 
 const searchQuery = ref('')
 const currentPage = ref(1)
@@ -179,12 +207,46 @@ const itemsPerPage = 10
 const selectedPrimaryCategory = ref('全部')
 const selectedFunctionalCategory = ref('全部')
 
-const primaryCategories = ['全部', '组学通用', '单细胞转录组', '蛋白组学', '其他']
-const functionalCategories = ['全部', '富集分析', '可视化绘图', 'h5ad相关', '统计分析', '特征转换', '序列处理']
+// 动态获取的筛选选项
+const primaryCategories = ref(['全部'])
+const functionalCategories = ref(['全部'])
 
 const tools = ref([])
 const total = ref(0)
 const loading = ref(false)
+const categoriesLoading = ref(false)
+const categoriesError = ref(false)
+
+// 缓存相关
+const CACHE_KEY = 'analysis_tool_categories'
+const CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
+
+// 缓存工具函数
+function getCachedCategories() {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached)
+      if (Date.now() - timestamp < CACHE_DURATION) {
+        return data
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to get cached categories:', error)
+  }
+  return null
+}
+
+function setCachedCategories(data) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }))
+  } catch (error) {
+    console.warn('Failed to cache categories:', error)
+  }
+}
 
 const iconMap = {
   BarChart3,
@@ -197,6 +259,56 @@ const iconMap = {
   Shuffle,
   PieChart,
   Activity
+}
+
+// 加载筛选选项
+async function loadCategories() {
+  categoriesLoading.value = true
+  categoriesError.value = false
+  
+  // 先尝试从缓存获取
+  const cached = getCachedCategories()
+  if (cached) {
+    primaryCategories.value = ['全部', ...(cached.categories || [])]
+    functionalCategories.value = ['全部', ...(cached.funcTypes || [])]
+    categoriesLoading.value = false
+    return
+  }
+  
+  try {
+    // 并行获取分类和功能类型
+    const [categoriesRes, funcTypesRes] = await Promise.all([
+      fetchAnalysisToolCategories(),
+      fetchAnalysisToolFuncTypes()
+    ])
+    
+    const categories = categoriesRes || []
+    const funcTypes = funcTypesRes || []
+    
+    // 更新组学分类（保留"全部"选项）
+    if (Array.isArray(categories)) {
+      primaryCategories.value = ['全部', ...categories]
+    }
+    
+    // 更新功能分类（保留"全部"选项）
+    if (Array.isArray(funcTypes)) {
+      functionalCategories.value = ['全部', ...funcTypes]
+    }
+    
+    // 缓存数据
+    setCachedCategories({
+      categories,
+      funcTypes
+    })
+  } catch (error) {
+    console.error('Failed to load categories:', error)
+    categoriesError.value = true
+    // 降级方案：使用默认分类
+    primaryCategories.value = ['全部', '组学通用', '单细胞转录组', '蛋白组学', '其他']
+    functionalCategories.value = ['全部', '富集分析', '可视化绘图', 'h5ad相关', '统计分析', '特征转换', '序列处理']
+  } finally {
+    categoriesLoading.value = false
+  }
 }
 
 function loadTools() {
@@ -231,7 +343,9 @@ watch(currentPage, () => {
   loadTools()
 })
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载分类选项，再加载工具列表
+  await loadCategories()
   loadTools()
 })
 
@@ -261,7 +375,6 @@ function toggleFavorite(tool) {
   toggleAnalysisToolFavorite(tool.id, newFavoriteStatus)
     .then(() => {
       tool.is_favorite = newFavoriteStatus
-      console.log('Successfully toggled favorite for tool:', tool.name, 'is_favorite:', tool.is_favorite)
     })
     .catch(error => {
       console.error('Failed to toggle favorite:', error)

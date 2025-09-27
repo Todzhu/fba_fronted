@@ -9,13 +9,17 @@ export interface AnalysisToolQuery {
 }
 
 export function fetchAnalysisToolList(params: AnalysisToolQuery) {
-  return requestClient.post('/biocloud/analysis_tool/list', params)
+  return requestClient.post('/api/v1/biocloud/analysis_tool/list', params)
 }
 
 export function fetchAnalysisToolCategories() {
-  return requestClient.get('/biocloud/analysis_tool/categories');
+  return requestClient.get('/api/v1/biocloud/analysis_tool/categories');
+}
+
+export function fetchAnalysisToolFuncTypes() {
+  return requestClient.get('/api/v1/biocloud/analysis_tool/func_types');
 }
 
 export function toggleAnalysisToolFavorite(tool_id: number, is_favorite: boolean) {
-  return requestClient.post('/biocloud/analysis_tool/favorite', { tool_id, is_favorite });
-} 
+  return requestClient.post('/api/v1/biocloud/analysis_tool/favorite', { tool_id, is_favorite });
+}
