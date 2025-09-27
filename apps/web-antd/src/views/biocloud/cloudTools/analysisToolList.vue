@@ -171,7 +171,7 @@ import {
   PieChart,
   Activity
 } from 'lucide-vue-next'
-import { fetchAnalysisToolList, fetchAnalysisToolCategories } from '#/api/analysisTool'
+import { fetchAnalysisToolList, fetchAnalysisToolCategories, toggleAnalysisToolFavorite } from '#/api/analysisTool'
 
 const searchQuery = ref('')
 const currentPage = ref(1)
@@ -256,9 +256,17 @@ function toggleFunctionalCategory(category) {
 }
 
 function toggleFavorite(tool) {
-  tool.is_favorite = !tool.is_favorite
-  // TODO: Implement actual favorite/unfavorite logic
-  console.log('Toggling favorite for tool:', tool.name, 'is_favorite:', tool.is_favorite)
+  const newFavoriteStatus = !tool.is_favorite
+  
+  toggleAnalysisToolFavorite(tool.id, newFavoriteStatus)
+    .then(() => {
+      tool.is_favorite = newFavoriteStatus
+      console.log('Successfully toggled favorite for tool:', tool.name, 'is_favorite:', tool.is_favorite)
+    })
+    .catch(error => {
+      console.error('Failed to toggle favorite:', error)
+      // 如果API调用失败，不改变UI状态
+    })
 }
 </script>
 
