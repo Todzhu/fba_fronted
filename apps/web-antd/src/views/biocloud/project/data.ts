@@ -26,7 +26,6 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       },
       fieldName: 'pname',
       label: '项目名称',
-      rules: 'required',
     },
     {
       component: 'Select',
@@ -36,10 +35,11 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
           { label: 'VisiumHD', value: 'VisiumHD' }
         ],
         placeholder: '请选择项目类型',
+        class: 'w-full',
       },
       fieldName: 'ptype',
       label: '项目类型',
-      rules: 'selectRequired',
+      // rules: 'selectRequired',
     },
     {
       component: 'Select',
@@ -49,10 +49,11 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
           { label: 'Mouse', value: 'Mouse' }
         ],
         placeholder: '请选择物种信息',
+        class: 'w-full',
       },
       fieldName: 'organism',
       label: '物种',
-      rules: 'selectRequired',
+      // rules: 'selectRequired',
     },
     {
       component: 'Input',
@@ -69,7 +70,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       },
       fieldName: 'custmor_name',
       label: '客户姓名',
-      rules: 'required',
+      // rules: 'required',
     },
     {
       component: 'Input',
@@ -86,6 +87,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       },
       fieldName: 'data_dir',
       label: '数据地址',
+      formItemClass: 'md:col-span-2',
     }
   ];
 }
@@ -138,7 +140,7 @@ export function useColumns(
     {
       type: 'checkbox',
       width: 50,
-      visible: false,
+      visible: true,
     },
     {
       field: 'id',
@@ -150,46 +152,55 @@ export function useColumns(
       field: 'pid',
       title: '项目编号',
       width: 150,
+      align: 'left',
     },
     {
       field: 'pname',
       title: '项目名称',
       width: 300,
+      align: 'left',
     },
     {
       field: 'ptype',
       title: '项目类型',
       width: 100,
+      align: 'left',
     },
     {
       field: 'organism',
       title: '物种信息',
       width: 100,
+      align: 'left',
     },
     {
       field: 'tissue',
       title: '组织类型',
       width: 100,
+      align: 'left',
     },
     {
       field: 'custmor_name',
       title: '客户姓名',
       width: 110,
+      align: 'left',
     },
     {
       field: 'custmor_address',
       title: '客户单位',
       width: 200,
+      align: 'left',
     },
     {
       field: 'data_dir',
       title: '数据地址',
       width: 350,
+      align: 'left',
     },
     {
       field: 'created_time',
       title: '创建时间',
       width: 180,
+      align: 'left',
       formatter: ({ cellValue }) => {
         if (!cellValue) return '';
         return new Date(cellValue).toLocaleString('zh-CN');
@@ -199,6 +210,7 @@ export function useColumns(
       field: 'updated_time',
       title: '更新时间',
       width: 180,
+      align: 'left',
       formatter: ({ cellValue }) => {
         if (!cellValue) return '';
         return new Date(cellValue).toLocaleString('zh-CN');

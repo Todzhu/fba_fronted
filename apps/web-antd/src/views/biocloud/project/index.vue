@@ -104,6 +104,7 @@ async function onActionClick({ code, row }: OnActionClickParams<ProjectInfoResul
 const [Form, formApi] = useVbenForm({
   layout: 'vertical',
   showDefaultActions: false,
+  wrapperClass: 'grid-cols-1 md:grid-cols-2 gap-x-4',
   schema: getFormSchema(false),
 });
 
@@ -124,6 +125,9 @@ const modalTitle = computed(() => {
 
 const [modal, modalApi] = useVbenModal({
   destroyOnClose: true,
+  modalProps: {
+    width: 1000,
+  },
   async onConfirm() {
     const { valid } = await formApi.validate();
     if (valid) {
@@ -171,7 +175,7 @@ const [modal, modalApi] = useVbenModal({
       </template>
     </Grid>
 
-    <modal :title="modalTitle">
+    <modal :title="modalTitle" :width="'1000px'">
       <Form />
     </modal>
   </Page>
