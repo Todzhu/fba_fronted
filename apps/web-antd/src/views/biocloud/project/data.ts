@@ -149,7 +149,7 @@ export function useColumns(
     {
       field: 'pid',
       title: '项目编号',
-      width: 200,
+      width: 150,
     },
     {
       field: 'pname',
@@ -159,22 +159,22 @@ export function useColumns(
     {
       field: 'ptype',
       title: '项目类型',
-      width: 120,
+      width: 100,
     },
     {
       field: 'organism',
       title: '物种信息',
-      width: 120,
+      width: 100,
     },
     {
       field: 'tissue',
       title: '组织类型',
-      width: 120,
+      width: 100,
     },
     {
       field: 'custmor_name',
       title: '客户姓名',
-      width: 150,
+      width: 110,
     },
     {
       field: 'custmor_address',
