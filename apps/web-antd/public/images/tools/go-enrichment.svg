@@ -1,0 +1,17 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" rx="12" fill="#F59E0B"/>
+  <rect x="8" y="8" width="48" height="48" rx="8" fill="#FFFFFF" fill-opacity="0.1"/>
+  <!-- Target circles -->
+  <circle cx="32" cy="32" r="16" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+  <circle cx="32" cy="32" r="12" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+  <circle cx="32" cy="32" r="8" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+  <circle cx="32" cy="32" r="4" fill="#FFFFFF"/>
+  <!-- Arrow pointing to center -->
+  <path d="M18 18L26 26" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+  <path d="M22 18L26 22L22 26" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Gene symbols -->
+  <text x="14" y="14" fill="#FFFFFF" font-size="8" font-family="monospace">GO</text>
+  <circle cx="46" cy="18" r="2" fill="#FFFFFF"/>
+  <circle cx="46" cy="46" r="2" fill="#FFFFFF"/>
+  <circle cx="18" cy="46" r="2" fill="#FFFFFF"/>
+</svg>

@@ -94,43 +94,69 @@
         <div
           v-for="tool in paginatedTools"
           :key="tool.id"
-          class="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow cursor-pointer"
+          @click="openTool(tool)"
+          class="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl hover:border-blue-300 transition-all duration-300 cursor-pointer group"
         >
-          <!-- Tool Header -->
-          <div class="flex items-start gap-4 mb-4">
-            <div class="w-12 h-12 rounded-lg flex items-center justify-center" :style="{ backgroundColor: tool.icon_bg }">
-              <component :is="tool.icon" class="w-6 h-6" :style="{ color: tool.icon_color }" />
-            </div>
-            <div class="flex-1">
-              <h3 class="font-semibold text-gray-900 mb-1 flex items-center">
-                {{ tool.name }}
-                <button
-                  @click.stop="toggleFavorite(tool)"
-                  :class="['ml-2', tool.is_favorite ? 'text-yellow-400' : 'text-gray-300', 'hover:text-yellow-500', 'focus:outline-none']"
-                  title="收藏"
-                >
-                  <Star class="w-5 h-5" :fill="tool.is_favorite ? 'currentColor' : 'none'" />
-                </button>
-              </h3>
-              <div class="flex gap-2">
-                <span class="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{{ tool.category }}</span>
-                <span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">{{ tool.type }}</span>
+          <!-- Tool Image - Top -->
+          <div class="w-full h-32 rounded-lg overflow-hidden mb-4 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+            <img 
+              v-if="tool.image_url" 
+              :src="tool.image_url" 
+              :alt="tool.name"
+              class="w-20 h-20 object-contain group-hover:scale-110 transition-transform duration-300"
+              @error="handleImageError"
+            />
+            <div 
+              v-else 
+              class="w-20 h-20 flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg"
+            >
+              <div class="text-center">
+                <BarChart3 class="w-10 h-10 text-blue-500 mx-auto mb-1" />
+                <span class="text-xs text-blue-600 font-medium">工具</span>
               </div>
             </div>
           </div>
-
-          <!-- Tool Description -->
-          <p class="text-gray-600 text-sm mb-4 line-clamp-3">{{ tool.description }}</p>
-
-          <!-- Tool Stats -->
-          <div class="flex items-center gap-4 text-sm text-gray-500">
-            <div class="flex items-center gap-1">
-              <Eye class="w-4 h-4" />
-              {{ tool.views }}
+          
+          <!-- Tool Information - Bottom -->
+          <div class="space-y-3">
+            <!-- Title and Favorite -->
+            <div class="flex items-start justify-between">
+              <h3 class="font-semibold text-gray-900 text-lg leading-tight flex-1 pr-2">
+                {{ tool.name }}
+              </h3>
+              <button
+                @click.stop="toggleFavorite(tool)"
+                :class="['flex-shrink-0', tool.is_favorite ? 'text-yellow-400' : 'text-gray-300', 'hover:text-yellow-500', 'focus:outline-none', 'transition-colors']"
+                title="收藏"
+              >
+                <Star class="w-5 h-5" :fill="tool.is_favorite ? 'currentColor' : 'none'" />
+              </button>
             </div>
-            <div class="flex items-center gap-1">
-              <Star class="w-4 h-4" />
-              {{ tool.likes }}
+            
+            <!-- Categories -->
+            <div class="flex gap-2 flex-wrap">
+              <span class="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">{{ tool.category }}</span>
+              <span class="px-3 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">{{ tool.type }}</span>
+            </div>
+            
+            <!-- Description -->
+            <p class="text-gray-600 text-sm leading-relaxed line-clamp-3">{{ tool.description }}</p>
+            
+            <!-- Stats -->
+            <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+              <div class="flex items-center gap-4 text-sm text-gray-500">
+                <div class="flex items-center gap-1">
+                  <Eye class="w-4 h-4" />
+                  {{ tool.views }}
+                </div>
+                <div class="flex items-center gap-1">
+                  <Star class="w-4 h-4" />
+                  {{ tool.likes }}
+                </div>
+              </div>
+              <div class="text-xs text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                点击查看详情 →
+              </div>
             </div>
           </div>
         </div>
@@ -188,16 +214,7 @@ import {
   Star,
   Heart,
   Search,
-  BarChart3,
-  GitBranch,
-  Zap,
-  Target,
-  Layers,
-  TrendingUp,
-  Network,
-  Shuffle,
-  PieChart,
-  Activity
+  BarChart3
 } from 'lucide-vue-next'
 import { fetchAnalysisToolList, fetchAnalysisToolCategories, fetchAnalysisToolFuncTypes, toggleAnalysisToolFavorite } from '#/api/analysisTool'
 
@@ -248,17 +265,20 @@ function setCachedCategories(data) {
   }
 }
 
-const iconMap = {
-  BarChart3,
-  GitBranch,
-  Zap,
-  Target,
-  Layers,
-  TrendingUp,
-  Network,
-  Shuffle,
-  PieChart,
-  Activity
+// 默认图片URL
+const defaultImageUrl = '/images/tools/default-tool.svg'
+
+// 处理工具数据
+const processedTools = computed(() => {
+  return tools.value.map(tool => ({
+    ...tool,
+    image_url: tool.image_url || defaultImageUrl
+  }))
+})
+
+// 图片加载错误处理
+const handleImageError = (event) => {
+  event.target.src = defaultImageUrl
 }
 
 // 加载筛选选项
@@ -324,9 +344,6 @@ function loadTools() {
       total.value = res.total
       tools.value = (res.items || []).map(tool => ({
         ...tool,
-        icon: iconMap[tool.icon] || BarChart3,
-        icon_bg: tool.icon_bg,
-        icon_color: tool.icon_color,
         is_favorite: tool.is_favorite
       }))
     })
@@ -349,7 +366,7 @@ onMounted(async () => {
   loadTools()
 })
 
-const paginatedTools = computed(() => tools.value)
+const paginatedTools = computed(() => processedTools.value)
 const totalPages = computed(() => Math.ceil(total.value / itemsPerPage))
 const visiblePages = computed(() => {
   const pages = []
@@ -380,6 +397,15 @@ function toggleFavorite(tool) {
       console.error('Failed to toggle favorite:', error)
       // 如果API调用失败，不改变UI状态
     })
+}
+
+function openTool(tool) {
+  // 这里可以根据需要实现工具详情页面跳转或弹窗
+  console.log('打开工具:', tool)
+  // 示例：跳转到工具详情页
+  // router.push(`/tools/${tool.id}`)
+  // 或者打开工具详情弹窗
+  // showToolDetail(tool)
 }
 </script>
 

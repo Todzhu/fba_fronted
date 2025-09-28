@@ -1,0 +1,50 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="64" height="64" fill="#fefefe" rx="8"/>
+  
+  <!-- Left file (input format) -->
+  <rect x="8" y="16" width="16" height="20" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5" rx="2"/>
+  <rect x="8" y="16" width="16" height="5" fill="#64748b" rx="2 2 0 0"/>
+  <text x="16" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="6" font-weight="bold" fill="white">CSV</text>
+  
+  <!-- File content lines -->
+  <line x1="10" y1="24" x2="22" y2="24" stroke="#94a3b8" stroke-width="1"/>
+  <line x1="10" y1="27" x2="20" y2="27" stroke="#94a3b8" stroke-width="1"/>
+  <line x1="10" y1="30" x2="22" y2="30" stroke="#94a3b8" stroke-width="1"/>
+  <line x1="10" y1="33" x2="18" y2="33" stroke="#94a3b8" stroke-width="1"/>
+  
+  <!-- Conversion arrow -->
+  <path d="M 28 26 L 36 26" stroke="#3b82f6" stroke-width="3" fill="none"/>
+  <polygon points="36,26 32,23 32,29" fill="#3b82f6"/>
+  
+  <!-- Conversion process indicator -->
+  <circle cx="32" cy="20" r="3" fill="#3b82f6" opacity="0.2"/>
+  <text x="32" y="22" text-anchor="middle" font-family="Arial, sans-serif" font-size="6" font-weight="bold" fill="#3b82f6">h5</text>
+  
+  <!-- Right file (h5ad format) -->
+  <rect x="40" y="16" width="16" height="20" fill="#f0f9ff" stroke="#0ea5e9" stroke-width="1.5" rx="2"/>
+  <rect x="40" y="16" width="16" height="5" fill="#0ea5e9" rx="2 2 0 0"/>
+  <text x="48" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="6" font-weight="bold" fill="white">H5AD</text>
+  
+  <!-- H5AD structure visualization -->
+  <rect x="42" y="24" width="12" height="2" fill="#0ea5e9" opacity="0.3" rx="1"/>
+  <rect x="42" y="27" width="8" height="2" fill="#10b981" opacity="0.3" rx="1"/>
+  <rect x="42" y="30" width="10" height="2" fill="#f59e0b" opacity="0.3" rx="1"/>
+  <rect x="42" y="33" width="6" height="2" fill="#8b5cf6" opacity="0.3" rx="1"/>
+  
+  <!-- Additional format icons -->
+  <rect x="8" y="42" width="12" height="15" fill="#fef3c7" stroke="#f59e0b" stroke-width="1" rx="2"/>
+  <rect x="8" y="42" width="12" height="4" fill="#f59e0b" rx="2 2 0 0"/>
+  <text x="14" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="5" font-weight="bold" fill="white">MTX</text>
+  
+  <rect x="24" y="42" width="12" height="15" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="1" rx="2"/>
+  <rect x="24" y="42" width="12" height="4" fill="#8b5cf6" rx="2 2 0 0"/>
+  <text x="30" y="45" text-anchor="middle" font-family="Arial, sans-serif" font-size="5" font-weight="bold" fill="white">TSV</text>
+  
+  <!-- Arrows pointing to h5ad -->
+  <path d="M 20 50 L 42 30" stroke="#94a3b8" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 36 50 L 42 32" stroke="#94a3b8" stroke-width="1.5" fill="none" opacity="0.6"/>
+  
+  <!-- Title -->
+  <text x="32" y="8" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#475569">Format Conversion</text>
+</svg>

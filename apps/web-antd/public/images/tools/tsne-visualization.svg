@@ -1,0 +1,76 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="64" height="64" fill="#fefefe" rx="8"/>
+  <rect x="6" y="6" width="52" height="52" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" rx="4"/>
+  
+  <!-- Coordinate axes -->
+  <line x1="12" y1="50" x2="56" y2="50" stroke="#64748b" stroke-width="2"/>
+  <line x1="12" y1="50" x2="12" y2="12" stroke="#64748b" stroke-width="2"/>
+  
+  <!-- Axis labels -->
+  <text x="34" y="58" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#64748b">t-SNE 1</text>
+  <text x="4" y="30" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#64748b" transform="rotate(-90, 4, 30)">t-SNE 2</text>
+  
+  <!-- Cluster 1 (red) -->
+  <circle cx="20" cy="20" r="2" fill="#ef4444" opacity="0.8"/>
+  <circle cx="22" cy="18" r="2" fill="#ef4444" opacity="0.8"/>
+  <circle cx="18" cy="22" r="2" fill="#ef4444" opacity="0.8"/>
+  <circle cx="24" cy="20" r="2" fill="#ef4444" opacity="0.8"/>
+  <circle cx="20" cy="24" r="2" fill="#ef4444" opacity="0.8"/>
+  <circle cx="16" cy="18" r="2" fill="#ef4444" opacity="0.8"/>
+  <circle cx="22" cy="22" r="2" fill="#ef4444" opacity="0.8"/>
+  
+  <!-- Cluster 2 (blue) -->
+  <circle cx="42" cy="18" r="2" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="44" cy="16" r="2" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="40" cy="20" r="2" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="46" cy="18" r="2" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="42" cy="22" r="2" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="38" cy="16" r="2" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="44" cy="20" r="2" fill="#3b82f6" opacity="0.8"/>
+  
+  <!-- Cluster 3 (green) -->
+  <circle cx="18" cy="38" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="20" cy="36" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="16" cy="40" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="22" cy="38" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="18" cy="42" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="14" cy="36" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="20" cy="40" r="2" fill="#10b981" opacity="0.8"/>
+  
+  <!-- Cluster 4 (purple) -->
+  <circle cx="44" cy="40" r="2" fill="#8b5cf6" opacity="0.8"/>
+  <circle cx="46" cy="38" r="2" fill="#8b5cf6" opacity="0.8"/>
+  <circle cx="42" cy="42" r="2" fill="#8b5cf6" opacity="0.8"/>
+  <circle cx="48" cy="40" r="2" fill="#8b5cf6" opacity="0.8"/>
+  <circle cx="44" cy="44" r="2" fill="#8b5cf6" opacity="0.8"/>
+  <circle cx="40" cy="38" r="2" fill="#8b5cf6" opacity="0.8"/>
+  <circle cx="46" cy="42" r="2" fill="#8b5cf6" opacity="0.8"/>
+  
+  <!-- Central scattered points -->
+  <circle cx="32" cy="28" r="1.5" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="30" cy="32" r="1.5" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="34" cy="30" r="1.5" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="28" cy="26" r="1.5" fill="#f59e0b" opacity="0.6"/>
+  <circle cx="36" cy="34" r="1.5" fill="#f59e0b" opacity="0.6"/>
+  
+  <!-- Cluster boundaries (subtle) -->
+  <ellipse cx="20" cy="21" rx="6" ry="5" fill="none" stroke="#ef4444" stroke-width="1" stroke-dasharray="2,2" opacity="0.3"/>
+  <ellipse cx="42" cy="19" rx="6" ry="4" fill="none" stroke="#3b82f6" stroke-width="1" stroke-dasharray="2,2" opacity="0.3"/>
+  <ellipse cx="18" cy="39" rx="5" ry="5" fill="none" stroke="#10b981" stroke-width="1" stroke-dasharray="2,2" opacity="0.3"/>
+  <ellipse cx="44" cy="41" rx="6" ry="4" fill="none" stroke="#8b5cf6" stroke-width="1" stroke-dasharray="2,2" opacity="0.3"/>
+  
+  <!-- Legend -->
+  <rect x="48" y="12" width="8" height="16" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" rx="2" opacity="0.9"/>
+  <circle cx="50" cy="14" r="1" fill="#ef4444"/>
+  <circle cx="50" cy="16" r="1" fill="#3b82f6"/>
+  <circle cx="50" cy="18" r="1" fill="#10b981"/>
+  <circle cx="50" cy="20" r="1" fill="#8b5cf6"/>
+  <text x="52" y="15" font-family="Arial, sans-serif" font-size="3" fill="#64748b">C1</text>
+  <text x="52" y="17" font-family="Arial, sans-serif" font-size="3" fill="#64748b">C2</text>
+  <text x="52" y="19" font-family="Arial, sans-serif" font-size="3" fill="#64748b">C3</text>
+  <text x="52" y="21" font-family="Arial, sans-serif" font-size="3" fill="#64748b">C4</text>
+  
+  <!-- Title -->
+  <text x="32" y="8" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#475569">t-SNE</text>
+</svg>

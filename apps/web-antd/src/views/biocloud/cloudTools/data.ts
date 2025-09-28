@@ -63,24 +63,37 @@ export function useColumns(actions: {
       showOverflow: true,
     },
     {
-      field: 'icon',
-      title: '图标',
-      width: 80,
+      field: 'image_url',
+      title: '工具图片',
+      width: 100,
       slots: {
         default: ({ row }) => {
-          if (row.icon) {
-            return h('div', {
-              class: 'flex items-center justify-center',
+          if (row.image_url) {
+            return h('img', {
+              src: row.image_url,
+              alt: row.name || '工具图片',
               style: {
-                width: '32px',
-                height: '32px',
-                backgroundColor: row.icon_bg || '#f0f0f0',
-                color: row.icon_color || '#333',
-                borderRadius: '4px',
+                width: '40px',
+                height: '40px',
+                objectFit: 'cover',
+                borderRadius: '6px',
+                border: '1px solid #e5e7eb',
               },
-            }, row.icon);
+              onError: (e) => {
+                e.target.src = '/images/tools/default-tool.svg';
+              },
+            });
           }
-          return '-';
+          return h('div', {
+            class: 'flex items-center justify-center',
+            style: {
+              width: '40px',
+              height: '40px',
+              backgroundColor: '#f3f4f6',
+              borderRadius: '6px',
+              border: '1px solid #e5e7eb',
+            },
+          }, h('span', { style: { fontSize: '12px', color: '#6b7280' } }, '无图片'));
         },
       },
     },
@@ -192,30 +205,39 @@ export function useAddSchema(categoryOptions: any, typeOptions: any): VbenFormSc
       label: '工具描述',
     },
     {
-      component: 'Input',
+      component: 'Upload',
       componentProps: {
-        placeholder: '请输入图标名称',
+        action: '/api/upload/image',
+        listType: 'picture-card',
+        maxCount: 1,
+        accept: 'image/*',
+        beforeUpload: (file: File) => {
+          const isImage = file.type.startsWith('image/');
+          const isLt2M = file.size / 1024 / 1024 < 2;
+          if (!isImage) {
+            console.error('只能上传图片文件!');
+            return false;
+          }
+          if (!isLt2M) {
+            console.error('图片大小不能超过 2MB!');
+            return false;
+          }
+          return true;
+        },
+        onChange: (info: any) => {
+          if (info.file.status === 'done') {
+            // 上传成功后设置图片URL
+            const imageUrl = info.file.response?.data?.url;
+            if (imageUrl) {
+              // 这里需要通过表单实例设置值
+              console.log('上传成功，图片URL:', imageUrl);
+            }
+          }
+        },
       },
-      fieldName: 'icon',
-      label: '图标名称',
-    },
-    {
-      component: 'Input',
-      componentProps: {
-        placeholder: '请输入图标背景色',
-        type: 'color',
-      },
-      fieldName: 'icon_bg',
-      label: '图标背景色',
-    },
-    {
-      component: 'Input',
-      componentProps: {
-        placeholder: '请输入图标颜色',
-        type: 'color',
-      },
-      fieldName: 'icon_color',
-      label: '图标颜色',
+      fieldName: 'image_url',
+      label: '工具图片',
+      help: '支持 JPG、PNG、WebP 格式，建议尺寸 100x100px，文件大小不超过 2MB',
     },
     {
       component: 'Select',

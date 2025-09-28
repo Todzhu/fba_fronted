@@ -1,0 +1,53 @@
+<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="64" height="64" fill="#fefefe" rx="8"/>
+  <rect x="6" y="6" width="52" height="52" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" rx="4"/>
+  
+  <!-- Alpha helix (spiral) -->
+  <path d="M 16 20 Q 20 16 24 20 Q 28 24 32 20 Q 36 16 40 20 Q 44 24 48 20" 
+        stroke="#ef4444" stroke-width="3" fill="none"/>
+  <path d="M 16 22 Q 20 18 24 22 Q 28 26 32 22 Q 36 18 40 22 Q 44 26 48 22" 
+        stroke="#ef4444" stroke-width="3" fill="none"/>
+  <path d="M 16 24 Q 20 20 24 24 Q 28 28 32 24 Q 36 20 40 24 Q 44 28 48 24" 
+        stroke="#ef4444" stroke-width="3" fill="none"/>
+  
+  <!-- Beta sheet (zigzag) -->
+  <path d="M 14 32 L 18 30 L 22 32 L 26 30 L 30 32 L 34 30 L 38 32 L 42 30 L 46 32 L 50 30" 
+        stroke="#3b82f6" stroke-width="2.5" fill="none"/>
+  <path d="M 14 34 L 18 32 L 22 34 L 26 32 L 30 34 L 34 32 L 38 34 L 42 32 L 46 34 L 50 32" 
+        stroke="#3b82f6" stroke-width="2.5" fill="none"/>
+  <path d="M 14 36 L 18 34 L 22 36 L 26 34 L 30 36 L 34 34 L 38 36 L 42 34 L 46 36 L 50 34" 
+        stroke="#3b82f6" stroke-width="2.5" fill="none"/>
+  
+  <!-- Random coil (wavy line) -->
+  <path d="M 12 42 Q 16 40 20 42 Q 24 44 28 42 Q 32 40 36 42 Q 40 44 44 42 Q 48 40 52 42" 
+        stroke="#10b981" stroke-width="2" fill="none"/>
+  
+  <!-- Amino acid side chains (small circles) -->
+  <circle cx="18" cy="18" r="1.5" fill="#f59e0b"/>
+  <circle cx="26" cy="22" r="1.5" fill="#8b5cf6"/>
+  <circle cx="34" cy="18" r="1.5" fill="#06b6d4"/>
+  <circle cx="42" cy="22" r="1.5" fill="#f97316"/>
+  
+  <circle cx="20" cy="30" r="1.5" fill="#84cc16"/>
+  <circle cx="28" cy="32" r="1.5" fill="#ec4899"/>
+  <circle cx="36" cy="30" r="1.5" fill="#6366f1"/>
+  <circle cx="44" cy="32" r="1.5" fill="#14b8a6"/>
+  
+  <!-- Disulfide bonds (yellow lines) -->
+  <line x1="26" y1="22" x2="34" y2="18" stroke="#eab308" stroke-width="2"/>
+  <line x1="28" y1="32" x2="36" y2="30" stroke="#eab308" stroke-width="2"/>
+  
+  <!-- Structure labels -->
+  <text x="32" y="14" text-anchor="middle" font-family="Arial, sans-serif" font-size="5" fill="#ef4444" font-weight="bold">α-helix</text>
+  <text x="32" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="5" fill="#3b82f6" font-weight="bold">β-sheet</text>
+  <text x="32" y="46" text-anchor="middle" font-family="Arial, sans-serif" font-size="5" fill="#10b981" font-weight="bold">loop</text>
+  
+  <!-- 3D effect indicators -->
+  <ellipse cx="20" cy="50" rx="3" ry="1" fill="#94a3b8" opacity="0.3"/>
+  <ellipse cx="32" cy="52" rx="4" ry="1.5" fill="#94a3b8" opacity="0.3"/>
+  <ellipse cx="44" cy="50" rx="3" ry="1" fill="#94a3b8" opacity="0.3"/>
+  
+  <!-- Title -->
+  <text x="32" y="8" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#475569">Protein Structure</text>
+</svg>
