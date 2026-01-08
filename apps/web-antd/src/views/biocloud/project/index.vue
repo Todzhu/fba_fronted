@@ -5,7 +5,7 @@ import type {
   OnActionClickParams,
   VxeTableGridOptions,
 } from '#/adapter/vxe-table';
-import type { ProjectInfoResult } from '#/api/project';
+import type { ProjectInfoParams, ProjectInfoResult } from '#/api/project';
 
 import { computed, ref } from 'vue';
 
@@ -108,16 +108,7 @@ const [Form, formApi] = useVbenForm({
   schema: getFormSchema(false),
 });
 
-interface FormProjectInfoParams {
-  id?: number;
-  pid?: string;
-  pname?: string;
-  ptype?: string;
-  custmor_name?: string;
-  custmor_address?: string;
-}
-
-const formData = ref<FormProjectInfoParams>();
+const formData = ref<ProjectInfoResult>();
 
 const modalTitle = computed(() => {
   return formData.value?.id ? '编辑项目信息' : '新增项目信息';
@@ -132,7 +123,7 @@ const [modal, modalApi] = useVbenModal({
     const { valid } = await formApi.validate();
     if (valid) {
       modalApi.lock();
-      const data = await formApi.getValues<FormProjectInfoParams>();
+      const data = await formApi.getValues<ProjectInfoParams>();
       try {
         await (formData.value?.id
           ? updateProjectInfoApi(formData.value.id, data)
@@ -147,7 +138,7 @@ const [modal, modalApi] = useVbenModal({
   },
   onOpenChange(isOpen) {
     if (isOpen) {
-      const data = modalApi.getData<FormProjectInfoParams>();
+      const data = modalApi.getData<ProjectInfoResult>();
       formApi.resetForm();
       if (data && data.id) {
         // 编辑模式
@@ -156,7 +147,7 @@ const [modal, modalApi] = useVbenModal({
         formApi.setValues(formData.value);
       } else {
         // 新增模式
-        formData.value = {};
+        formData.value = undefined;
         formApi.updateSchema(getFormSchema(false));
       }
     }

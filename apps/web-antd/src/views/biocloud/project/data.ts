@@ -39,7 +39,6 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       },
       fieldName: 'ptype',
       label: '项目类型',
-      // rules: 'selectRequired',
     },
     {
       component: 'Select',
@@ -68,7 +67,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       componentProps: {
         placeholder: '请输入客户姓名',
       },
-      fieldName: 'custmor_name',
+      fieldName: 'pcustomer',
       label: '客户姓名',
       // rules: 'required',
     },
@@ -77,16 +76,25 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       componentProps: {
         placeholder: '请输入客户单位',
       },
-      fieldName: 'custmor_address',
+      fieldName: 'paddress',
       label: '客户单位',
     },
     {
       component: 'Input',
       componentProps: {
-        placeholder: '请输入数据地址',
+        placeholder: '请输入原始数据地址',
       },
-      fieldName: 'data_dir',
-      label: '数据地址',
+      fieldName: 'data_raw',
+      label: '原始数据地址',
+      formItemClass: 'md:col-span-2',
+    },
+    {
+      component: 'Input',
+      componentProps: {
+        placeholder: '请输入分析数据路径',
+      },
+      fieldName: 'report_dir',
+      label: '分析数据路径',
       formItemClass: 'md:col-span-2',
     }
   ];
@@ -127,7 +135,7 @@ export const querySchema: VbenFormSchema[] = [
     componentProps: {
       placeholder: '请输入客户姓名',
     },
-    fieldName: 'custmor_name',
+    fieldName: 'pcustomer',
     label: '客户姓名',
   },
 ];
@@ -157,7 +165,7 @@ export function useColumns(
     {
       field: 'pname',
       title: '项目名称',
-      width: 300,
+      width: 250,
       align: 'left',
     },
     {
@@ -179,57 +187,50 @@ export function useColumns(
       align: 'left',
     },
     {
-      field: 'custmor_name',
+      field: 'pcustomer',
       title: '客户姓名',
       width: 110,
       align: 'left',
     },
     {
-      field: 'custmor_address',
+      field: 'paddress',
       title: '客户单位',
+      width: 150,
+      align: 'left',
+    },
+    {
+      field: 'data_raw',
+      title: '原始数据地址',
       width: 200,
       align: 'left',
     },
     {
-      field: 'data_dir',
-      title: '数据地址',
-      width: 350,
+      field: 'report_dir',
+      title: '分析数据路径',
+      width: 200,
       align: 'left',
     },
     {
       field: 'created_time',
       title: '创建时间',
       width: 180,
-      align: 'left',
-      formatter: ({ cellValue }) => {
-        if (!cellValue) return '';
-        return new Date(cellValue).toLocaleString('zh-CN');
-      },
-    },
-    {
-      field: 'updated_time',
-      title: '更新时间',
-      width: 180,
-      align: 'left',
-      formatter: ({ cellValue }) => {
-        if (!cellValue) return '';
-        return new Date(cellValue).toLocaleString('zh-CN');
-      },
+      formatter: 'formatDateTime',
     },
     {
       field: 'operation',
       title: $t('common.table.operation'),
       align: 'center',
       fixed: 'right',
-      resizable: false,
       width: 150,
       cellRender: {
         attrs: {
-          nameField: 'pid',
           onClick: onActionClick,
         },
         name: 'CellOperation',
-        options: ['edit', 'delete'],
+        options: [
+          'edit',
+          'delete',
+        ],
       },
     },
   ];
