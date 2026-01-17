@@ -6,3 +6,4 @@ export * from './monitor';
 export * from './plugin';
 export * from './role';
 export * from './scheduler';
+export * from './analysisTool';

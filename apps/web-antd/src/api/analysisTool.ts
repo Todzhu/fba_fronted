@@ -20,9 +20,7 @@ export interface AnalysisTool {
   id: number
   name: string
   description?: string
-  icon?: string
-  icon_bg?: string
-  icon_color?: string
+  image_url?: string
   category?: string
   type?: string
   views: number
@@ -35,9 +33,7 @@ export interface AnalysisTool {
 export interface AnalysisToolCreateRequest {
   name: string
   description?: string
-  icon?: string
-  icon_bg?: string
-  icon_color?: string
+  image_url?: string
   category?: string
   type?: string
   views?: number
@@ -48,9 +44,7 @@ export interface AnalysisToolCreateRequest {
 export interface AnalysisToolUpdateRequest {
   name?: string
   description?: string
-  icon?: string
-  icon_bg?: string
-  icon_color?: string
+  image_url?: string
   category?: string
   type?: string
   views?: number

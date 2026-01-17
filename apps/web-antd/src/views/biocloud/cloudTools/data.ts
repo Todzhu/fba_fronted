@@ -184,7 +184,7 @@ export function useColumns(actions: {
 }
 
 // 新增表单配置
-export function useAddSchema(categoryOptions: any, typeOptions: any): VbenFormSchema[] {
+export function useAddSchema(): VbenFormSchema[] {
   return [
     {
       component: 'Input',
@@ -240,21 +240,17 @@ export function useAddSchema(categoryOptions: any, typeOptions: any): VbenFormSc
       help: '支持 JPG、PNG、WebP 格式，建议尺寸 100x100px，文件大小不超过 2MB',
     },
     {
-      component: 'Select',
+      component: 'Input',
       componentProps: {
-        placeholder: '请选择组学分类',
-        allowClear: true,
-        options: categoryOptions?.map((item: string) => ({ label: item, value: item })) || [],
+        placeholder: '请输入组学分类',
       },
       fieldName: 'category',
       label: '组学分类',
     },
     {
-      component: 'Select',
+      component: 'Input',
       componentProps: {
-        placeholder: '请选择功能分类',
-        allowClear: true,
-        options: typeOptions?.map((item: string) => ({ label: item, value: item })) || [],
+        placeholder: '请输入功能分类',
       },
       fieldName: 'type',
       label: '功能分类',
@@ -289,7 +285,108 @@ export function useAddSchema(categoryOptions: any, typeOptions: any): VbenFormSc
   ];
 }
 
-// 编辑表单配置（与新增相同）
 export function useEditSchema(categoryOptions: any, typeOptions: any): VbenFormSchema[] {
-  return useAddSchema(categoryOptions, typeOptions);
+  return [
+    {
+      component: 'Input',
+      componentProps: {
+        placeholder: '请输入工具名称',
+      },
+      fieldName: 'name',
+      label: '工具名称',
+      rules: 'required',
+    },
+    {
+      component: 'Textarea',
+      componentProps: {
+        placeholder: '请输入工具描述',
+        rows: 3,
+      },
+      fieldName: 'description',
+      label: '工具描述',
+    },
+    {
+      component: 'Upload',
+      componentProps: {
+        action: '/api/upload/image',
+        listType: 'picture-card',
+        maxCount: 1,
+        accept: 'image/*',
+        beforeUpload: (file: File) => {
+          const isImage = file.type.startsWith('image/');
+          const isLt2M = file.size / 1024 / 1024 < 2;
+          if (!isImage) {
+            console.error('只能上传图片文件!');
+            return false;
+          }
+          if (!isLt2M) {
+            console.error('图片大小不能超过 2MB!');
+            return false;
+          }
+          return true;
+        },
+        onChange: (info: any) => {
+          if (info.file.status === 'done') {
+            const imageUrl = info.file.response?.data?.url;
+            if (imageUrl) {
+              console.log('上传成功，图片URL:', imageUrl);
+            }
+          }
+        },
+      },
+      fieldName: 'image_url',
+      label: '工具图片',
+      help: '支持 JPG、PNG、WebP 格式，建议尺寸 100x100px，文件大小不超过 2MB',
+    },
+    {
+      component: 'Select',
+      componentProps: {
+        placeholder: '请选择组学分类',
+        allowClear: true,
+        options:
+          categoryOptions?.map((item: string) => ({ label: item, value: item })) ||
+          [],
+      },
+      fieldName: 'category',
+      label: '组学分类',
+    },
+    {
+      component: 'Select',
+      componentProps: {
+        placeholder: '请选择功能分类',
+        allowClear: true,
+        options:
+          typeOptions?.map((item: string) => ({ label: item, value: item })) || [],
+      },
+      fieldName: 'type',
+      label: '功能分类',
+    },
+    {
+      component: 'InputNumber',
+      componentProps: {
+        placeholder: '请输入浏览量',
+        min: 0,
+      },
+      fieldName: 'views',
+      label: '浏览量',
+    },
+    {
+      component: 'InputNumber',
+      componentProps: {
+        placeholder: '请输入点赞数',
+        min: 0,
+      },
+      fieldName: 'likes',
+      label: '点赞数',
+    },
+    {
+      component: 'Switch',
+      componentProps: {
+        checkedChildren: '是',
+        unCheckedChildren: '否',
+      },
+      fieldName: 'is_favorite',
+      label: '是否收藏',
+    },
+  ];
 }
