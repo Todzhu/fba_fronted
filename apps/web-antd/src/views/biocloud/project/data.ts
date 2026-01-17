@@ -32,7 +32,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       componentProps: {
         options: [
           { label: 'Xenium', value: 'Xenium' },
-          { label: 'VisiumHD', value: 'VisiumHD' }
+          { label: 'VisiumHD', value: 'VisiumHD' },
         ],
         placeholder: '请选择项目类型',
         class: 'w-full',
@@ -45,7 +45,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       componentProps: {
         options: [
           { label: 'Human', value: 'Human' },
-          { label: 'Mouse', value: 'Mouse' }
+          { label: 'Mouse', value: 'Mouse' },
         ],
         placeholder: '请选择物种信息',
         class: 'w-full',
@@ -60,7 +60,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
         placeholder: '请输入组织类型',
       },
       fieldName: 'tissue',
-      label: '组织类型'
+      label: '组织类型',
     },
     {
       component: 'Input',
@@ -96,7 +96,7 @@ export function getFormSchema(isEdit: boolean = false): VbenFormSchema[] {
       fieldName: 'report_dir',
       label: '分析数据路径',
       formItemClass: 'md:col-span-2',
-    }
+    },
   ];
 }
 
@@ -123,7 +123,7 @@ export const querySchema: VbenFormSchema[] = [
     componentProps: {
       options: [
         { label: 'Xenium', value: 'Xenium' },
-        { label: 'VisiumHD', value: 'VisiumHD' }
+        { label: 'VisiumHD', value: 'VisiumHD' },
       ],
       placeholder: '请选择项目类型',
     },
@@ -227,10 +227,7 @@ export function useColumns(
           onClick: onActionClick,
         },
         name: 'CellOperation',
-        options: [
-          'edit',
-          'delete',
-        ],
+        options: ['edit', 'delete'],
       },
     },
   ];

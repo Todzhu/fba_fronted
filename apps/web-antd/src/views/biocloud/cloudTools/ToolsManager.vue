@@ -1,50 +1,38 @@
-<template>
-  <Page auto-content-height>
-    <!-- 集成表格组件 -->
-    <Grid table-title="分析工具管理">
-      <template #toolbar-tools>
-        <VbenButton type="primary" @click="handleAdd">
-          <template #icon>
-            <MaterialSymbolsAdd />
-          </template>
-          新增工具
-        </VbenButton>
-      </template>
-    </Grid>
-
-    <!-- 新增弹窗 -->
-    <component :is="addModal" title="新增工具" :width="600">
-      <AddForm />
-    </component>
-
-    <!-- 编辑弹窗 -->
-    <component :is="editModal" title="编辑工具" :width="600">
-      <EditForm />
-    </component>
-  </Page>
-</template>
-
 <script setup lang="ts">
-import type { VxeTableGridOptions } from '#/adapter/vxe-table';
-import type { AnalysisTool, AnalysisToolManageQuery, AnalysisToolCreateRequest, AnalysisToolUpdateRequest } from '#/api/analysisTool';
+import type { VbenFormProps } from '@vben/common-ui';
 
-import { ref, onMounted, computed, nextTick } from 'vue';
-import { message } from 'ant-design-vue';
-import { VbenButton, useVbenModal, Page } from '@vben/common-ui';
+import type { VxeTableGridOptions } from '#/adapter/vxe-table';
+import type {
+  AnalysisTool,
+  AnalysisToolCreateRequest,
+  AnalysisToolUpdateRequest,
+} from '#/api/analysisTool';
+
+import { computed, nextTick, onMounted, ref } from 'vue';
+
+import { Page, useVbenModal, VbenButton } from '@vben/common-ui';
 import { MaterialSymbolsAdd } from '@vben/icons';
+
+import { message } from 'ant-design-vue';
+
 import { useVbenForm } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
-import type { VbenFormProps } from '@vben/common-ui';
 import {
-  fetchAnalysisToolManageList,
-  fetchAnalysisToolDetail,
   createAnalysisTool,
-  updateAnalysisTool,
   deleteAnalysisTool,
   fetchAnalysisToolCategories,
+  fetchAnalysisToolDetail,
   fetchAnalysisToolFuncTypes,
+  fetchAnalysisToolManageList,
+  updateAnalysisTool,
 } from '#/api/analysisTool';
-import { useQuerySchema, useColumns, useAddSchema, useEditSchema } from './data';
+
+import {
+  useAddSchema,
+  useColumns,
+  useEditSchema,
+  useQuerySchema,
+} from './data';
 
 // 当前编辑的工具ID
 const editToolId = ref(0);
@@ -60,18 +48,24 @@ const formOptions: VbenFormProps = {
   submitButtonOptions: {
     content: '搜索',
   },
-  schema: computed(() => useQuerySchema(categoryOptions.value, typeOptions.value)),
+  schema: computed(() =>
+    useQuerySchema(categoryOptions.value, typeOptions.value),
+  ),
 };
 
 // 表单组件
 const [AddForm, addFormApi] = useVbenForm({
   showDefaultActions: false,
-  schema: computed(() => useAddSchema(categoryOptions.value, typeOptions.value)),
+  schema: computed(() =>
+    useAddSchema(categoryOptions.value, typeOptions.value),
+  ),
 });
 
 const [EditForm, editFormApi] = useVbenForm({
   showDefaultActions: false,
-  schema: computed(() => useEditSchema(categoryOptions.value, typeOptions.value)),
+  schema: computed(() =>
+    useEditSchema(categoryOptions.value, typeOptions.value),
+  ),
 });
 
 // 弹窗组件
@@ -195,7 +189,7 @@ async function handleDelete(row: AnalysisTool) {
     await deleteAnalysisTool(row.id);
     message.success('删除成功');
     onRefresh();
-  } catch (error) {
+  } catch {
     message.error('删除失败');
   }
 }
@@ -207,7 +201,7 @@ async function fetchOptions() {
       fetchAnalysisToolCategories(),
       fetchAnalysisToolFuncTypes(),
     ]);
-    
+
     categoryOptions.value = categoriesRes;
     typeOptions.value = typesRes;
   } catch (error) {
@@ -219,6 +213,32 @@ onMounted(() => {
   fetchOptions();
 });
 </script>
+
+<template>
+  <Page auto-content-height>
+    <!-- 集成表格组件 -->
+    <Grid table-title="分析工具管理">
+      <template #toolbar-tools>
+        <VbenButton type="primary" @click="handleAdd">
+          <template #icon>
+            <MaterialSymbolsAdd />
+          </template>
+          新增工具
+        </VbenButton>
+      </template>
+    </Grid>
+
+    <!-- 新增弹窗 -->
+    <component :is="addModal" title="新增工具" :width="600">
+      <AddForm />
+    </component>
+
+    <!-- 编辑弹窗 -->
+    <component :is="editModal" title="编辑工具" :width="600">
+      <EditForm />
+    </component>
+  </Page>
+</template>
 
 <style scoped>
 .analysis-tool-manage {

@@ -1,3 +1,4 @@
+export * from './analysisTool';
 export * from './core';
 export * from './data-permission';
 export * from './dept';
@@ -6,4 +7,3 @@ export * from './monitor';
 export * from './plugin';
 export * from './role';
 export * from './scheduler';
-export * from './analysisTool';

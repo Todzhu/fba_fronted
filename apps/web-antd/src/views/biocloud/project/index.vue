@@ -33,7 +33,8 @@ defineOptions({
 const formOptions: VbenFormProps = {
   collapsed: true,
   showCollapseButton: true,
-  wrapperClass: 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
+  wrapperClass:
+    'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5',
   submitButtonOptions: {
     content: $t('common.query'),
   },
@@ -82,14 +83,17 @@ function handleAddProject() {
   modalApi.setData(null).open();
 }
 
-async function onActionClick({ code, row }: OnActionClickParams<ProjectInfoResult>) {
+async function onActionClick({
+  code,
+  row,
+}: OnActionClickParams<ProjectInfoResult>) {
   switch (code) {
     case 'delete': {
       try {
         await deleteProjectInfoApi([row.id]);
         message.success('删除成功');
         onRefresh();
-      } catch (error) {
+      } catch {
         message.error('删除失败');
       }
       break;
@@ -166,7 +170,7 @@ const [modal, modalApi] = useVbenModal({
       </template>
     </Grid>
 
-    <modal :title="modalTitle" :width="'1000px'">
+    <modal :title="modalTitle" width="1000px">
       <Form />
     </modal>
   </Page>

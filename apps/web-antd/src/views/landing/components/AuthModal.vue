@@ -1,6 +1,17 @@
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
-import { X, User, Lock, Mail, ArrowRight, Github, Eye, EyeOff, Loader2 } from 'lucide-vue-next';
+import { reactive, ref } from 'vue';
+
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Github,
+  Loader2,
+  Lock,
+  Mail,
+  User,
+  X,
+} from 'lucide-vue-next';
 
 const props = defineProps<{
   visible: boolean;
@@ -36,10 +47,10 @@ const handleLogin = async () => {
   if (isLoading.value) return;
   isLoading.value = true;
   console.log('Login attempt:', loginForm);
-  
+
   // Simulate API call
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     // Implement actual login logic here
   } finally {
     isLoading.value = false;
@@ -50,10 +61,10 @@ const handleRegister = async () => {
   if (isLoading.value) return;
   isLoading.value = true;
   console.log('Register attempt:', registerForm);
-  
+
   // Simulate API call
   try {
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     // Implement actual register logic here
   } finally {
     isLoading.value = false;
@@ -71,13 +82,13 @@ const handleRegister = async () => {
       leave-from-class="opacity-100"
       leave-to-class="opacity-0"
     >
-      <div 
-        v-if="visible" 
+      <div
+        v-if="visible"
         class="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
       >
         <!-- Backdrop -->
-        <div 
-          class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" 
+        <div
+          class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm"
           @click="closeModal"
         ></div>
 
@@ -91,49 +102,67 @@ const handleRegister = async () => {
           leave-to-class="opacity-0 scale-95 translate-y-4"
           appear
         >
-          <div 
-            class="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden"
+          <div
+            class="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
             role="dialog"
             aria-modal="true"
           >
             <!-- Close Button -->
-            <button 
-              @click="closeModal" 
-              class="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors z-10"
+            <button
+              @click="closeModal"
+              class="absolute right-4 top-4 z-10 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
               :disabled="isLoading"
             >
-              <X class="w-5 h-5" />
+              <X class="h-5 w-5" />
             </button>
 
             <!-- Header / Illustration -->
-            <div class="bg-gradient-to-br from-rose-50 via-white to-rose-50 p-8 pb-6 text-center border-b border-rose-100/50">
-              <div class="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center text-white shadow-rose-200 shadow-lg mb-4 transform transition-transform hover:scale-105 duration-300">
-                <span class="font-bold text-2xl tracking-tighter">B</span>
+            <div
+              class="border-b border-rose-100/50 bg-gradient-to-br from-rose-50 via-white to-rose-50 p-8 pb-6 text-center"
+            >
+              <div
+                class="mx-auto mb-4 flex h-14 w-14 transform items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-lg shadow-rose-200 transition-transform duration-300 hover:scale-105"
+              >
+                <span class="text-2xl font-bold tracking-tighter">B</span>
               </div>
-              <h2 class="text-2xl font-bold text-gray-900 tracking-tight">
+              <h2 class="text-2xl font-bold tracking-tight text-gray-900">
                 {{ activeTab === 'login' ? '欢迎回来' : '创建账号' }}
               </h2>
-              <p class="text-sm text-gray-500 mt-2">
-                {{ activeTab === 'login' ? '登录以继续使用 BioCloud 工具' : '加入 BioCloud，开启科研之旅' }}
+              <p class="mt-2 text-sm text-gray-500">
+                {{
+                  activeTab === 'login'
+                    ? '登录以继续使用 BioCloud 工具'
+                    : '加入 BioCloud，开启科研之旅'
+                }}
               </p>
             </div>
 
             <!-- Tabs -->
-            <div class="flex p-1 mx-6 mt-6 bg-gray-100/80 rounded-xl relative">
-              <div 
-                class="absolute inset-y-1 w-[calc(50%-4px)] bg-white rounded-lg shadow-sm transition-all duration-300 ease-spring"
-                :class="activeTab === 'login' ? 'left-1' : 'left-[calc(50%+4px)]'"
+            <div class="relative mx-6 mt-6 flex rounded-xl bg-gray-100/80 p-1">
+              <div
+                class="ease-spring absolute inset-y-1 w-[calc(50%-4px)] rounded-lg bg-white shadow-sm transition-all duration-300"
+                :class="
+                  activeTab === 'login' ? 'left-1' : 'left-[calc(50%+4px)]'
+                "
               ></div>
-              <button 
-                class="flex-1 py-2 text-sm font-medium transition-colors relative z-10 rounded-lg"
-                :class="activeTab === 'login' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+              <button
+                class="relative z-10 flex-1 rounded-lg py-2 text-sm font-medium transition-colors"
+                :class="
+                  activeTab === 'login'
+                    ? 'text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                "
                 @click="activeTab = 'login'"
               >
                 登录
               </button>
-              <button 
-                class="flex-1 py-2 text-sm font-medium transition-colors relative z-10 rounded-lg"
-                :class="activeTab === 'register' ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'"
+              <button
+                class="relative z-10 flex-1 rounded-lg py-2 text-sm font-medium transition-colors"
+                :class="
+                  activeTab === 'register'
+                    ? 'text-gray-900'
+                    : 'text-gray-500 hover:text-gray-700'
+                "
                 @click="activeTab = 'register'"
               >
                 注册
@@ -142,18 +171,25 @@ const handleRegister = async () => {
 
             <!-- Forms -->
             <div class="p-8 pt-6">
-              
               <!-- Login Form -->
-              <form v-if="activeTab === 'login'" @submit.prevent="handleLogin" class="space-y-5">
+              <form
+                v-if="activeTab === 'login'"
+                @submit.prevent="handleLogin"
+                class="space-y-5"
+              >
                 <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-gray-700 ml-1">用户名</label>
-                  <div class="relative group">
-                    <User class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-rose-500 transition-colors" />
-                    <input 
+                  <label class="ml-1 text-xs font-semibold text-gray-700"
+                    >用户名</label
+                  >
+                  <div class="group relative">
+                    <User
+                      class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-rose-500"
+                    />
+                    <input
                       v-model="loginForm.username"
-                      type="text" 
-                      placeholder="请输入用户名" 
-                      class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all placeholder-gray-400 text-sm"
+                      type="text"
+                      placeholder="请输入用户名"
+                      class="w-full rounded-xl border border-gray-200 bg-gray-50/50 py-2.5 pl-10 pr-4 text-sm placeholder-gray-400 outline-none transition-all focus:border-rose-500 focus:bg-white focus:ring-4 focus:ring-rose-500/10"
                       required
                       :disabled="isLoading"
                     />
@@ -161,52 +197,67 @@ const handleRegister = async () => {
                 </div>
 
                 <div class="space-y-1.5">
-                   <div class="flex justify-between items-center ml-1">
-                     <label class="text-xs font-semibold text-gray-700">密码</label>
-                     <a href="#" class="text-xs text-rose-500 hover:text-rose-600 font-medium hover:underline">忘记密码?</a>
-                   </div>
-                  <div class="relative group">
-                    <Lock class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-rose-500 transition-colors" />
-                    <input 
+                  <div class="ml-1 flex items-center justify-between">
+                    <label class="text-xs font-semibold text-gray-700"
+                      >密码</label
+                    >
+                    <a
+                      href="#"
+                      class="text-xs font-medium text-rose-500 hover:text-rose-600 hover:underline"
+                      >忘记密码?</a
+                    >
+                  </div>
+                  <div class="group relative">
+                    <Lock
+                      class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-rose-500"
+                    />
+                    <input
                       v-model="loginForm.password"
                       :type="showPassword ? 'text' : 'password'"
-                      placeholder="请输入密码" 
-                      class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all placeholder-gray-400 text-sm"
+                      placeholder="请输入密码"
+                      class="w-full rounded-xl border border-gray-200 bg-gray-50/50 py-2.5 pl-10 pr-10 text-sm placeholder-gray-400 outline-none transition-all focus:border-rose-500 focus:bg-white focus:ring-4 focus:ring-rose-500/10"
                       required
                       :disabled="isLoading"
                     />
-                    <button 
+                    <button
                       type="button"
                       @click="showPassword = !showPassword"
                       class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                     >
-                      <component :is="showPassword ? EyeOff : Eye" class="w-4 h-4" />
+                      <component
+                        :is="showPassword ? EyeOff : Eye"
+                        class="h-4 w-4"
+                      />
                     </button>
                   </div>
                 </div>
 
-                <button 
-                  type="submit" 
-                  class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl font-bold shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+                <button
+                  type="submit"
+                  class="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 py-2.5 font-bold text-white shadow-lg shadow-rose-500/30 transition-all hover:-translate-y-0.5 hover:bg-rose-700 hover:shadow-xl hover:shadow-rose-500/40 active:bg-rose-800 disabled:transform-none disabled:cursor-not-allowed disabled:opacity-70"
                   :disabled="isLoading"
                 >
-                  <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
+                  <Loader2 v-if="isLoading" class="h-4 w-4 animate-spin" />
                   <span v-else>立即登录</span>
-                  <ArrowRight v-if="!isLoading" class="w-4 h-4" />
+                  <ArrowRight v-if="!isLoading" class="h-4 w-4" />
                 </button>
               </form>
 
               <!-- Register Form -->
               <form v-else @submit.prevent="handleRegister" class="space-y-4">
                 <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-gray-700 ml-1">用户名</label>
-                  <div class="relative group">
-                    <User class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-rose-500 transition-colors" />
-                    <input 
+                  <label class="ml-1 text-xs font-semibold text-gray-700"
+                    >用户名</label
+                  >
+                  <div class="group relative">
+                    <User
+                      class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-rose-500"
+                    />
+                    <input
                       v-model="registerForm.username"
-                      type="text" 
-                      placeholder="设置用户名" 
-                      class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all placeholder-gray-400 text-sm"
+                      type="text"
+                      placeholder="设置用户名"
+                      class="w-full rounded-xl border border-gray-200 bg-gray-50/50 py-2.5 pl-10 pr-4 text-sm placeholder-gray-400 outline-none transition-all focus:border-rose-500 focus:bg-white focus:ring-4 focus:ring-rose-500/10"
                       required
                       :disabled="isLoading"
                     />
@@ -214,14 +265,18 @@ const handleRegister = async () => {
                 </div>
 
                 <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-gray-700 ml-1">邮箱</label>
-                  <div class="relative group">
-                    <Mail class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-rose-500 transition-colors" />
-                    <input 
+                  <label class="ml-1 text-xs font-semibold text-gray-700"
+                    >邮箱</label
+                  >
+                  <div class="group relative">
+                    <Mail
+                      class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-rose-500"
+                    />
+                    <input
                       v-model="registerForm.email"
-                      type="email" 
-                      placeholder="您的邮箱地址" 
-                      class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all placeholder-gray-400 text-sm"
+                      type="email"
+                      placeholder="您的邮箱地址"
+                      class="w-full rounded-xl border border-gray-200 bg-gray-50/50 py-2.5 pl-10 pr-4 text-sm placeholder-gray-400 outline-none transition-all focus:border-rose-500 focus:bg-white focus:ring-4 focus:ring-rose-500/10"
                       required
                       :disabled="isLoading"
                     />
@@ -229,55 +284,69 @@ const handleRegister = async () => {
                 </div>
 
                 <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-gray-700 ml-1">密码</label>
-                  <div class="relative group">
-                    <Lock class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-rose-500 transition-colors" />
-                    <input 
+                  <label class="ml-1 text-xs font-semibold text-gray-700"
+                    >密码</label
+                  >
+                  <div class="group relative">
+                    <Lock
+                      class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-rose-500"
+                    />
+                    <input
                       v-model="registerForm.password"
                       :type="showPassword ? 'text' : 'password'"
-                      placeholder="设置登录密码" 
-                      class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all placeholder-gray-400 text-sm"
+                      placeholder="设置登录密码"
+                      class="w-full rounded-xl border border-gray-200 bg-gray-50/50 py-2.5 pl-10 pr-10 text-sm placeholder-gray-400 outline-none transition-all focus:border-rose-500 focus:bg-white focus:ring-4 focus:ring-rose-500/10"
                       required
                       :disabled="isLoading"
                     />
-                     <button 
+                    <button
                       type="button"
                       @click="showPassword = !showPassword"
                       class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                     >
-                      <component :is="showPassword ? EyeOff : Eye" class="w-4 h-4" />
+                      <component
+                        :is="showPassword ? EyeOff : Eye"
+                        class="h-4 w-4"
+                      />
                     </button>
                   </div>
                 </div>
 
-                 <div class="space-y-1.5">
-                  <label class="text-xs font-semibold text-gray-700 ml-1">确认密码</label>
-                  <div class="relative group">
-                    <Lock class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 group-focus-within:text-rose-500 transition-colors" />
-                    <input 
+                <div class="space-y-1.5">
+                  <label class="ml-1 text-xs font-semibold text-gray-700"
+                    >确认密码</label
+                  >
+                  <div class="group relative">
+                    <Lock
+                      class="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-rose-500"
+                    />
+                    <input
                       v-model="registerForm.confirmPassword"
                       :type="showConfirmPassword ? 'text' : 'password'"
-                      placeholder="再次输入密码" 
-                      class="w-full pl-10 pr-10 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all placeholder-gray-400 text-sm"
+                      placeholder="再次输入密码"
+                      class="w-full rounded-xl border border-gray-200 bg-gray-50/50 py-2.5 pl-10 pr-10 text-sm placeholder-gray-400 outline-none transition-all focus:border-rose-500 focus:bg-white focus:ring-4 focus:ring-rose-500/10"
                       required
                       :disabled="isLoading"
                     />
-                    <button 
+                    <button
                       type="button"
                       @click="showConfirmPassword = !showConfirmPassword"
                       class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
                     >
-                      <component :is="showConfirmPassword ? EyeOff : Eye" class="w-4 h-4" />
+                      <component
+                        :is="showConfirmPassword ? EyeOff : Eye"
+                        class="h-4 w-4"
+                      />
                     </button>
                   </div>
                 </div>
 
-                <button 
-                  type="submit" 
-                  class="w-full py-2.5 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl font-bold shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+                <button
+                  type="submit"
+                  class="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 py-2.5 font-bold text-white shadow-lg shadow-rose-500/30 transition-all hover:-translate-y-0.5 hover:bg-rose-700 hover:shadow-xl hover:shadow-rose-500/40 active:bg-rose-800 disabled:transform-none disabled:cursor-not-allowed disabled:opacity-70"
                   :disabled="isLoading"
                 >
-                  <Loader2 v-if="isLoading" class="w-4 h-4 animate-spin" />
+                  <Loader2 v-if="isLoading" class="h-4 w-4 animate-spin" />
                   <span v-else>注册账号</span>
                 </button>
               </form>
@@ -293,14 +362,13 @@ const handleRegister = async () => {
               </div>
 
               <!-- Social Login -->
-              <button 
-                class="w-full py-2.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl font-medium border border-gray-200 transition-all flex items-center justify-center gap-2 hover:border-gray-300"
+              <button
+                class="flex w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-2.5 font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100"
                 :disabled="isLoading"
               >
-                <Github class="w-5 h-5" />
+                <Github class="h-5 w-5" />
                 使用 GitHub 登录
               </button>
-              
             </div>
           </div>
         </Transition>

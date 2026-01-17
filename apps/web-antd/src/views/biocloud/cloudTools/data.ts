@@ -1,10 +1,15 @@
 import type { VbenFormSchema } from '#/adapter/form';
 import type { VxeTableGridOptions } from '#/adapter/vxe-table';
+
 import { h } from 'vue';
-import { Tag, Button, Popconfirm, Space } from 'ant-design-vue';
+
+import { Button, Popconfirm, Space, Tag } from 'ant-design-vue';
 
 // 搜索表单配置
-export function useQuerySchema(categoryOptions: any, typeOptions: any): VbenFormSchema[] {
+export function useQuerySchema(
+  categoryOptions: any,
+  typeOptions: any,
+): VbenFormSchema[] {
   return [
     {
       component: 'Input',
@@ -19,7 +24,11 @@ export function useQuerySchema(categoryOptions: any, typeOptions: any): VbenForm
       componentProps: {
         placeholder: '请选择组学分类',
         allowClear: true,
-        options: categoryOptions?.map((item: string) => ({ label: item, value: item })) || [],
+        options:
+          categoryOptions?.map((item: string) => ({
+            label: item,
+            value: item,
+          })) || [],
       },
       fieldName: 'category',
       label: '组学分类',
@@ -30,7 +39,9 @@ export function useQuerySchema(categoryOptions: any, typeOptions: any): VbenForm
       componentProps: {
         placeholder: '请选择功能分类',
         allowClear: true,
-        options: typeOptions?.map((item: string) => ({ label: item, value: item })) || [],
+        options:
+          typeOptions?.map((item: string) => ({ label: item, value: item })) ||
+          [],
       },
       fieldName: 'type',
       label: '功能分类',
@@ -41,8 +52,8 @@ export function useQuerySchema(categoryOptions: any, typeOptions: any): VbenForm
 
 // 表格列配置
 export function useColumns(actions: {
-  onEdit: (row: any) => void;
   onDelete: (row: any) => void;
+  onEdit: (row: any) => void;
 }): VxeTableGridOptions['columns'] {
   return [
     {
@@ -84,16 +95,24 @@ export function useColumns(actions: {
               },
             });
           }
-          return h('div', {
-            class: 'flex items-center justify-center',
-            style: {
-              width: '40px',
-              height: '40px',
-              backgroundColor: '#f3f4f6',
-              borderRadius: '6px',
-              border: '1px solid #e5e7eb',
+          return h(
+            'div',
+            {
+              class: 'flex items-center justify-center',
+              style: {
+                width: '40px',
+                height: '40px',
+                backgroundColor: '#f3f4f6',
+                borderRadius: '6px',
+                border: '1px solid #e5e7eb',
+              },
             },
-          }, h('span', { style: { fontSize: '12px', color: '#6b7280' } }, '无图片'));
+            h(
+              'span',
+              { style: { fontSize: '12px', color: '#6b7280' } },
+              '无图片',
+            ),
+          );
         },
       },
     },
@@ -103,7 +122,9 @@ export function useColumns(actions: {
       width: 120,
       slots: {
         default: ({ row }) => {
-          return row.category ? h(Tag, { color: 'blue' }, () => row.category) : '-';
+          return row.category
+            ? h(Tag, { color: 'blue' }, () => row.category)
+            : '-';
         },
       },
     },
@@ -136,9 +157,13 @@ export function useColumns(actions: {
       align: 'center',
       slots: {
         default: ({ row }) => {
-          return h(Tag, { 
-            color: row.is_favorite ? 'red' : 'default' 
-          }, () => row.is_favorite ? '是' : '否');
+          return h(
+            Tag,
+            {
+              color: row.is_favorite ? 'red' : 'default',
+            },
+            () => (row.is_favorite ? '是' : '否'),
+          );
         },
       },
     },
@@ -161,21 +186,34 @@ export function useColumns(actions: {
       slots: {
         default: ({ row }) => {
           return h(Space, { size: 'small' }, () => [
-            h(Button, {
-              type: 'link',
-              size: 'small',
-              onClick: () => actions.onEdit(row),
-            }, () => '编辑'),
-            h(Popconfirm, {
-              title: '确定要删除这个工具吗？',
-              onConfirm: () => actions.onDelete(row),
-            }, {
-              default: () => h(Button, {
+            h(
+              Button,
+              {
                 type: 'link',
                 size: 'small',
-                danger: true,
-              }, () => '删除'),
-            }),
+                onClick: () => actions.onEdit(row),
+              },
+              () => '编辑',
+            ),
+            h(
+              Popconfirm,
+              {
+                title: '确定要删除这个工具吗？',
+                onConfirm: () => actions.onDelete(row),
+              },
+              {
+                default: () =>
+                  h(
+                    Button,
+                    {
+                      type: 'link',
+                      size: 'small',
+                      danger: true,
+                    },
+                    () => '删除',
+                  ),
+              },
+            ),
           ]);
         },
       },
@@ -285,7 +323,10 @@ export function useAddSchema(): VbenFormSchema[] {
   ];
 }
 
-export function useEditSchema(categoryOptions: any, typeOptions: any): VbenFormSchema[] {
+export function useEditSchema(
+  categoryOptions: any,
+  typeOptions: any,
+): VbenFormSchema[] {
   return [
     {
       component: 'Input',
@@ -344,8 +385,10 @@ export function useEditSchema(categoryOptions: any, typeOptions: any): VbenFormS
         placeholder: '请选择组学分类',
         allowClear: true,
         options:
-          categoryOptions?.map((item: string) => ({ label: item, value: item })) ||
-          [],
+          categoryOptions?.map((item: string) => ({
+            label: item,
+            value: item,
+          })) || [],
       },
       fieldName: 'category',
       label: '组学分类',
@@ -356,7 +399,8 @@ export function useEditSchema(categoryOptions: any, typeOptions: any): VbenFormS
         placeholder: '请选择功能分类',
         allowClear: true,
         options:
-          typeOptions?.map((item: string) => ({ label: item, value: item })) || [],
+          typeOptions?.map((item: string) => ({ label: item, value: item })) ||
+          [],
       },
       fieldName: 'type',
       label: '功能分类',
