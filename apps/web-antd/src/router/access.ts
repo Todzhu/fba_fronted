@@ -25,7 +25,7 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
     IFrameView,
   };
 
-  return await generateAccessible(preferences.app.accessMode, {
+  const result = await generateAccessible(preferences.app.accessMode, {
     ...options,
     fetchMenuListAsync: async () => {
       message.loading({
@@ -34,12 +34,43 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
       });
       return await getAllMenusApi();
     },
-    // 可以指定没有权限跳转403页面
     forbiddenComponent,
-    // 如果 route.meta.menuVisibleWithForbidden = true
     layoutMap,
     pageMap,
   });
+
+  // 手动添加前端定义的隐藏详情页路由（后端可能不返回这些路由）
+  // 遍历 options.routes 找到所有 hideInMenu 的路由并确保它们被包含
+  const ensureHiddenRoutes = (routes: any[], accessibleRoutes: any[]) => {
+    routes.forEach(route => {
+      if (route.children && route.children.length > 0) {
+        // 检查是否有父路由在 accessibleRoutes 中
+        const parentInAccessible = accessibleRoutes.find(r => r.name === route.name || r.path === route.path);
+        if (parentInAccessible) {
+          // 遍历子路由，添加隐藏的详情页
+          route.children.forEach((child: any) => {
+            if (child.meta?.hideInMenu && !parentInAccessible.children?.find((c: any) => c.name === child.name)) {
+              // 这个隐藏路由不在 accessibleRoutes 中，手动添加
+              if (!parentInAccessible.children) {
+                parentInAccessible.children = [];
+              }
+              parentInAccessible.children.push(child);
+            }
+          });
+        }
+        // 递归处理子路由
+        if (parentInAccessible?.children) {
+          ensureHiddenRoutes(route.children, parentInAccessible.children);
+        }
+      }
+    });
+  };
+
+  if (options.routes && result.accessibleRoutes) {
+    ensureHiddenRoutes(options.routes, result.accessibleRoutes);
+  }
+
+  return result;
 }
 
 export { generateAccess };
