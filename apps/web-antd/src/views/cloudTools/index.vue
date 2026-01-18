@@ -54,7 +54,7 @@ const fetchTools = async () => {
       page: currentPage.value,
       size: pageSize.value,
       search: searchText.value || undefined,
-      omics: activeOmics.value !== 'all' ? activeOmics.value : undefined,
+      omics: activeOmics.value === 'all' ? undefined : activeOmics.value,
       func: activeFunc.value.length > 0 ? activeFunc.value : undefined,
     });
 
