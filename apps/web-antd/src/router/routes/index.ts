@@ -35,7 +35,7 @@ const staticRoutes: RouteRecordRaw[] = [
       {
         name: 'AnalysisToolDetail',
         path: 'tool/:id',
-        component: () => import('#/views/analysis/tools/detail.vue'),
+        component: () => import('#/views/cloudTools/detail.vue'),
         meta: {
           hideInMenu: true,
           title: '工具分析',

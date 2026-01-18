@@ -202,8 +202,12 @@ onMounted(() => {
 
           <div class="flex items-center justify-between text-xs text-gray-400">
             <div class="flex gap-3">
-              <span class="flex items-center gap-1"><Icon icon="mdi:eye-outline" /> {{ tool.views }}</span>
-              <span class="flex items-center gap-1"><Icon icon="mdi:star-outline" /> {{ tool.stars }}</span>
+              <span class="flex items-center gap-1">
+                <Icon icon="mdi:eye-outline" /> {{ tool.views }}
+              </span>
+              <span class="flex items-center gap-1">
+                <Icon icon="mdi:star-outline" /> {{ tool.stars }}
+              </span>
             </div>
             <Icon
               icon="mdi:arrow-right-circle"
