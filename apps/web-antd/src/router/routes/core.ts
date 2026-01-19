@@ -33,7 +33,8 @@ const coreRoutes: RouteRecordRaw[] = [
       title: 'Root',
     },
     name: 'Root',
-    path: '/app',
+    path: '/',
+    redirect: LOGIN_PATH,
     children: [],
   },
   {

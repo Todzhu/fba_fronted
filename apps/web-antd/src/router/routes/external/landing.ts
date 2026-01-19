@@ -9,7 +9,7 @@ const routes: RouteRecordRaw[] = [
       title: '工具广场',
     },
     name: 'LandingPage',
-    path: '/',
+    path: '/index',
     alias: ['/landing', '/plaza'],
   },
 ];
