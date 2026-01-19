@@ -47,6 +47,7 @@
     "pinia": "catalog:",
     "socket.io-client": "^4.8.1",
     "vue": "catalog:",
-    "vue-router": "catalog:"
+    "vue-router": "catalog:",
+    "x-data-spreadsheet": "^1.1.9"
   }
 }

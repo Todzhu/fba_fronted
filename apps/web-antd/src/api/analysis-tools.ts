@@ -76,3 +76,70 @@ export interface AnalysisToolCategories {
 export async function getAnalysisToolCategories() {
     return requestClient.get<AnalysisToolCategories>('/api/v1/sys/analysis-tools/categories');
 }
+
+// ========== 管理端 API ==========
+
+export interface CloudToolCreateParams {
+    title: string;
+    omics_category: string;
+    description?: string | null;
+    icon?: string | null;
+    color?: string | null;
+    func_category?: string | null;
+    status?: number;
+    sort?: number;
+}
+
+export interface CloudToolUpdateParams {
+    title?: string;
+    omics_category?: string;
+    description?: string | null;
+    icon?: string | null;
+    color?: string | null;
+    func_category?: string | null;
+    status?: number;
+    sort?: number;
+}
+
+export interface CloudToolListParams {
+    search?: string;
+    omics?: string;
+    status?: number;
+    page?: number;
+    size?: number;
+}
+
+/**
+ * 获取云端工具列表（管理端）
+ */
+export async function getCloudToolListApi(params?: CloudToolListParams) {
+    return requestClient.get<AnalysisToolListResponse>('/api/v1/sys/cloud-tools', { params });
+}
+
+/**
+ * 获取云端工具详情（管理端）
+ */
+export async function getCloudToolApi(id: number) {
+    return requestClient.get<AnalysisTool>(`/api/v1/sys/cloud-tools/${id}`);
+}
+
+/**
+ * 创建云端工具
+ */
+export async function createCloudToolApi(data: CloudToolCreateParams) {
+    return requestClient.post('/api/v1/sys/cloud-tools', data);
+}
+
+/**
+ * 更新云端工具
+ */
+export async function updateCloudToolApi(id: number, data: CloudToolUpdateParams) {
+    return requestClient.put(`/api/v1/sys/cloud-tools/${id}`, data);
+}
+
+/**
+ * 删除云端工具
+ */
+export async function deleteCloudToolApi(id: number) {
+    return requestClient.delete(`/api/v1/sys/cloud-tools/${id}`);
+}

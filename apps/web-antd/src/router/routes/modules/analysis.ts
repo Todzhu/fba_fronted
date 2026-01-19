@@ -19,6 +19,15 @@ const routes: RouteRecordRaw[] = [
           title: '工具广场',
         },
       },
+      {
+        name: 'AnalysisToolDetail',
+        path: '/analysis/tool/:id',
+        component: () => import('#/views/cloudTools/detail.vue'),
+        meta: {
+          title: '工具详情',
+          hideInMenu: true,
+        },
+      },
     ],
   },
 ];

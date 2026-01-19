@@ -178,8 +178,21 @@ onMounted(() => {
           @click="goToDetail(tool.id)"
         >
           <div class="flex items-start">
-            <div class="tool-icon-wrapper mr-3">
+            <div
+              class="tool-icon-wrapper mr-3 flex-shrink-0"
+              :style="{
+                backgroundColor:
+                  tool.icon && tool.icon.includes('/') ? 'transparent' : undefined,
+              }"
+            >
+              <img
+                v-if="tool.icon && tool.icon.includes('/')"
+                :src="tool.icon"
+                class="h-full w-full object-contain"
+                alt="icon"
+              />
               <Icon
+                v-else
                 :icon="tool.icon || 'mdi:chart-bar'"
                 class="text-3xl"
                 :style="{ color: tool.color || '#1890ff' }"
@@ -288,8 +301,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   background-color: #f5f5f5;
   border-radius: 8px;
 }

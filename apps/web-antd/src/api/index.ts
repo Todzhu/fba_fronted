@@ -1,3 +1,4 @@
+export * from './analysis-tools';
 export * from './core';
 export * from './data-permission';
 export * from './dept';
