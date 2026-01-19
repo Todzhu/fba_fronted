@@ -28,10 +28,7 @@ import {
 
 import { fetchAnalysisToolCategories, fetchAnalysisToolList } from '#/api';
 
-import AuthModal from './components/AuthModal.vue';
-
-// Auth Modal State
-const showAuthModal = ref(false);
+// Router is provided by Vue Router
 
 // Loading State
 const loading = ref(false);
@@ -125,12 +122,7 @@ const loadTools = async () => {
     if (response && response.items) {
       tools.value = response.items;
       totalCount.value = response.total || 0;
-      console.log(
-        'Loaded tools:',
-        tools.value.length,
-        'total:',
-        totalCount.value,
-      );
+      // Tools loaded successfully
     } else {
       console.warn('Unexpected response format:', response);
       tools.value = [];
@@ -153,7 +145,7 @@ const loadCategories = async () => {
     // 所以 response 直接就是 string[] 分类数组
     if (response && Array.isArray(response)) {
       categoryList.value = response;
-      console.log('Loaded categories:', categoryList.value);
+      // Categories loaded successfully
     } else {
       console.warn('Unexpected categories format:', response);
       categoryList.value = [];
@@ -264,13 +256,13 @@ onMounted(() => {
             >
               <Moon class="h-5 w-5" />
             </button>
-            <button
-              @click="showAuthModal = true"
+            <router-link
+              to="/auth/login"
               class="hidden transform items-center justify-center rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-rose-700 hover:shadow-lg sm:flex"
             >
               <LogIn class="mr-2 h-4 w-4" />
               登录
-            </button>
+            </router-link>
           </div>
         </div>
       </div>
@@ -499,13 +491,9 @@ onMounted(() => {
                   >
                     <div class="flex items-center gap-2">
                       <Eye class="h-4 w-4 text-gray-400" />
-                      <span class="text-xs text-gray-500"
-                        >{{ tool.views }} 次浏览</span
-                      >
+                      <span class="text-xs text-gray-500">{{ tool.views }} 次浏览</span>
                     </div>
-                    <span class="text-xs text-gray-400">{{
-                      formatDate(tool.created_time)
-                    }}</span>
+                    <span class="text-xs text-gray-400">{{ formatDate(tool.created_time) }}</span>
                   </div>
                 </div>
               </div>
@@ -620,9 +608,6 @@ onMounted(() => {
         </div>
       </div>
     </footer>
-
-    <!-- Auth Modal -->
-    <AuthModal v-model:visible="showAuthModal" />
   </div>
 </template>
 
