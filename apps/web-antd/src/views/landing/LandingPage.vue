@@ -491,9 +491,13 @@ onMounted(() => {
                   >
                     <div class="flex items-center gap-2">
                       <Eye class="h-4 w-4 text-gray-400" />
-                      <span class="text-xs text-gray-500">{{ tool.views }} 次浏览</span>
+                      <span class="text-xs text-gray-500"
+                        >{{ tool.views }} 次浏览</span
+                      >
                     </div>
-                    <span class="text-xs text-gray-400">{{ formatDate(tool.created_time) }}</span>
+                    <span class="text-xs text-gray-400">{{
+                      formatDate(tool.created_time)
+                    }}</span>
                   </div>
                 </div>
               </div>
