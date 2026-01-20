@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Page } from '@vben/common-ui';
 import { message, Breadcrumb, Modal } from 'ant-design-vue';
 import { IconifyIcon } from '@vben/icons';
@@ -9,76 +9,81 @@ import FileToolbar from './components/FileToolbar.vue';
 import FileGrid from './components/FileGrid.vue';
 import NewFolderModal from './components/NewFolderModal.vue';
 import FileUploadModal from './components/FileUploadModal.vue';
-
 import RenameModal from './components/RenameModal.vue';
 import MoveModal from './components/MoveModal.vue';
 import FilePreviewModal from './components/FilePreviewModal.vue';
 
-import { allMockFiles, type FileItem } from './mock';
+import {
+    getMyDataFiles,
+    createMyDataFolder,
+    uploadMyDataFile,
+    downloadMyDataFile,
+    renameMyDataFile,
+    moveMyDataFile,
+    deleteMyDataFile,
+    batchDeleteMyDataFiles,
+    type FileItem as ApiFileItem,
+} from '#/api/my-data';
+
+// 前端 FileItem 类型
+interface FileItem {
+    id: string;
+    name: string;
+    size: string;
+    updateTime: string;
+    type: 'folder' | 'file';
+    parentId: string | null;
+    icon?: string;
+}
 
 // State
-// ... (keep existing state)
-
-const currentFolderId = ref<string | null>(null);
-const breadcrumbs = ref<{ id: string | null; name: string }[]>([
-  { id: null, name: '我的数据' }
+const loading = ref(false);
+const currentFolderId = ref<number | null>(null);
+const breadcrumbs = ref<{ id: number | null; name: string }[]>([
+    { id: null, name: '我的数据' }
 ]);
-
-// Search State
 const searchKeyword = ref('');
-
-// Make mock data reactive for local mutations
-const allFiles = ref<FileItem[]>([...allMockFiles]);
-
-// Computed
-const files = computed(() => {
-    if (searchKeyword.value.trim()) {
-        const keyword = searchKeyword.value.trim().toLowerCase();
-        return allFiles.value.filter(f => f.name.toLowerCase().includes(keyword));
-    }
-    return allFiles.value.filter(f => f.parentId === currentFolderId.value);
-});
+const allFiles = ref<FileItem[]>([]);
 const selectedFiles = ref<FileItem[]>([]);
 const viewMode = ref('list');
 const newFolderModalOpen = ref(false);
 const uploadModalOpen = ref(false);
+const renameModalOpen = ref(false);
+const moveModalOpen = ref(false);
+const previewModalOpen = ref(false);
+const currentRenameFile = ref<FileItem | null>(null);
+const currentMoveFile = ref<FileItem | null>(null);
+const currentPreviewFile = ref<FileItem | null>(null);
 
-// Handlers
-const handleSearch = (value: string) => {
-  searchKeyword.value = value;
-  if (value) {
-      selectedFiles.value = []; // Clear selection on search
-  }
+// Computed
+const files = computed(() => allFiles.value);
+
+// 转换后端数据到前端格式
+const transformFileItem = (item: ApiFileItem): FileItem => ({
+    id: String(item.id),
+    name: item.name,
+    size: item.type === 'folder' ? '-' : formatFileSize(item.size),
+    updateTime: item.updated_time ? formatDateTime(item.updated_time) : '-',
+    type: item.type,
+    parentId: item.parent_id ? String(item.parent_id) : null,
+    icon: item.type === 'folder' ? undefined : determineIcon(item.name),
+});
+
+const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-const handleViewChange = (mode: string) => {
-  viewMode.value = mode;
+const formatDateTime = (dateStr: string): string => {
+    const d = new Date(dateStr);
+    return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 };
 
-const handleSelectionChange = (selection: FileItem[]) => {
-  selectedFiles.value = selection;
-};
-
-const handleUpload = () => {
-  uploadModalOpen.value = true;
-};
-
-const handleUploadFiles = (filesToUpload: any[]) => {
-    filesToUpload.forEach(file => {
-        const newFile: FileItem = {
-            id: `file-${Date.now()}-${Math.random()}`,
-            name: file.name,
-            size: file.size,
-            updateTime: new Date().toLocaleString(),
-            type: 'file',
-            parentId: currentFolderId.value,
-            icon: determineIcon(file.type)
-        };
-        allFiles.value.unshift(newFile);
-    });
-};
-
-const determineIcon = (ext: string): string => {
+const determineIcon = (filename: string): string => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
     const map: Record<string, string> = {
         'png': 'image', 'jpg': 'image', 'jpeg': 'image', 'gif': 'image',
         'pdf': 'pdf',
@@ -90,38 +95,92 @@ const determineIcon = (ext: string): string => {
         'mp4': 'video', 'mov': 'video',
         'js': 'code', 'ts': 'code', 'json': 'code', 'py': 'code'
     };
-    return map[ext.toLowerCase()] || 'file';
+    return map[ext] || 'file';
+};
+
+// Fetch files from API
+const fetchFiles = async () => {
+    loading.value = true;
+    try {
+        const params: { parent_id?: number; keyword?: string } = {};
+        if (searchKeyword.value.trim()) {
+            params.keyword = searchKeyword.value.trim();
+        } else if (currentFolderId.value !== null) {
+            params.parent_id = currentFolderId.value;
+        }
+        // 不传 parent_id 时，后端默认返回根目录
+        const res = await getMyDataFiles(params);
+        console.log('API Response:', res);
+        allFiles.value = res.items.map(transformFileItem);
+        // 清空选中状态，防止删除文件后选中栏残留
+        selectedFiles.value = [];
+    } catch (e: any) {
+        console.error('Fetch files error:', e);
+        message.error(e.message || '获取文件列表失败');
+    } finally {
+        loading.value = false;
+    }
+};
+
+onMounted(() => {
+    fetchFiles();
+});
+
+// Handlers
+const handleSearch = (value: string) => {
+    searchKeyword.value = value;
+    selectedFiles.value = [];
+    fetchFiles();
+};
+
+const handleViewChange = (mode: string) => {
+    viewMode.value = mode;
+};
+
+const handleSelectionChange = (selection: FileItem[]) => {
+    selectedFiles.value = selection;
+};
+
+const handleUpload = () => {
+    uploadModalOpen.value = true;
+};
+
+const handleUploadFiles = async (filesToUpload: File[]) => {
+    for (const file of filesToUpload) {
+        try {
+            await uploadMyDataFile(file, currentFolderId.value);
+            message.success(`${file.name} 上传成功`);
+        } catch (e: any) {
+            message.error(`${file.name} 上传失败: ${e.message}`);
+        }
+    }
+    fetchFiles();
 };
 
 const handleNewFolder = () => {
-  newFolderModalOpen.value = true;
+    newFolderModalOpen.value = true;
 };
 
-const handleCreateFolder = (name: string) => {
-  const newFolder: FileItem = {
-    id: `folder-${Date.now()}`,
-    name,
-    size: '-',
-    updateTime: new Date().toLocaleString(),
-    type: 'folder',
-    parentId: currentFolderId.value, // Set correct parentId
-  };
-  allFiles.value.unshift(newFolder);
-  message.success(`文件夹 "${name}" 创建成功 (Mock)`);
+const handleCreateFolder = async (name: string) => {
+    try {
+        await createMyDataFolder({ name, parent_id: currentFolderId.value });
+        message.success(`文件夹 "${name}" 创建成功`);
+        fetchFiles();
+    } catch (e: any) {
+        message.error(e.message || '创建文件夹失败');
+    }
 };
 
-const handleDownload = (file: FileItem) => {
+const handleDownload = async (file: FileItem) => {
     if (file.type === 'folder') {
         message.warning('暂不支持下载文件夹');
         return;
     }
     
     message.loading({ content: `正在准备下载 ${file.name}...`, key: 'download' });
-    
-    setTimeout(() => {
-        // Mock download logic
-        const content = `Mock content for file: ${file.name}\nSize: ${file.size}\nType: ${file.type}`;
-        const blob = new Blob([content], { type: 'text/plain' });
+    try {
+        const res = await downloadMyDataFile(Number(file.id));
+        const blob = new Blob([res as any]);
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -130,9 +189,10 @@ const handleDownload = (file: FileItem) => {
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
-        
         message.success({ content: '下载开始', key: 'download' });
-    }, 1000);
+    } catch (e: any) {
+        message.error({ content: e.message || '下载失败', key: 'download' });
+    }
 };
 
 const handleDelete = (file: FileItem) => {
@@ -142,9 +202,14 @@ const handleDelete = (file: FileItem) => {
         okText: '删除',
         okType: 'danger',
         cancelText: '取消',
-        onOk() {
-            allFiles.value = allFiles.value.filter(f => f.id !== file.id);
-            message.success('删除成功');
+        async onOk() {
+            try {
+                await deleteMyDataFile(Number(file.id));
+                message.success('删除成功');
+                fetchFiles();
+            } catch (e: any) {
+                message.error(e.message || '删除失败');
+            }
         }
     });
 };
@@ -157,29 +222,32 @@ const handleBatchDelete = () => {
         okText: '删除',
         okType: 'danger',
         cancelText: '取消',
-        onOk() {
-            const ids = new Set(selectedFiles.value.map(f => f.id));
-            allFiles.value = allFiles.value.filter(f => !ids.has(f.id));
-            selectedFiles.value = [];
-            message.success('批量删除成功');
+        async onOk() {
+            try {
+                await batchDeleteMyDataFiles(selectedFiles.value.map(f => Number(f.id)));
+                selectedFiles.value = [];
+                message.success('批量删除成功');
+                fetchFiles();
+            } catch (e: any) {
+                message.error(e.message || '删除失败');
+            }
         }
     });
 };
-
-// Rename State
-const renameModalOpen = ref(false);
-const currentRenameFile = ref<FileItem | null>(null);
 
 const handleRename = (file: FileItem) => {
     currentRenameFile.value = file;
     renameModalOpen.value = true;
 };
 
-const handleRenameSubmit = (newName: string) => {
-    if (currentRenameFile.value) {
-        currentRenameFile.value.name = newName;
-        // In real app, call API
+const handleRenameSubmit = async (newName: string) => {
+    if (!currentRenameFile.value) return;
+    try {
+        await renameMyDataFile(Number(currentRenameFile.value.id), newName);
         message.success('重命名成功');
+        fetchFiles();
+    } catch (e: any) {
+        message.error(e.message || '重命名失败');
     }
 };
 
@@ -188,35 +256,30 @@ const handleMove = (file: FileItem) => {
     moveModalOpen.value = true;
 };
 
-const handleMoveSubmit = (targetFolderId: string) => {
+const handleMoveSubmit = async (targetFolderId: string) => {
     if (!currentMoveFile.value) return;
     
-    // Check if moving to self or children (simple check for self)
     if (currentMoveFile.value.id === targetFolderId) {
         message.error('不能移动到自身');
         return;
     }
     
-    // In a real app we would check circular dependency deeper
+    const newParentId = targetFolderId === 'root' ? null : Number(targetFolderId);
     
-    // 'root' is special key for top level
-    const newParentId = targetFolderId === 'root' ? null : targetFolderId;
-    
-    if (currentMoveFile.value.parentId === newParentId) {
-         message.warning('文件已在该文件夹下');
-         return;
+    try {
+        await moveMyDataFile(Number(currentMoveFile.value.id), newParentId);
+        message.success('移动成功');
+        currentMoveFile.value = null;
+        fetchFiles();
+    } catch (e: any) {
+        message.error(e.message || '移动失败');
     }
-
-    currentMoveFile.value.parentId = newParentId;
-    message.success('移动成功');
-    currentMoveFile.value = null;
 };
 
-// Tree Data Generation for Move Modal
+// Tree Data for Move Modal (simplified - just root folder)
 const folderTreeData = computed(() => {
     const folders = allFiles.value.filter(f => f.type === 'folder');
     
-    // Helper to build tree
     const buildTree = (parentId: string | null): any[] => {
         return folders
             .filter(f => f.parentId === parentId)
@@ -224,9 +287,7 @@ const folderTreeData = computed(() => {
                 title: f.name,
                 key: f.id,
                 children: buildTree(f.id),
-                // Disable if moving a folder into itself (basic check)
-                disabled: currentMoveFile.value?.type === 'folder' && 
-                          (currentMoveFile.value.id === f.id) 
+                disabled: currentMoveFile.value?.type === 'folder' && currentMoveFile.value.id === f.id
             }));
     };
 
@@ -239,37 +300,31 @@ const folderTreeData = computed(() => {
     ];
 });
 
-// Move State
-const moveModalOpen = ref(false);
-const currentMoveFile = ref<FileItem | null>(null);
-
-// Navigation Handlers
+// Navigation
 const handleEnterFolder = (folder: FileItem) => {
-  currentFolderId.value = folder.id;
-  breadcrumbs.value.push({ id: folder.id, name: folder.name });
-  selectedFiles.value = []; // Clear selection when navigating
-  searchKeyword.value = ''; // Exit search mode
+    currentFolderId.value = Number(folder.id);
+    breadcrumbs.value.push({ id: Number(folder.id), name: folder.name });
+    selectedFiles.value = [];
+    searchKeyword.value = '';
+    fetchFiles();
 };
 
-const handleBreadcrumbClick = (item: { id: string | null; name: string }, index: number) => {
-  currentFolderId.value = item.id;
-  breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
-  selectedFiles.value = [];
-  searchKeyword.value = ''; // Exit search mode
+const handleBreadcrumbClick = (item: { id: number | null; name: string }, index: number) => {
+    currentFolderId.value = item.id;
+    breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
+    selectedFiles.value = [];
+    searchKeyword.value = '';
+    fetchFiles();
 };
 
 const handleNavUp = () => {
-  if (breadcrumbs.value.length > 1) {
-    const parent = breadcrumbs.value[breadcrumbs.value.length - 2];
-    if (parent) {
-      handleBreadcrumbClick(parent, breadcrumbs.value.length - 2);
+    if (breadcrumbs.value.length > 1) {
+        const parent = breadcrumbs.value[breadcrumbs.value.length - 2];
+        if (parent) {
+            handleBreadcrumbClick(parent, breadcrumbs.value.length - 2);
+        }
     }
-  }
 };
-
-// Preview State
-const previewModalOpen = ref(false);
-const currentPreviewFile = ref<FileItem | null>(null);
 
 const handlePreview = (file: FileItem) => {
     currentPreviewFile.value = file;
@@ -283,7 +338,6 @@ const handlePreview = (file: FileItem) => {
       
       <!-- Breadcrumb Navigation -->
       <div class="mb-6 flex items-center px-4 py-2">
-         <!-- Visual Anchor -->
          <div class="h-6 w-1.5 bg-blue-600 rounded-full mr-4"></div>
          
          <IconifyIcon 
@@ -293,7 +347,7 @@ const handlePreview = (file: FileItem) => {
             @click="handleNavUp"
          />
          <Breadcrumb separator=">">
-            <Breadcrumb.Item v-for="(item, index) in breadcrumbs" :key="item.id || 'root'">
+            <Breadcrumb.Item v-for="(item, index) in breadcrumbs" :key="item.id ?? 'root'">
                <span 
                  class="cursor-pointer hover:text-blue-600 transition-all duration-200"
                  :class="{ 
@@ -323,6 +377,7 @@ const handlePreview = (file: FileItem) => {
           <FileTable 
               v-if="viewMode === 'list'"
               :files="files"
+              :loading="loading"
               @selection-change="handleSelectionChange"
               @download="handleDownload"
               @delete="handleDelete"

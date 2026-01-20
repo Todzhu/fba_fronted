@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Modal, Upload, Button, message } from 'ant-design-vue';
+import { Modal, Upload, message } from 'ant-design-vue';
 import { IconifyIcon } from '@vben/icons';
 import type { UploadChangeParam, UploadProps } from 'ant-design-vue';
 
@@ -21,7 +21,7 @@ const handleChange = (info: UploadChangeParam) => {
   fileList.value = resFileList;
 };
 
-const handleOk = () => {
+const handleOk = async () => {
   if (!fileList.value || fileList.value.length === 0) {
     message.warning('请先选择文件');
     return;
@@ -29,22 +29,22 @@ const handleOk = () => {
   
   uploading.value = true;
   
-  // Simulate upload delay
-  setTimeout(() => {
-    // Emit uploaded files details to parent
-    const filesToUpload = fileList.value?.map(f => ({
-      name: f.name,
-      size: f.size ? (f.size / 1024).toFixed(1) + ' KB' : '0 KB',
-      type: f.name.split('.').pop() || 'file'
-    }));
-    
-    emit('upload', filesToUpload);
-    
+  // 提取真正的File对象（originFileObj是Ant Design Upload组件存储原始文件的字段）
+  const filesToUpload = fileList.value
+    .map(f => f.originFileObj as File)
+    .filter(f => f !== undefined && f !== null) as File[];
+  
+  if (filesToUpload.length === 0) {
+    message.warning('没有有效的文件');
     uploading.value = false;
-    fileList.value = [];
-    emit('update:open', false);
-    message.success('文件上传成功');
-  }, 1500);
+    return;
+  }
+  
+  emit('upload', filesToUpload);
+  
+  uploading.value = false;
+  fileList.value = [];
+  emit('update:open', false);
 };
 
 const handleCancel = () => {

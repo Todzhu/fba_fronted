@@ -3,6 +3,7 @@ import { Table, Tooltip, Dropdown, Menu } from 'ant-design-vue';
 import { IconifyIcon } from '@vben/icons';
 import type { FileItem } from '../mock';
 import { computed } from 'vue';
+import type { Key } from 'ant-design-vue/es/table/interface';
 
 interface Props {
   files: FileItem[];
@@ -74,7 +75,7 @@ const getIconColor = (icon?: string) => {
 }
 
 const rowSelection = computed(() => ({
-  onChange: (selectedRowKeys: string[], selectedRows: FileItem[]) => {
+  onChange: (selectedRowKeys: Key[], selectedRows: FileItem[]) => {
     emit('selection-change', selectedRows);
   },
 }));
@@ -86,6 +87,7 @@ const rowSelection = computed(() => ({
     :data-source="files"
     :loading="loading"
     :row-selection="rowSelection"
+    :scroll="{ x: 1000 }"
     :pagination="{ pageSize: 10 }"
     row-key="id"
   >
