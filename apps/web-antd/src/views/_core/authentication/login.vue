@@ -1,100 +1,73 @@
 <script lang="ts" setup>
 import type { VbenFormSchema } from '@vben/common-ui';
-// import type { BasicOption } from '@vben/types';
 
 import { computed, h, onMounted, onUnmounted, ref } from 'vue';
 
-import { AuthenticationLogin, z } from '@vben/common-ui';
+import { AuthenticationLogin, useVbenForm } from '@vben/common-ui';
 import { $t } from '@vben/locales';
-import { useAccessStore } from '@vben/stores';
+import { useAccessStore, useAuthStore } from '@vben/stores';
 
-import { Image } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
+import { refAutoReset } from '@vueuse/core';
 
-import OAuth2Login from '#/plugins/oauth2/views/login.vue';
-import { useAuthStore } from '#/store';
+import { getCaptcha } from '#/api';
 
-defineOptions({ name: 'Login' });
+defineOptions({ name: 'Login' })
 
 const authStore = useAuthStore();
 const accessStore = useAccessStore();
 
-// const MOCK_USER_OPTIONS: BasicOption[] = [
-//   {
-//     label: 'Admin',
-//     value: 'admin',
-//   },
-//   {
-//     label: 'Test',
-//     value: 'test',
-//   },
-// ];
-
 const imageSrc = ref('');
 const captchaEnabled = ref(false);
 const captchaExpireSeconds = ref(0);
-let refreshTimer: null | ReturnType<typeof setTimeout> = null;
+const uuid = ref('');
 
+// 倒计时
+const countdown = refAutoReset(0, 1000); // 1秒后重置为0，用于简单的倒计时触发器不合适，直接用数字减吧。
+// const countdownValue = ref(0);
+let timer: ReturnType<typeof setInterval> | null = null;
+
+const loading = ref(false);
+
+// 生成验证码
 const refreshCaptcha = async () => {
   try {
-    const captcha = await authStore.captcha();
-    captchaEnabled.value = captcha.is_enabled;
-    captchaExpireSeconds.value = captcha.expire_seconds;
-    imageSrc.value = `data:image/png;base64, ${captcha.image}`;
+    const result = await getCaptcha();
+    if (result) {
+      if (result.is_enabled) {
+        captchaEnabled.value = true;
+        imageSrc.value = result.image;
+        uuid.value = result.uuid;
+        captchaExpireSeconds.value = result.expire_seconds;
 
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-      refreshTimer = null;
-    }
-
-    // 自动刷新（提前3秒刷新）
-    if (captcha.is_enabled && captcha.expire_seconds > 0) {
-      const refreshDelay = Math.max((captcha.expire_seconds - 3) * 1000, 1000);
-      refreshTimer = setTimeout(() => {
-        refreshCaptcha();
-      }, refreshDelay);
+        // 重置并启动倒计时
+        if (timer) clearInterval(timer);
+        countdown.value = result.expire_seconds;
+        timer = setInterval(() => {
+          if (countdown.value > 0) {
+            countdown.value--;
+          } else {
+            if (timer) clearInterval(timer);
+          }
+        }, 1000);
+      } else {
+        captchaEnabled.value = false;
+        if (timer) clearInterval(timer);
+      }
     }
   } catch (error) {
-    console.error(error);
+    console.error('Failed to get captcha:', error);
+    captchaEnabled.value = false;
   }
 };
 
 const formSchema = computed((): VbenFormSchema[] => {
   const baseFields: VbenFormSchema[] = [
-    // {
-    //   component: 'VbenSelect',
-    //   componentProps: {
-    //     options: MOCK_USER_OPTIONS,
-    //     placeholder: $t('authentication.selectAccount'),
-    //   },
-    //   fieldName: 'selectAccount',
-    //   label: $t('authentication.selectAccount'),
-    //   rules: z
-    //     .string()
-    //     .min(1, { message: $t('authentication.selectAccount') })
-    //     .optional()
-    //     .default('admin'),
-    // },
     {
       component: 'VbenInput',
       componentProps: {
         placeholder: $t('authentication.usernameTip'),
       },
-      // dependencies: {
-      //   trigger(values, form) {
-      //     if (values.selectAccount) {
-      //       const findUser = MOCK_USER_OPTIONS.find(
-      //         (item) => item.value === values.selectAccount,
-      //       );
-      //       if (findUser) {
-      //         form.setValues({
-      //           password: '123456',
-      //           username: findUser.value,
-      //         });
-      //       }
-      //     }
-      //   },
-      //   triggerFields: ['selectAccount'],
-      // },
       fieldName: 'username',
       label: $t('authentication.username'),
       rules: z.string().min(1, { message: $t('authentication.usernameTip') }),
@@ -102,7 +75,7 @@ const formSchema = computed((): VbenFormSchema[] => {
     {
       component: 'VbenInputPassword',
       componentProps: {
-        placeholder: $t('authentication.password'),
+        placeholder: $t('authentication.passwordTip'),
       },
       fieldName: 'password',
       label: $t('authentication.password'),
@@ -111,72 +84,89 @@ const formSchema = computed((): VbenFormSchema[] => {
   ];
 
   if (captchaEnabled.value) {
-    baseFields.push(
-      {
-        component: 'VbenInput',
-        componentProps: {
-          placeholder: $t('page.auth.captchaPlaceholder'),
-        },
-        fieldName: 'captcha',
-        label: $t('authentication.password'),
-        rules: z
-          .string()
-          .min(1, { message: $t('page.auth.captchaRequired') })
-          .optional()
-          .default(''),
-        formItemClass: 'w-2/3',
+    baseFields.push({
+      component: 'VbenInput',
+      componentProps: {
+        placeholder: '请输入验证码',
       },
-      {
-        component: 'VbenInput',
-        fieldName: 'uuid',
-        formItemClass: 'hidden',
-        dependencies: {
-          trigger: (_, form) => {
-            form.setValues({
-              uuid: accessStore.captchaUuid,
-            });
-          },
-          triggerFields: ['captchaImg'],
-        },
+      fieldName: 'captcha',
+      label: '验证码',
+      rules: z.string().min(1, { message: '请输入验证码' }),
+      renderComponentContent: () => {
+        return {
+          addonAfter: () =>
+            h('div', { class: 'flex items-center cursor-pointer' }, [
+              imageSrc.value
+                ? h('img', {
+                    src: imageSrc.value,
+                    alt: 'captcha',
+                    class: 'h-8 cursor-pointer',
+                    onClick: refreshCaptcha,
+                    style: { display: 'block' },
+                  })
+                : null,
+            ]),
+        };
       },
-      {
-        component: h(Image),
-        componentProps: {
-          src: imageSrc.value,
-          width: 120,
-          height: 40,
-          preview: false,
-          onClick: refreshCaptcha,
-        },
-        fieldName: 'captchaImg',
-        formItemClass: 'ml-auto -mt-[74px]',
-      },
-    );
+    });
   }
 
   return baseFields;
 });
+
+const [Form, { validate, setValues }] = useVbenForm({
+  fieldMappingTime: [['rangeDate', ['startTime', 'endTime'], 'YYYY-MM-DD']],
+  schema: formSchema,
+  showDefaultActions: false,
+});
+
+const handleSubmit = async () => {
+  const { valid, values } = await validate();
+  if (valid) {
+    try {
+      loading.value = true;
+      // 添加 uuid 到登录参数
+      const loginParams = {
+        ...values,
+        uuid: uuid.value,
+      };
+
+      await authStore.authLogin(loginParams);
+      await accessStore.fetchAccess();
+      await refreshCaptcha(); // 登录成功也刷新一下，虽然会跳转
+    } catch (error: any) {
+      console.error('Login failed:', error);
+      // 登录失败强制刷新验证码
+      await refreshCaptcha();
+      // 密码错误还是验证码错误，已经在 axios 拦截器处理或者 store 处理了
+    } finally {
+      loading.value = false;
+    }
+  }
+};
 
 onMounted(() => {
   refreshCaptcha();
 });
 
 onUnmounted(() => {
-  if (refreshTimer) {
-    clearTimeout(refreshTimer);
-    refreshTimer = null;
+  if (timer) {
+    clearInterval(timer);
   }
 });
 </script>
 
 <template>
-  <AuthenticationLogin
-    :form-schema="formSchema"
-    :loading="authStore.loginLoading"
-    @submit="authStore.authLogin"
-  >
-    <template #third-party-login>
-      <OAuth2Login />
+  <AuthenticationLogin :loading="loading" @submit="handleSubmit">
+    <template #content>
+      <Form />
+      <!-- 倒计时提示（可选） -->
+      <div v-if="captchaEnabled && countdown > 0 && countdown <= 10" class="text-xs text-red-500 mt-1">
+        验证码将在 {{ countdown }} 秒后过期
+      </div>
+      <div v-if="captchaEnabled && countdown === 0" class="text-xs text-gray-500 mt-1 cursor-pointer" @click="refreshCaptcha">
+        验证码已过期，点击刷新
+      </div>
     </template>
   </AuthenticationLogin>
 </template>

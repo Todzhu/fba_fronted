@@ -5,21 +5,21 @@ import { $t } from '#/locales';
 const routes: RouteRecordRaw[] = [
   {
     meta: {
-      icon: 'ic:baseline-view-in-ar',
-      keepAlive: true,
+      icon: 'lucide:layout-template',
       order: 1000,
-      title: $t('demos.title'),
+      title: 'Demos',
     },
     name: 'Demos',
     path: '/demos',
     children: [
       {
+        name: 'Spreadsheet',
+        path: '/demos/spreadsheet',
+        component: () => import('#/views/demos/spreadsheet/index.vue'),
         meta: {
-          title: $t('demos.antd'),
+          icon: 'lucide:sheet',
+          title: 'Spreadsheet',
         },
-        name: 'AntDesignDemos',
-        path: '/demos/ant-design',
-        component: () => import('#/views/demos/antd/index.vue'),
       },
     ],
   },
