@@ -278,22 +278,28 @@ const handlePreview = (file: FileItem) => {
 </script>
 
 <template>
-  <Page title="我的数据">
+  <Page>
     <div class="flex flex-col h-[calc(100vh-140px)] bg-white rounded-lg shadow-sm overflow-hidden p-4">
       
       <!-- Breadcrumb Navigation -->
-      <div class="mb-4 flex items-center gap-2">
+      <div class="mb-6 flex items-center px-4 py-2">
+         <!-- Visual Anchor -->
+         <div class="h-6 w-1.5 bg-blue-600 rounded-full mr-4"></div>
+         
          <IconifyIcon 
             v-if="currentFolderId !== null"
             icon="ant-design:arrow-left-outlined" 
-            class="cursor-pointer hover:text-blue-500 text-lg mr-2"
+            class="cursor-pointer hover:text-blue-600 text-xl mr-3 text-slate-500 transition-colors"
             @click="handleNavUp"
          />
-         <Breadcrumb>
+         <Breadcrumb separator=">">
             <Breadcrumb.Item v-for="(item, index) in breadcrumbs" :key="item.id || 'root'">
                <span 
-                 class="cursor-pointer hover:text-blue-500"
-                 :class="{ 'font-bold text-gray-800': index === breadcrumbs.length - 1 }"
+                 class="cursor-pointer hover:text-blue-600 transition-all duration-200"
+                 :class="{ 
+                    'font-bold text-slate-800 text-xl': index === breadcrumbs.length - 1,
+                    'text-slate-500 text-lg font-medium': index !== breadcrumbs.length - 1
+                 }"
                  @click="handleBreadcrumbClick(item, index)"
                >
                  {{ item.name }}
