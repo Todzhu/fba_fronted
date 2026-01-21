@@ -36,7 +36,7 @@ const analyzing = ref(false);
 const activeTab = ref('data');
 
 // ========== 表单状态 ==========
-const inputFiles = ref<Record<string, number | null>>({});
+const inputFiles = ref<Record<string, null | number>>({});
 const formParams = ref<Record<string, unknown>>({});
 
 // ========== 结果状态 ==========
@@ -62,7 +62,9 @@ const fetchTool = async () => {
     // 初始化参数默认值
     if (tool.value?.param_schema?.properties) {
       const defaults: Record<string, unknown> = {};
-      for (const [key, prop] of Object.entries(tool.value.param_schema.properties as Record<string, any>)) {
+      for (const [key, prop] of Object.entries(
+        tool.value.param_schema.properties as Record<string, any>,
+      )) {
         if (prop.default !== undefined) {
           defaults[key] = prop.default;
         }
@@ -80,7 +82,9 @@ const fetchTool = async () => {
 // 提交分析
 const submitAnalysis = async () => {
   // 验证必填文件
-  const inputSchema = tool.value?.input_schema as { files?: Array<{ key: string; required?: boolean; label?: string }> } | null;
+  const inputSchema = tool.value?.input_schema as null | {
+    files?: Array<{ key: string; label?: string; required?: boolean }>;
+  };
   if (inputSchema?.files) {
     for (const file of inputSchema.files) {
       if (file.required && !inputFiles.value[file.key]) {
@@ -218,7 +222,10 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
             />
 
             <!-- 回退兼容：硬编码图表 -->
-            <div v-else-if="hasResult && !hasOutputConfig" class="chart-container">
+            <div
+              v-else-if="hasResult && !hasOutputConfig"
+              class="chart-container"
+            >
               <EchartsUI ref="chartRef" />
             </div>
 
@@ -238,9 +245,9 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
         <div class="control-panel">
           <Tabs v-model:active-key="activeTab" type="card" size="small">
             <template #rightExtra>
-               <Button type="link" size="small" @click="loadExampleData">
-                 加载示例
-               </Button>
+              <Button type="link" size="small" @click="loadExampleData">
+                加载示例
+              </Button>
             </template>
             <!-- 数据文件选项卡 -->
             <Tabs.TabPane key="data" tab="数据文件">
@@ -297,7 +304,10 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   margin-bottom: 24px;
   background: var(--component-background);
   border-radius: 12px;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 3%), 0 1px 6px -1px rgb(0 0 0 / 2%), 0 2px 4px 0 rgb(0 0 0 / 2%);
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 3%),
+    0 1px 6px -1px rgb(0 0 0 / 2%),
+    0 2px 4px 0 rgb(0 0 0 / 2%);
 }
 
 .header-left {
@@ -309,6 +319,7 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 .back-btn {
   color: var(--text-color-secondary);
 }
+
 .back-btn:hover {
   color: var(--primary-color);
   background: transparent;
@@ -350,7 +361,10 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   overflow: hidden;
   background: var(--component-background);
   border-radius: 12px;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 3%), 0 1px 6px -1px rgb(0 0 0 / 2%), 0 2px 4px 0 rgb(0 0 0 / 2%);
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 3%),
+    0 1px 6px -1px rgb(0 0 0 / 2%),
+    0 2px 4px 0 rgb(0 0 0 / 2%);
 }
 
 .panel-header {
@@ -416,7 +430,10 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   overflow: hidden;
   background: var(--component-background);
   border-radius: 12px;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 3%), 0 1px 6px -1px rgb(0 0 0 / 2%), 0 2px 4px 0 rgb(0 0 0 / 2%);
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 3%),
+    0 1px 6px -1px rgb(0 0 0 / 2%),
+    0 2px 4px 0 rgb(0 0 0 / 2%);
 }
 
 .tab-content {
@@ -438,8 +455,8 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 }
 
 :deep(.ant-tabs-nav) {
-  margin: 0 !important;
   padding: 8px 16px 0;
+  margin: 0 !important;
 }
 
 :deep(.ant-tabs-content) {
