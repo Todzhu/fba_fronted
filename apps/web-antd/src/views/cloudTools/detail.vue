@@ -158,33 +158,80 @@ onMounted(() => fetchTool());
 const hasOutputConfig = computed(() => !!tool.value?.output_config);
 const hasInputSchema = computed(() => !!tool.value?.input_schema);
 const hasParamSchema = computed(() => !!tool.value?.param_schema);
+
+// ========== 示例数据与辅助功能 ==========
+// 加载示例数据
+const loadExampleData = () => {
+  // TODO: 从工具配置中获取示例数据
+  message.info('正在加载示例数据...');
+  // 模拟加载示例数据
+  setTimeout(() => {
+    message.success('示例数据已加载');
+  }, 500);
+};
+
+// 下载示例数据
+const downloadExampleData = () => {
+  // TODO: 从工具配置中获取示例数据下载链接
+  message.info('正在准备下载...');
+};
+
+// 打开使用指南
+const openGuide = () => {
+  // TODO: 根据工具配置打开使用指南
+  message.info('使用指南功能开发中...');
+};
+
+// 打开视频教程
+const openVideoTutorial = () => {
+  // TODO: 根据工具配置打开视频教程
+  message.info('视频教程功能开发中...');
+};
+
+// 预览结果
+const previewResult = () => {
+  if (!hasResult.value) {
+    message.warning('请先提交分析');
+    return;
+  }
+  message.info('预览结果...');
+};
+
+// 下载结果
+const downloadResult = () => {
+  if (!hasResult.value) {
+    message.warning('请先提交分析');
+    return;
+  }
+  message.info('下载结果...');
+};
 </script>
 
 <template>
-  <Page auto-content-height>
+  <Page auto-content-height class="page-container">
     <Spin :spinning="loading">
       <!-- Header -->
       <div class="header-bar">
         <div class="header-left">
-          <Button type="text" size="large" class="back-btn" @click="goBack">
-            <Icon icon="mdi:arrow-left" />
+          <Button type="text" shape="circle" class="back-btn" @click="goBack">
+            <Icon icon="mdi:arrow-left" style="font-size: 20px" />
           </Button>
           <div v-if="tool" class="tool-info">
             <div
               class="tool-icon"
-              :style="{ backgroundColor: `${tool.color || '#1890ff'}15` }"
+              :style="{
+                backgroundColor: `${tool.color || '#1890ff'}15`,
+                color: tool.color || '#1890ff',
+              }"
             >
-              <Icon
-                :icon="tool.icon || 'mdi:chart-bar'"
-                :style="{ color: tool.color || '#1890ff' }"
-              />
+              <Icon :icon="tool.icon || 'mdi:chart-bar'" />
             </div>
             <h1 class="tool-title">{{ tool.title }}</h1>
           </div>
         </div>
         <Space>
-          <Button><Icon icon="mdi:thumb-up-outline" /> 打赏</Button>
-          <Button><Icon icon="mdi:star-outline" /> 收藏</Button>
+          <Button type="text"><Icon icon="mdi:thumb-up-outline" /> 打赏</Button>
+          <Button type="text"><Icon icon="mdi:star-outline" /> 收藏</Button>
         </Space>
       </div>
 
@@ -194,16 +241,20 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
         <div class="result-panel">
           <div class="panel-header">
             <Space>
-              <Button size="small">
+              <Button type="text" size="small" @click="openGuide">
                 <Icon icon="mdi:book-open-outline" /> 使用指南
               </Button>
-              <Button size="small" type="primary">
-                <Icon icon="mdi:file-pdf-box" /> 预览PDF
+              <Button type="text" size="small" @click="openVideoTutorial">
+                <Icon icon="mdi:video-outline" /> 视频教程
               </Button>
-              <Button size="small">
-                <Icon icon="mdi:eye-outline" /> 预览日志
+            </Space>
+            <Space>
+              <Button size="small" type="primary" ghost @click="previewResult">
+                <Icon icon="mdi:chart-bar" /> 预览结果
               </Button>
-              <Button size="small"><Icon icon="mdi:download" /> 下载</Button>
+              <Button size="small" @click="downloadResult">
+                <Icon icon="mdi:download" /> 下载结果
+              </Button>
             </Space>
           </div>
 
@@ -243,11 +294,16 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 
         <!-- Right: Config Panel -->
         <div class="control-panel">
-          <Tabs v-model:active-key="activeTab" type="card" size="small">
+          <Tabs v-model:active-key="activeTab" size="small">
             <template #rightExtra>
-              <Button type="link" size="small" @click="loadExampleData">
-                加载示例
-              </Button>
+              <Space size="small" style="padding-right: 16px">
+                <Button type="link" size="small" @click="loadExampleData">
+                  填充示例
+                </Button>
+                <Button type="link" size="small" @click="downloadExampleData">
+                  下载示例
+                </Button>
+              </Space>
             </template>
             <!-- 数据文件选项卡 -->
             <Tabs.TabPane key="data" tab="数据文件">
@@ -283,6 +339,7 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
               size="large"
               block
               :loading="analyzing"
+              :style="{ height: '48px', fontSize: '16px' }"
               @click="submitAnalysis"
             >
               <Icon v-if="!analyzing" icon="mdi:play" />
@@ -296,33 +353,42 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 </template>
 
 <style scoped>
+/* Scientific Minimalism Design System */
+:global(body) {
+  --bg-color: #f8fafc;
+}
+
+.page-container {
+  min-height: 100vh;
+  padding-bottom: 24px;
+  background-color: #f8fafc !important; /* Slate 50 */
+}
+
 .header-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  padding: 16px 32px;
   margin-bottom: 24px;
-  background: var(--component-background);
-  border-radius: 12px;
-  box-shadow:
-    0 1px 2px 0 rgb(0 0 0 / 3%),
-    0 1px 6px -1px rgb(0 0 0 / 2%),
-    0 2px 4px 0 rgb(0 0 0 / 2%);
+  background: #fff;
+  border-bottom: 1px solid #e2e8f0; /* Slate 200 */
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
 }
 
 .header-left {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
 }
 
 .back-btn {
-  color: var(--text-color-secondary);
+  color: #64748b; /* Slate 500 */
+  transition: all 0.2s;
 }
 
 .back-btn:hover {
   color: var(--primary-color);
-  background: transparent;
+  background: #f1f5f9; /* Slate 100 */
 }
 
 .tool-info {
@@ -335,10 +401,12 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   font-size: 24px;
-  border-radius: 12px;
+  border-radius: 10px;
+
+  /* Icon background handled inline */
 }
 
 .tool-title {
@@ -346,12 +414,15 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   font-size: 20px;
   font-weight: 600;
   line-height: 1.4;
+  color: #1e293b; /* Slate 800 */
+  letter-spacing: -0.01em;
 }
 
 .main-content {
   display: flex;
   gap: 24px;
-  height: calc(100vh - 240px);
+  height: calc(100vh - 120px); /* Adjusted for header */
+  padding: 0 32px;
 }
 
 .result-panel {
@@ -359,17 +430,23 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: var(--component-background);
+  background: #fff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
+
+  /* Soft shadow */
   box-shadow:
-    0 1px 2px 0 rgb(0 0 0 / 3%),
-    0 1px 6px -1px rgb(0 0 0 / 2%),
-    0 2px 4px 0 rgb(0 0 0 / 2%);
+    0 4px 6px -1px rgb(0 0 0 / 5%),
+    0 2px 4px -2px rgb(0 0 0 / 5%);
 }
 
 .panel-header {
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .result-content {
@@ -377,8 +454,9 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   flex: 1;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 32px;
   overflow: auto;
+  background: #fff;
 }
 
 .chart-container {
@@ -390,77 +468,107 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 .empty-state {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--text-color-secondary);
+  color: #64748b;
 }
 
 .empty-state-visual {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 120px;
-  height: 120px;
-  background: var(--background-color-base);
+  width: 96px;
+  height: 96px;
+  color: #94a3b8;
+  background: #f8fafc;
   border-radius: 50%;
 }
 
 .empty-state .iconify {
-  font-size: 48px;
-  color: var(--text-color-disabled);
+  font-size: 40px;
 }
 
 .empty-title {
   font-size: 16px;
   font-weight: 500;
-  color: var(--text-color);
+  color: #334155;
 }
 
 .empty-desc {
+  max-width: 250px;
   font-size: 14px;
-  color: var(--text-color-secondary);
+  color: #64748b;
+  text-align: center;
 }
 
 .control-panel {
   display: flex;
   flex-direction: column;
-  width: 400px;
+  max-height: 100%;
   overflow: hidden;
-  background: var(--component-background);
+  background: #fff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   box-shadow:
-    0 1px 2px 0 rgb(0 0 0 / 3%),
-    0 1px 6px -1px rgb(0 0 0 / 2%),
-    0 2px 4px 0 rgb(0 0 0 / 2%);
+    0 4px 6px -1px rgb(0 0 0 / 5%),
+    0 2px 4px -2px rgb(0 0 0 / 5%);
 }
 
 .tab-content {
-  flex: 1;
-  padding: 16px;
+  padding: 20px;
   overflow-y: auto;
 }
 
 .empty-schema {
   padding: 32px;
-  color: var(--text-color-secondary);
+  color: #94a3b8;
   text-align: center;
 }
 
 .submit-area {
-  padding: 16px;
-  background: var(--component-background);
-  border-top: 1px solid var(--border-color);
+  padding: 20px;
+  background: #fff;
+  border-top: 1px solid #f1f5f9;
 }
 
+/* Custom Tabs Styling */
 :deep(.ant-tabs-nav) {
-  padding: 8px 16px 0;
+  padding: 0 20px;
   margin: 0 !important;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+:deep(.ant-tabs-tab) {
+  padding: 16px 0 !important;
+  margin: 0 24px 0 0 !important;
+  background: transparent !important;
+  border: none !important;
+  transition: all 0.3s;
+}
+
+:deep(.ant-tabs-tab-active) {
+  font-weight: 600;
+}
+
+:deep(.ant-tabs-tab-btn) {
+  font-size: 14px;
+  color: #64748b;
+}
+
+:deep(.ant-tabs-tab-active .ant-tabs-tab-btn) {
+  color: var(--primary-color) !important;
+}
+
+:deep(.ant-tabs-ink-bar) {
+  height: 3px !important;
+  background: var(--primary-color);
+  border-radius: 3px 3px 0 0;
 }
 
 :deep(.ant-tabs-content) {
-  height: calc(100% - 46px);
+  height: calc(100% - 54px); /* Adjusted for nav height */
 }
 
 :deep(.ant-tabs-tabpane) {

@@ -42,8 +42,8 @@ interface ParamSchema {
 }
 
 const props = defineProps<{
-  schema: ParamSchema | null;
   modelValue: Record<string, unknown>;
+  schema: null | ParamSchema;
 }>();
 
 const emit = defineEmits<{
@@ -141,7 +141,10 @@ const getWidgetType = (prop: SchemaProperty): string => {
       <Input
         v-else
         :value="(modelValue[prop.key] as string) ?? prop.default ?? ''"
-        @change="(e: Event) => updateField(prop.key, (e.target as HTMLInputElement).value)"
+        @change="
+          (e: Event) =>
+            updateField(prop.key, (e.target as HTMLInputElement).value)
+        "
       />
     </Form.Item>
   </Form>
@@ -152,12 +155,41 @@ const getWidgetType = (prop: SchemaProperty): string => {
 
 <style scoped>
 .empty-schema {
-  padding: 24px;
+  padding: 32px;
   color: var(--text-color-secondary);
   text-align: center;
+  background: #f8fafc;
+  border: 1px dashed #e2e8f0;
+  border-radius: 8px;
 }
 
 .w-full {
   width: 100%;
+}
+
+/* Modern Input Styles */
+:deep(.ant-input),
+:deep(.ant-input-number),
+:deep(.ant-select-selector) {
+  border-color: #e2e8f0 !important;
+  border-radius: 8px !important;
+}
+
+:deep(.ant-input:hover),
+:deep(.ant-input-number:hover),
+:deep(.ant-select-selector:hover) {
+  border-color: var(--primary-color) !important;
+}
+
+:deep(.ant-input:focus),
+:deep(.ant-input-focused),
+:deep(.ant-select-focused .ant-select-selector) {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 10%) !important;
+}
+
+:deep(.ant-form-item-label > label) {
+  font-weight: 500;
+  color: #334155;
 }
 </style>

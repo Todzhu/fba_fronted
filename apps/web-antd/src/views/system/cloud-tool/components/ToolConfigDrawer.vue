@@ -1,4 +1,6 @@
 <script lang="ts" setup>
+import type { AnalysisTool, CloudToolUpdateParams } from '#/api/analysis-tools';
+
 /**
  * ToolConfigDrawer - 工具配置可视化编辑器
  *
@@ -23,7 +25,6 @@ import {
   Tabs,
 } from 'ant-design-vue';
 
-import type { AnalysisTool, CloudToolUpdateParams } from '#/api/analysis-tools';
 import { updateCloudToolApi } from '#/api/analysis-tools';
 
 // ========== Props & Emits ==========
@@ -50,7 +51,18 @@ const activeTab = ref('basic');
 const basicInfo = ref({
   runner_type: 'r_script',
   script_path: '',
+  guide_doc: '',
+  video_url: '',
 });
+
+// 示例数据配置
+interface ExampleItem {
+  key: string;
+  name: string;
+  url: string;
+  description: string;
+}
+const exampleItems = ref<ExampleItem[]>([]);
 
 // 输入文件配置
 interface InputFile {
@@ -64,9 +76,9 @@ const inputFiles = ref<InputFile[]>([]);
 // 参数配置
 interface ParamItem {
   key: string;
-  type: 'string' | 'integer' | 'number' | 'boolean';
+  type: 'boolean' | 'integer' | 'number' | 'string';
   title: string;
-  widget: 'text' | 'number' | 'slider' | 'select' | 'switch';
+  widget: 'number' | 'select' | 'slider' | 'switch' | 'text';
   default: string;
   enum: string;
   minimum?: number;
@@ -78,7 +90,7 @@ const paramItems = ref<ParamItem[]>([]);
 interface OutputItem {
   key: string;
   path: string;
-  type: 'echarts' | 'table' | 'download' | 'pdf';
+  type: 'download' | 'echarts' | 'pdf' | 'table';
   title: string;
 }
 const outputItems = ref<OutputItem[]>([]);
@@ -93,10 +105,20 @@ watch(
     basicInfo.value = {
       runner_type: tool.runner_type || 'r_script',
       script_path: tool.script_path || '',
+      guide_doc: tool.guide_doc || '',
+      video_url: tool.video_url || '',
     };
 
+    // 示例数据
+    exampleItems.value = (tool.example_data || []).map((e: any) => ({
+      key: e.key || '',
+      name: e.name || '',
+      url: e.url || '',
+      description: e.description || '',
+    }));
+
     // 输入文件
-    const inputSchema = tool.input_schema as { files?: any[] } | null;
+    const inputSchema = tool.input_schema as null | { files?: any[] };
     inputFiles.value = (inputSchema?.files || []).map((f: any) => ({
       key: f.key || '',
       label: f.label || '',
@@ -105,24 +127,26 @@ watch(
     }));
 
     // 参数
-    const paramSchema = tool.param_schema as { properties?: Record<string, any> } | null;
-    if (paramSchema?.properties) {
-      paramItems.value = Object.entries(paramSchema.properties).map(([key, p]) => ({
-        key,
-        type: p.type || 'string',
-        title: p.title || key,
-        widget: p.widget || (p.enum ? 'select' : p.type === 'boolean' ? 'switch' : 'text'),
-        default: String(p.default ?? ''),
-        enum: (p.enum || []).join(', '),
-        minimum: p.minimum,
-        maximum: p.maximum,
-      }));
-    } else {
-      paramItems.value = [];
-    }
+    const paramSchema = tool.param_schema as null | {
+      properties?: Record<string, any>;
+    };
+    paramItems.value = paramSchema?.properties
+      ? Object.entries(paramSchema.properties).map(([key, p]) => ({
+          key,
+          type: p.type || 'string',
+          title: p.title || key,
+          widget:
+            p.widget ||
+            (p.enum ? 'select' : p.type === 'boolean' ? 'switch' : 'text'),
+          default: String(p.default ?? ''),
+          enum: (p.enum || []).join(', '),
+          minimum: p.minimum,
+          maximum: p.maximum,
+        }))
+      : [];
 
     // 输出
-    const outputConfig = tool.output_config as { outputs?: any[] } | null;
+    const outputConfig = tool.output_config as null | { outputs?: any[] };
     outputItems.value = (outputConfig?.outputs || []).map((o: any) => ({
       key: o.key || '',
       path: o.path || '',
@@ -135,7 +159,12 @@ watch(
 
 // ========== 添加/删除操作 ==========
 const addInputFile = () => {
-  inputFiles.value.push({ key: '', label: '', required: true, extensions: '.txt, .csv' });
+  inputFiles.value.push({
+    key: '',
+    label: '',
+    required: true,
+    extensions: '.txt, .csv',
+  });
 };
 
 const removeInputFile = (index: number) => {
@@ -165,6 +194,14 @@ const removeOutput = (index: number) => {
   outputItems.value.splice(index, 1);
 };
 
+const addExample = () => {
+  exampleItems.value.push({ key: '', name: '', url: '', description: '' });
+};
+
+const removeExample = (index: number) => {
+  exampleItems.value.splice(index, 1);
+};
+
 // ========== 保存 ==========
 const handleSave = async () => {
   if (!props.tool) return;
@@ -175,7 +212,10 @@ const handleSave = async () => {
       key: f.key,
       label: f.label,
       required: f.required,
-      extensions: f.extensions.split(',').map((e) => e.trim()).filter(Boolean),
+      extensions: f.extensions
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean),
     })),
   };
 
@@ -188,14 +228,18 @@ const handleSave = async () => {
     };
     if (p.widget && p.widget !== 'text') prop.widget = p.widget;
     if (p.default) {
-      prop.default = p.type === 'integer' || p.type === 'number'
-        ? Number(p.default)
-        : p.type === 'boolean'
-          ? p.default === 'true'
-          : p.default;
+      prop.default =
+        p.type === 'integer' || p.type === 'number'
+          ? Number(p.default)
+          : p.type === 'boolean'
+            ? p.default === 'true'
+            : p.default;
     }
     if (p.enum) {
-      prop.enum = p.enum.split(',').map((e) => e.trim()).filter(Boolean);
+      prop.enum = p.enum
+        .split(',')
+        .map((e) => e.trim())
+        .filter(Boolean);
     }
     if (p.minimum !== undefined) prop.minimum = p.minimum;
     if (p.maximum !== undefined) prop.maximum = p.maximum;
@@ -213,11 +257,20 @@ const handleSave = async () => {
     })),
   };
 
+  // 构建 example_data
+  const example_data = exampleItems.value.map((e) => ({
+    key: e.key,
+    name: e.name,
+    url: e.url,
+    description: e.description,
+  }));
+
   const updateData: CloudToolUpdateParams = {
     ...basicInfo.value,
     input_schema,
     param_schema,
     output_config,
+    example_data: example_data.length > 0 ? example_data : null,
   };
 
   loading.value = true;
@@ -259,6 +312,14 @@ const outputColumns = [
   { title: '标题', dataIndex: 'title', width: 100 },
   { title: '操作', dataIndex: 'action', width: 60 },
 ];
+
+const exampleColumns = [
+  { title: 'Key', dataIndex: 'key', width: 100 },
+  { title: '名称', dataIndex: 'name', width: 120 },
+  { title: 'URL', dataIndex: 'url' },
+  { title: '描述', dataIndex: 'description', width: 150 },
+  { title: '操作', dataIndex: 'action', width: 60 },
+];
 </script>
 
 <template>
@@ -280,7 +341,22 @@ const outputColumns = [
             </Select>
           </Form.Item>
           <Form.Item label="脚本路径">
-            <Input v-model:value="basicInfo.script_path" placeholder="scripts/go_enrichment.R" />
+            <Input
+              v-model:value="basicInfo.script_path"
+              placeholder="scripts/go_enrichment.R"
+            />
+          </Form.Item>
+          <Form.Item label="使用指南">
+            <Input
+              v-model:value="basicInfo.guide_doc"
+              placeholder="使用指南文档 URL 或 Markdown 内容"
+            />
+          </Form.Item>
+          <Form.Item label="视频教程">
+            <Input
+              v-model:value="basicInfo.video_url"
+              placeholder="视频教程链接"
+            />
           </Form.Item>
         </Form>
       </Tabs.TabPane>
@@ -288,9 +364,16 @@ const outputColumns = [
       <!-- 输入文件 -->
       <Tabs.TabPane key="input" tab="输入文件">
         <div class="tab-actions">
-          <Button type="primary" size="small" @click="addInputFile">+ 添加文件</Button>
+          <Button type="primary" size="small" @click="addInputFile">
+            + 添加文件
+          </Button>
         </div>
-        <Table :columns="inputColumns" :data-source="inputFiles" :pagination="false" size="small">
+        <Table
+          :columns="inputColumns"
+          :data-source="inputFiles"
+          :pagination="false"
+          size="small"
+        >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.dataIndex === 'key'">
               <Input v-model:value="record.key" size="small" />
@@ -302,7 +385,11 @@ const outputColumns = [
               <Switch v-model:checked="record.required" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'extensions'">
-              <Input v-model:value="record.extensions" size="small" placeholder=".txt, .csv" />
+              <Input
+                v-model:value="record.extensions"
+                size="small"
+                placeholder=".txt, .csv"
+              />
             </template>
             <template v-else-if="column.dataIndex === 'action'">
               <Popconfirm title="确定删除?" @confirm="removeInputFile(index)">
@@ -316,9 +403,16 @@ const outputColumns = [
       <!-- 参数配置 -->
       <Tabs.TabPane key="params" tab="参数配置">
         <div class="tab-actions">
-          <Button type="primary" size="small" @click="addParam">+ 添加参数</Button>
+          <Button type="primary" size="small" @click="addParam">
+            + 添加参数
+          </Button>
         </div>
-        <Table :columns="paramColumns" :data-source="paramItems" :pagination="false" size="small">
+        <Table
+          :columns="paramColumns"
+          :data-source="paramItems"
+          :pagination="false"
+          size="small"
+        >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.dataIndex === 'key'">
               <Input v-model:value="record.key" size="small" />
@@ -327,7 +421,11 @@ const outputColumns = [
               <Input v-model:value="record.title" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'type'">
-              <Select v-model:value="record.type" size="small" style="width: 100%">
+              <Select
+                v-model:value="record.type"
+                size="small"
+                style="width: 100%"
+              >
                 <Select.Option value="string">string</Select.Option>
                 <Select.Option value="integer">integer</Select.Option>
                 <Select.Option value="number">number</Select.Option>
@@ -335,7 +433,11 @@ const outputColumns = [
               </Select>
             </template>
             <template v-else-if="column.dataIndex === 'widget'">
-              <Select v-model:value="record.widget" size="small" style="width: 100%">
+              <Select
+                v-model:value="record.widget"
+                size="small"
+                style="width: 100%"
+              >
                 <Select.Option value="text">text</Select.Option>
                 <Select.Option value="number">number</Select.Option>
                 <Select.Option value="slider">slider</Select.Option>
@@ -358,18 +460,33 @@ const outputColumns = [
       <!-- 输出配置 -->
       <Tabs.TabPane key="output" tab="输出配置">
         <div class="tab-actions">
-          <Button type="primary" size="small" @click="addOutput">+ 添加输出</Button>
+          <Button type="primary" size="small" @click="addOutput">
+            + 添加输出
+          </Button>
         </div>
-        <Table :columns="outputColumns" :data-source="outputItems" :pagination="false" size="small">
+        <Table
+          :columns="outputColumns"
+          :data-source="outputItems"
+          :pagination="false"
+          size="small"
+        >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.dataIndex === 'key'">
               <Input v-model:value="record.key" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'path'">
-              <Input v-model:value="record.path" size="small" placeholder="result/plot.json" />
+              <Input
+                v-model:value="record.path"
+                size="small"
+                placeholder="result/plot.json"
+              />
             </template>
             <template v-else-if="column.dataIndex === 'type'">
-              <Select v-model:value="record.type" size="small" style="width: 100%">
+              <Select
+                v-model:value="record.type"
+                size="small"
+                style="width: 100%"
+              >
                 <Select.Option value="echarts">ECharts</Select.Option>
                 <Select.Option value="table">Table</Select.Option>
                 <Select.Option value="download">Download</Select.Option>
@@ -387,12 +504,65 @@ const outputColumns = [
           </template>
         </Table>
       </Tabs.TabPane>
+
+      <!-- 示例数据 -->
+      <Tabs.TabPane key="example" tab="示例数据">
+        <div class="tab-actions">
+          <Button type="primary" size="small" @click="addExample">
+            + 添加示例
+          </Button>
+        </div>
+        <Table
+          :columns="exampleColumns"
+          :data-source="exampleItems"
+          :pagination="false"
+          size="small"
+        >
+          <template #bodyCell="{ column, record, index }">
+            <template v-if="column.dataIndex === 'key'">
+              <Input
+                v-model:value="record.key"
+                size="small"
+                placeholder="对应文件key"
+              />
+            </template>
+            <template v-else-if="column.dataIndex === 'name'">
+              <Input
+                v-model:value="record.name"
+                size="small"
+                placeholder="示例名称"
+              />
+            </template>
+            <template v-else-if="column.dataIndex === 'url'">
+              <Input
+                v-model:value="record.url"
+                size="small"
+                placeholder="示例文件URL"
+              />
+            </template>
+            <template v-else-if="column.dataIndex === 'description'">
+              <Input
+                v-model:value="record.description"
+                size="small"
+                placeholder="描述"
+              />
+            </template>
+            <template v-else-if="column.dataIndex === 'action'">
+              <Popconfirm title="确定删除?" @confirm="removeExample(index)">
+                <Button type="link" danger size="small">删除</Button>
+              </Popconfirm>
+            </template>
+          </template>
+        </Table>
+      </Tabs.TabPane>
     </Tabs>
 
     <template #footer>
       <Space>
         <Button @click="visible = false">取消</Button>
-        <Button type="primary" :loading="loading" @click="handleSave">保存配置</Button>
+        <Button type="primary" :loading="loading" @click="handleSave">
+          保存配置
+        </Button>
       </Space>
     </template>
   </Drawer>
