@@ -12,6 +12,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
+import { useTabs } from '@vben/hooks';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
@@ -25,6 +26,7 @@ import ResultRenderer from './components/ResultRenderer.vue';
 
 const route = useRoute();
 const router = useRouter();
+const { setTabTitle } = useTabs();
 
 // ========== 工具信息 ==========
 const toolId = computed(() => Number(route.params.id));
@@ -51,9 +53,10 @@ const fetchTool = async () => {
   loading.value = true;
   try {
     tool.value = await getAnalysisTool(toolId.value);
+    // 动态更新页签标题为工具名称
     if (tool.value?.title) {
       document.title = `${tool.value.title} - FBA`;
-      route.meta.title = tool.value.title;
+      setTabTitle(tool.value.title);
     }
 
     // 初始化参数默认值
@@ -220,8 +223,13 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
             </div>
 
             <div v-else class="empty-state">
-              <Icon icon="mdi:chart-scatter-plot" />
-              <p>请在右侧配置数据和参数并提交分析</p>
+              <div class="empty-state-visual">
+                <Icon icon="mdi:chart-box-outline" />
+              </div>
+              <div class="text-center">
+                <h3 class="empty-title">等待分析</h3>
+                <p class="empty-desc">请在右侧配置数据和参数并提交分析</p>
+              </div>
             </div>
           </div>
         </div>
@@ -229,6 +237,11 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
         <!-- Right: Config Panel -->
         <div class="control-panel">
           <Tabs v-model:active-key="activeTab" type="card" size="small">
+            <template #rightExtra>
+               <Button type="link" size="small" @click="loadExampleData">
+                 加载示例
+               </Button>
+            </template>
             <!-- 数据文件选项卡 -->
             <Tabs.TabPane key="data" tab="数据文件">
               <div class="tab-content">
@@ -242,7 +255,6 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
                 </div>
               </div>
             </Tabs.TabPane>
-
             <!-- 参数设置选项卡 -->
             <Tabs.TabPane key="params" tab="参数设置">
               <div class="tab-content">
@@ -281,25 +293,30 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  margin-bottom: 16px;
+  padding: 16px 24px;
+  margin-bottom: 24px;
   background: var(--component-background);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 3%), 0 1px 6px -1px rgb(0 0 0 / 2%), 0 2px 4px 0 rgb(0 0 0 / 2%);
 }
 
 .header-left {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
 }
 
 .back-btn {
-  padding: 4px 8px;
+  color: var(--text-color-secondary);
+}
+.back-btn:hover {
+  color: var(--primary-color);
+  background: transparent;
 }
 
 .tool-info {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
 }
 
@@ -307,22 +324,23 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  font-size: 22px;
-  border-radius: 8px;
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+  border-radius: 12px;
 }
 
 .tool-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
+  line-height: 1.4;
 }
 
 .main-content {
   display: flex;
-  gap: 16px;
-  height: calc(100vh - 220px);
+  gap: 24px;
+  height: calc(100vh - 240px);
 }
 
 .result-panel {
@@ -331,11 +349,12 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   flex-direction: column;
   overflow: hidden;
   background: var(--component-background);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 3%), 0 1px 6px -1px rgb(0 0 0 / 2%), 0 2px 4px 0 rgb(0 0 0 / 2%);
 }
 
 .panel-header {
-  padding: 12px 16px;
+  padding: 12px 24px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -344,7 +363,8 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   flex: 1;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 24px;
+  overflow: auto;
 }
 
 .chart-container {
@@ -356,44 +376,74 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 .empty-state {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 24px;
   align-items: center;
+  justify-content: center;
+  height: 100%;
   color: var(--text-color-secondary);
 }
 
+.empty-state-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  background: var(--background-color-base);
+  border-radius: 50%;
+}
+
 .empty-state .iconify {
-  font-size: 80px;
-  opacity: 0.3;
+  font-size: 48px;
+  color: var(--text-color-disabled);
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.empty-desc {
+  font-size: 14px;
+  color: var(--text-color-secondary);
 }
 
 .control-panel {
   display: flex;
   flex-direction: column;
-  width: 420px;
+  width: 400px;
   overflow: hidden;
   background: var(--component-background);
-  border-radius: 8px;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 3%), 0 1px 6px -1px rgb(0 0 0 / 2%), 0 2px 4px 0 rgb(0 0 0 / 2%);
 }
 
 .tab-content {
   flex: 1;
-  padding: 12px;
+  padding: 16px;
   overflow-y: auto;
 }
 
 .empty-schema {
-  padding: 24px;
+  padding: 32px;
   color: var(--text-color-secondary);
   text-align: center;
 }
 
 .submit-area {
-  padding: 12px;
+  padding: 16px;
+  background: var(--component-background);
   border-top: 1px solid var(--border-color);
 }
 
+:deep(.ant-tabs-nav) {
+  margin: 0 !important;
+  padding: 8px 16px 0;
+}
+
 :deep(.ant-tabs-content) {
-  height: calc(100% - 40px);
+  height: calc(100% - 46px);
 }
 
 :deep(.ant-tabs-tabpane) {

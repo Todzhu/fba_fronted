@@ -92,6 +92,33 @@ const coreRoutes: RouteRecordRaw[] = [
       },
     ],
   },
+  {
+    component: BasicLayout,
+    meta: {
+      title: 'Analysis',
+    },
+    name: 'AnalysisCore',
+    path: '/analysis',
+    children: [
+      {
+        name: 'AnalysisTools',
+        path: 'tools',
+        component: () => import('#/views/cloudTools/index.vue'),
+        meta: {
+          title: '工具广场',
+        },
+      },
+      {
+        name: 'AnalysisToolDetail',
+        path: 'tool/:id',
+        component: () => import('#/views/cloudTools/detail.vue'),
+        meta: {
+          title: '工具详情',
+          hideInMenu: true,
+        },
+      },
+    ],
+  },
 ];
 
 export { coreRoutes, fallbackNotFoundRoute };

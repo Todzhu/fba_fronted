@@ -9,6 +9,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'Analysis',
     path: '/analysis',
+    component: () => import('#/layouts/basic.vue'),
     children: [
       {
         name: 'AnalysisTools',

@@ -27,24 +27,8 @@ const pluginRoutes: RouteRecordRaw[] = mergeRouteModules(pluginRouteFiles);
 // const staticRoutes: RouteRecordRaw[] = mergeRouteModules(staticRouteFiles);
 
 // 静态路由 - 不受后端菜单控制，直接加载
-const staticRoutes: RouteRecordRaw[] = [
-  {
-    path: '/analysis',
-    component: () => import('#/layouts/basic.vue'),
-    children: [
-      {
-        name: 'AnalysisToolDetail',
-        path: 'tool/:id',
-        component: () => import('#/views/cloudTools/detail.vue'),
-        meta: {
-          hideInMenu: true,
-          title: '工具分析',
-          activeMenu: '/analysis/tools',
-        },
-      },
-    ],
-  },
-];
+// 注意：analysis 相关路由已移至 modules/analysis.ts
+const staticRoutes: RouteRecordRaw[] = [];
 const externalRoutes: RouteRecordRaw[] = [];
 
 /** 路由列表，由基本路由、外部路由和404兜底路由组成
