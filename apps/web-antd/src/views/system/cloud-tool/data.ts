@@ -82,14 +82,18 @@ export function useColumns(
             title: $t('common.table.operation'),
             align: 'center',
             fixed: 'right',
-            width: 150,
+            width: 200,
             cellRender: {
                 attrs: {
                     nameField: 'title',
                     onClick: onActionClick,
                 },
                 name: 'CellOperation',
-                options: ['edit', 'delete'],
+                options: [
+                    { code: 'config', text: '配置' },
+                    'edit',
+                    'delete',
+                ],
             },
         },
     ];

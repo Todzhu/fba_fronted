@@ -23,6 +23,8 @@ import {
 } from '#/api';
 import { formSchema, querySchema, useColumns } from '#/views/system/cloud-tool/data';
 
+import ToolConfigDrawer from './components/ToolConfigDrawer.vue';
+
 const formOptions: VbenFormProps = {
   collapsed: true,
   showCollapseButton: true,
@@ -89,8 +91,17 @@ function onActionClick({ code, row }: OnActionClickParams<AnalysisTool>) {
       modalApi.setData(row).open();
       break;
     }
+    case 'config': {
+      configTool.value = row;
+      configDrawerOpen.value = true;
+      break;
+    }
   }
 }
+
+// 配置抽屉状态
+const configDrawerOpen = ref(false);
+const configTool = ref<AnalysisTool | null>(null);
 
 const [Form, formApi] = useVbenForm({
   showDefaultActions: false,
@@ -156,5 +167,10 @@ const [Modal, modalApi] = useVbenModal({
     <Modal :title="modalTitle">
       <Form />
     </Modal>
+    <ToolConfigDrawer
+      v-model:open="configDrawerOpen"
+      :tool="configTool"
+      @saved="onRefresh"
+    />
   </Page>
 </template>

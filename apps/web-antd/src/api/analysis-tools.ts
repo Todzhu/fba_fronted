@@ -12,6 +12,12 @@ export interface AnalysisTool {
     stars: number;
     status: number;
     sort: number;
+    // 配置驱动字段
+    input_schema: Record<string, unknown> | null;
+    param_schema: Record<string, unknown> | null;
+    output_config: Record<string, unknown> | null;
+    runner_type: string | null;
+    script_path: string | null;
     created_time: string;
     updated_time: string | null;
 }
@@ -88,6 +94,12 @@ export interface CloudToolCreateParams {
     func_category?: string | null;
     status?: number;
     sort?: number;
+    // 配置驱动字段
+    input_schema?: Record<string, unknown> | null;
+    param_schema?: Record<string, unknown> | null;
+    output_config?: Record<string, unknown> | null;
+    runner_type?: string | null;
+    script_path?: string | null;
 }
 
 export interface CloudToolUpdateParams {
@@ -99,6 +111,12 @@ export interface CloudToolUpdateParams {
     func_category?: string | null;
     status?: number;
     sort?: number;
+    // 配置驱动字段
+    input_schema?: Record<string, unknown> | null;
+    param_schema?: Record<string, unknown> | null;
+    output_config?: Record<string, unknown> | null;
+    runner_type?: string | null;
+    script_path?: string | null;
 }
 
 export interface CloudToolListParams {

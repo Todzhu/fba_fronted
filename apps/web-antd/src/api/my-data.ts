@@ -105,3 +105,17 @@ export async function deleteMyDataFile(fileId: number) {
 export async function batchDeleteMyDataFiles(ids: number[]) {
     return requestClient.delete(`${BASE_URL}/batch`, { data: { ids } });
 }
+
+// ========== 文件夹树 ==========
+
+export interface FolderTreeNode extends FileItem {
+    children?: FolderTreeNode[];
+}
+
+/**
+ * 获取用户文件夹树（用于文件选择器）
+ */
+export async function getUserFolderTree(): Promise<FolderTreeNode[]> {
+    return requestClient.get<FolderTreeNode[]>(`${BASE_URL}/tree`);
+}
+
