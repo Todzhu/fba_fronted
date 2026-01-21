@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
-import { Modal, Image, Button } from 'ant-design-vue';
+import { computed } from 'vue';
+import { Modal, Image, Button, message } from 'ant-design-vue';
 import { IconifyIcon } from '@vben/icons';
 import type { FileItem } from '../mock';
+import { downloadMyDataFile } from '#/api/my-data';
 
 interface Props {
   open: boolean;
@@ -14,6 +15,28 @@ const emit = defineEmits(['update:open']);
 
 const handleCancel = () => {
   emit('update:open', false);
+};
+
+// 下载文件
+const handleDownload = async () => {
+  if (!props.file || props.file.type !== 'file') return;
+  
+  message.loading({ content: `正在准备下载 ${props.file.name}...`, key: 'download' });
+  try {
+    const res = await downloadMyDataFile(Number(props.file.id));
+    const blob = new Blob([res as any]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = props.file.name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    message.success({ content: '下载开始', key: 'download' });
+  } catch (e: any) {
+    message.error({ content: e.message || '下载失败', key: 'download' });
+  }
 };
 
 const fileType = computed(() => {
@@ -93,7 +116,7 @@ const mockCodeContent = `// This is a preview of the file content
         <div v-else class="text-center py-10">
             <IconifyIcon :icon="file?.icon ? `ant-design:${file.icon}-outlined` : 'ant-design:file-outlined'" class="text-6xl text-gray-300 mb-4" />
             <p class="text-gray-500 mb-4">该文件类型暂不支持在线预览</p>
-            <Button type="primary">下载文件</Button>
+            <Button type="primary" @click="handleDownload">下载文件</Button>
         </div>
 
     </div>
