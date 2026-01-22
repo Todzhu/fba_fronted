@@ -21,4 +21,9 @@ export const overridesPreferences = defineOverridesPreferences({
   theme: {
     mode: 'auto',
   },
+  // 启用页签缓存，切换页签时保留页面状态
+  tabbar: {
+    enable: true,
+    keepAlive: true,
+  },
 });

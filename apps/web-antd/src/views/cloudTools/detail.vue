@@ -16,7 +16,15 @@ import { useTabs } from '@vben/hooks';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
-import { Button, message, Space, Spin, TabPane, Tabs } from 'ant-design-vue';
+import {
+  Button,
+  message,
+  Space,
+  Spin,
+  TabPane,
+  Tabs,
+  Typography,
+} from 'ant-design-vue';
 
 import { getAnalysisTool } from '#/api/analysis-tools';
 
@@ -33,6 +41,7 @@ const toolId = computed(() => Number(route.params.id));
 const tool = ref<AnalysisTool | null>(null);
 const loading = ref(false);
 const analyzing = ref(false);
+const activeTab = ref('data');
 
 // ========== 表单状态 ==========
 const inputFiles = ref<Record<string, null | number>>({});
@@ -94,6 +103,7 @@ const submitAnalysis = async () => {
   }
 
   analyzing.value = true;
+  showGuide.value = false; // 关闭指南
   message.loading('正在分析中，请稍候...', 0);
 
   try {
@@ -140,15 +150,113 @@ watch(
 );
 
 const goBack = () => router.push('/analysis/tools');
-const openGuide = () => message.info('使用指南功能开发中...');
-const openVideoTutorial = () => message.info('视频教程功能开发中...');
+
+const showGuide = ref(false);
+const openGuide = () => {
+  showGuide.value = true;
+};
+
 const previewResult = () => {
-  if (!hasResult.value) return message.warning('请先提交分析');
-  message.info('预览结果...');
+  // 如果已有结果，直接切换视图，不重新生成
+  if (hasResult.value) {
+    showGuide.value = false;
+    return;
+  }
+
+  message.loading({ content: '生成预览数据中...', key: 'preview' });
+  setTimeout(() => {
+    hasResult.value = true;
+    message.success({ content: '预览结果已生成', key: 'preview' });
+
+    // 渲染更丰富的预览图表
+    renderEcharts({
+      title: { text: '示例分析结果预览 (Mock Data)', left: 'center' },
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['Sample A', 'Sample B'], bottom: 0 },
+      grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      },
+      yAxis: { type: 'value' },
+      series: [
+        {
+          name: 'Sample A',
+          type: 'line',
+          stack: 'Total',
+          areaStyle: {},
+          emphasis: { focus: 'series' },
+          data: [120, 132, 101, 134, 90, 230, 210],
+        },
+        {
+          name: 'Sample B',
+          type: 'line',
+          stack: 'Total',
+          areaStyle: {},
+          emphasis: { focus: 'series' },
+          data: [220, 182, 191, 234, 290, 330, 310],
+        },
+      ],
+    });
+    showGuide.value = false; // 关闭指南，显示结果
+  }, 800);
 };
 const downloadResult = () => {
   if (!hasResult.value) return message.warning('请先提交分析');
   message.info('下载结果...');
+};
+
+// 重置参数为默认值
+const handleReset = () => {
+  if (tool.value?.param_schema?.properties) {
+    const defaults: Record<string, unknown> = {};
+    for (const [key, prop] of Object.entries(
+      tool.value.param_schema.properties as Record<string, any>,
+    )) {
+      if (prop.default !== undefined) {
+        defaults[key] = prop.default;
+      }
+    }
+    formParams.value = defaults;
+    message.success('参数已重置');
+  }
+};
+
+// 导入参数文件
+const handleImportParams = () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json';
+  input.addEventListener('change', async (e: any) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (typeof json === 'object') {
+        formParams.value = { ...formParams.value, ...json };
+        message.success('参数导入成功');
+      }
+    } catch {
+      message.error('参数文件格式错误');
+    }
+  });
+  input.click();
+};
+
+// 导出参数文件
+const handleExportParams = () => {
+  const data = JSON.stringify(formParams.value, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${tool.value?.title || 'analysis'}_params_${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  message.success('参数导出成功');
 };
 
 onMounted(() => fetchTool());
@@ -168,7 +276,7 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
             <Icon icon="mdi:arrow-left" style="font-size: 20px" />
           </Button>
           <div v-if="tool" class="tool-info">
-             <div
+            <div
               class="tool-icon"
               :style="{
                 backgroundColor: `${tool.color || '#1890ff'}15`,
@@ -185,18 +293,28 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
       <!-- Main Content: Result (Left) / Config (Right) -->
       <div class="main-content">
         <!-- Result: Main Panel (Flex Grow) -->
-         <div class="result-panel">
+        <div class="result-panel">
           <div class="panel-header">
             <div class="panel-title-group">
               <Icon icon="mdi:chart-box" class="panel-header-icon" />
               <span class="panel-header-text">分析结果</span>
             </div>
             <Space>
-              <Button type="text" size="small" @click="openGuide">
+              <Button
+                :type="showGuide ? 'primary' : 'text'"
+                size="small"
+                @click="openGuide"
+              >
                 <Icon icon="mdi:book-open-outline" /> 使用指南
               </Button>
-              <Button type="primary" size="small" ghost @click="previewResult">
-                <Icon icon="mdi:eye-outline" /> 结果预览
+              <Button
+                :type="!showGuide ? 'primary' : 'text'"
+                :ghost="false"
+                size="small"
+                @click="previewResult"
+              >
+                <Icon icon="mdi:eye-outline" />
+                {{ hasResult ? '查看结果' : '结果预览' }}
               </Button>
               <div class="v-divider"></div>
               <Button type="primary" size="small" @click="downloadResult">
@@ -209,6 +327,57 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
             <div v-if="analyzing" class="loading-state">
               <Spin size="large" />
               <p class="mt-4 text-slate-500">正在进行数据分析，请耐心等待...</p>
+            </div>
+
+            <!-- 使用指南 (Embedded - High Priority) -->
+            <div v-else-if="showGuide" class="guide-content">
+              <div class="guide-card">
+                <Typography>
+                  <Typography.Title :level="3">快速开始</Typography.Title>
+                  <Typography.Paragraph>
+                    欢迎使用在线分析工具。本工具支持多种格式的数据文件输入，并提供高度可配置的参数选项。
+                  </Typography.Paragraph>
+
+                  <Typography.Title :level="4">1. 数据准备</Typography.Title>
+                  <Typography.Paragraph>
+                    请准备符合以下要求的 CSV 或 Excel 文件：
+                    <ul>
+                      <li>第一行为表头（列名）</li>
+                      <li>第一列为样本或基因 ID</li>
+                      <li>数值数据必须为纯数字</li>
+                    </ul>
+                  </Typography.Paragraph>
+
+                  <Typography.Title :level="4">2. 参数设置</Typography.Title>
+                  <Typography.Paragraph>
+                    在右侧参数面板中配置分析参数：
+                    <ul>
+                      <li>
+                        <strong>通用参数</strong>：包括图表标题、配色方案等。
+                      </li>
+                      <li>
+                        <strong>特殊参数</strong>：根据具体分析方法设置的阈值、算法选项等。
+                      </li>
+                    </ul>
+                  </Typography.Paragraph>
+
+                  <Typography.Title :level="4">3. 查看结果</Typography.Title>
+                  <Typography.Paragraph>
+                    点击“提交分析”后，系统将在左侧面板生成交互式图表。您可以：
+                    <ul>
+                      <li>缩放和拖拽图表</li>
+                      <li>导出图片 (PNG/PDF)</li>
+                      <li>下载原始分析结果文件</li>
+                    </ul>
+                  </Typography.Paragraph>
+
+                  <div
+                    class="demo-image-placeholder my-4 rounded border border-dashed bg-gray-50 p-4 text-center text-gray-400"
+                  >
+                    [示例数据截图占位符]
+                  </div>
+                </Typography>
+              </div>
             </div>
 
             <!-- 动态结果渲染 -->
@@ -233,7 +402,9 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
               </div>
               <div class="text-center">
                 <h3 class="empty-title">准备就绪</h3>
-                <p class="empty-desc">请在左侧配置数据和参数，点击"提交分析"查看结果</p>
+                <p class="empty-desc">
+                  请在左侧配置数据和参数，点击"提交分析"查看结果
+                </p>
               </div>
             </div>
           </div>
@@ -242,29 +413,38 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
         <!-- Right: Config Panel (Fixed Width) -->
         <div class="control-panel">
           <div class="panel-scroll-content">
-            <Tabs default-active-key="files" class="config-tabs">
+            <Tabs v-model:active-key="activeTab" class="config-tabs">
               <!-- Tab 1: Data Files -->
-              <TabPane key="files" tab="数据文件">
+              <TabPane key="data" tab="数据文件">
                 <div class="config-section">
-                   <DataFileSelector
+                  <DataFileSelector
                     v-if="hasInputSchema"
                     v-model="inputFiles"
                     :schema="tool?.input_schema ?? null"
-                    @next="() => {} /* To implement switch to params */"
+                    @next-step="activeTab = 'params'"
                   />
-                  <div v-else class="empty-schema">
-                    <p>此工具暂无文件配置</p>
-                  </div>
+                  <DataFileSelector
+                    v-else
+                    v-model="inputFiles"
+                    :schema="{
+                      files: [{ key: 'data', label: '数据表', required: true }],
+                    }"
+                    @next-step="activeTab = 'params'"
+                  />
                 </div>
               </TabPane>
 
               <!-- Tab 2: Parameters -->
               <TabPane key="params" tab="参数设置">
-                 <div class="config-section">
+                <div class="config-section params-section">
                   <DynamicForm
                     v-if="hasParamSchema"
                     v-model="formParams"
                     :schema="(tool?.param_schema as any) ?? null"
+                    @reset="handleReset"
+                    @import="handleImportParams"
+                    @export="handleExportParams"
+                    @submit="submitAnalysis"
                   />
                   <div v-else class="empty-schema">
                     <p>此工具暂无可配置参数</p>
@@ -280,7 +460,25 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 </template>
 
 <style scoped>
-/* Scientific Minimalism Design System */
+@media (max-width: 1024px) {
+  .main-content {
+    flex-direction: column;
+    height: auto;
+    padding: 0 16px 24px;
+  }
+
+  .control-panel {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .result-panel {
+    flex: none;
+    height: 600px;
+  }
+}
+
 :global(body) {
   --bg-color: #f8fafc;
 }
@@ -298,8 +496,8 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 32px;
-  margin-bottom: 24px;
+  padding: 10px 16px;
+  margin-bottom: 12px;
   background: #fff;
   border-bottom: 1px solid #e2e8f0;
   box-shadow: 0 1px 2px 0 rgb(0 0 0 / 5%);
@@ -351,35 +549,38 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 .main-content {
   display: flex;
   flex: 1; /* Take remaining height */
-  gap: 24px;
+  gap: 16px;
   min-height: 0; /* Important for nested scrolling */
-  padding: 0 32px 24px; /* Add bottom padding here */
+  padding: 0 16px 16px; /* Add bottom padding here */
 }
 
 /* Control Panel (now Right) */
 .control-panel {
   display: flex;
-  flex: 0 0 500px; /* Fixed width 500px */
+  flex: 0 0 600px; /* Fixed width 600px */
   flex-direction: column;
-  max-width: 500px;
+  max-width: 600px;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 16px; /* Smooth corners */
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 5%), 0 2px 4px -2px rgb(0 0 0 / 5%);
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 5%),
+    0 2px 4px -2px rgb(0 0 0 / 5%);
 }
 
 .panel-scroll-content {
   flex: 1;
   overflow-y: auto;
+  scrollbar-color: #cbd5e1 transparent;
+
   /* Custom Scrollbar for sleek look */
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
 }
 
 :deep(.config-tabs .ant-tabs-nav) {
-  margin: 0;
   padding: 0 16px;
+  margin: 0;
   border-bottom: 1px solid #f1f5f9;
 }
 
@@ -419,6 +620,12 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   padding: 20px 24px;
 }
 
+.step-nav-area {
+  padding-top: 16px;
+  margin-top: 24px;
+  border-top: 1px dashed #e2e8f0;
+}
+
 .submit-area {
   z-index: 10;
   padding: 24px;
@@ -444,7 +651,9 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 5%), 0 2px 4px -2px rgb(0 0 0 / 5%);
+  box-shadow:
+    0 4px 6px -1px rgb(0 0 0 / 5%),
+    0 2px 4px -2px rgb(0 0 0 / 5%);
 }
 
 .panel-header {
@@ -490,6 +699,20 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
 .chart-container {
   width: 100%;
   height: 100%;
+}
+
+.guide-content {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  width: 100%;
+}
+
+.guide-card {
+  width: 100%;
+  max-width: 800px;
+  padding: 40px;
+  background: #fff;
 }
 
 .loading-state,
@@ -544,22 +767,5 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
   border-radius: 12px;
 }
 
-@media (max-width: 1024px) {
-  .main-content {
-    flex-direction: column;
-    height: auto;
-    padding: 0 16px 24px;
-  }
-
-  .control-panel {
-    flex: none;
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .result-panel {
-    flex: none;
-    height: 600px;
-  }
-}
+/* Scientific Minimalism Design System */
 </style>
