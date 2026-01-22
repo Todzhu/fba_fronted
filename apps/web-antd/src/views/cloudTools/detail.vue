@@ -356,7 +356,8 @@ const hasParamSchema = computed(() => !!tool.value?.param_schema);
                         <strong>通用参数</strong>：包括图表标题、配色方案等。
                       </li>
                       <li>
-                        <strong>特殊参数</strong>：根据具体分析方法设置的阈值、算法选项等。
+                        <strong>特殊参数</strong
+                        >：根据具体分析方法设置的阈值、算法选项等。
                       </li>
                     </ul>
                   </Typography.Paragraph>
