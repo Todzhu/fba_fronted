@@ -43,6 +43,22 @@ const loading = ref(false);
 const analyzing = ref(false);
 const activeTab = ref('data');
 
+// ========== 配置驱动计算属性 ==========
+const hasInputSchema = computed(() => {
+  const schema = tool.value?.input_schema as { files?: unknown[] } | null;
+  return schema?.files && schema.files.length > 0;
+});
+
+const hasParamSchema = computed(() => {
+  const schema = tool.value?.param_schema as { properties?: object } | null;
+  return schema?.properties && Object.keys(schema.properties).length > 0;
+});
+
+const hasOutputConfig = computed(() => {
+  const config = tool.value?.output_config as { outputs?: unknown[] } | null;
+  return config?.outputs && config.outputs.length > 0;
+});
+
 // ========== 表单状态 ==========
 const inputFiles = ref<Record<string, null | number>>({});
 const formParams = ref<Record<string, unknown>>({});
@@ -260,10 +276,6 @@ const handleExportParams = () => {
 };
 
 onMounted(() => fetchTool());
-
-const hasOutputConfig = computed(() => !!tool.value?.output_config);
-const hasInputSchema = computed(() => !!tool.value?.input_schema);
-const hasParamSchema = computed(() => !!tool.value?.param_schema);
 </script>
 
 <template>

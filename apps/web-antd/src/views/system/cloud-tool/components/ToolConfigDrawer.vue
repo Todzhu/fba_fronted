@@ -78,11 +78,13 @@ interface ParamItem {
   key: string;
   type: 'boolean' | 'integer' | 'number' | 'string';
   title: string;
-  widget: 'number' | 'select' | 'slider' | 'switch' | 'text';
+  widget: 'color' | 'number' | 'select' | 'slider' | 'switch' | 'text' | 'textarea';
   default: string;
   enum: string;
   minimum?: number;
   maximum?: number;
+  group?: string;
+  format?: string;
 }
 const paramItems = ref<ParamItem[]>([]);
 
@@ -137,11 +139,13 @@ watch(
           title: p.title || key,
           widget:
             p.widget ||
-            (p.enum ? 'select' : p.type === 'boolean' ? 'switch' : 'text'),
+            (p.format === 'color' ? 'color' : p.enum ? 'select' : p.type === 'boolean' ? 'switch' : 'text'),
           default: String(p.default ?? ''),
           enum: (p.enum || []).join(', '),
           minimum: p.minimum,
           maximum: p.maximum,
+          group: p.group || '特殊参数',
+          format: p.format,
         }))
       : [];
 
@@ -179,6 +183,7 @@ const addParam = () => {
     widget: 'text',
     default: '',
     enum: '',
+    group: '特殊参数',
   });
 };
 
@@ -227,6 +232,8 @@ const handleSave = async () => {
       title: p.title,
     };
     if (p.widget && p.widget !== 'text') prop.widget = p.widget;
+    if (p.widget === 'color') prop.format = 'color';
+    if (p.group) prop.group = p.group;
     if (p.default) {
       prop.default =
         p.type === 'integer' || p.type === 'number'
@@ -302,6 +309,7 @@ const paramColumns = [
   { title: '类型', dataIndex: 'type', width: 80 },
   { title: '控件', dataIndex: 'widget', width: 80 },
   { title: '默认值', dataIndex: 'default', width: 80 },
+  { title: '分组', dataIndex: 'group', width: 80 },
   { title: '操作', dataIndex: 'action', width: 60 },
 ];
 
@@ -439,14 +447,26 @@ const exampleColumns = [
                 style="width: 100%"
               >
                 <Select.Option value="text">text</Select.Option>
+                <Select.Option value="textarea">textarea</Select.Option>
                 <Select.Option value="number">number</Select.Option>
                 <Select.Option value="slider">slider</Select.Option>
                 <Select.Option value="select">select</Select.Option>
                 <Select.Option value="switch">switch</Select.Option>
+                <Select.Option value="color">color</Select.Option>
               </Select>
             </template>
             <template v-else-if="column.dataIndex === 'default'">
               <Input v-model:value="record.default" size="small" />
+            </template>
+            <template v-else-if="column.dataIndex === 'group'">
+              <Select
+                v-model:value="record.group"
+                size="small"
+                style="width: 100%"
+              >
+                <Select.Option value="特殊参数">特殊参数</Select.Option>
+                <Select.Option value="通用参数">通用参数</Select.Option>
+              </Select>
             </template>
             <template v-else-if="column.dataIndex === 'action'">
               <Popconfirm title="确定删除?" @confirm="removeParam(index)">
