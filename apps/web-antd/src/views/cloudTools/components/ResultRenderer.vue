@@ -14,10 +14,12 @@ import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import { Icon } from '@iconify/vue';
 import { Button, Empty, message, Space, Spin, Table, Tabs } from 'ant-design-vue';
 
+import { getTaskFileUrl } from '#/api/analysis-tools';
+
 interface OutputItem {
   key: string;
   path: string;
-  type: 'echarts' | 'table' | 'download' | 'pdf';
+  type: 'download' | 'echarts' | 'pdf' | 'table';
   title?: string;
 }
 
@@ -38,14 +40,28 @@ const outputData = ref<Record<string, unknown>>({});
 // ECharts refs
 const chartRefs = ref<Record<string, EchartsUIType>>({});
 
+// 构建文件 URL
+const buildFileUrl = (filePath: string): string => {
+  if (props.taskId) {
+    return getTaskFileUrl(Number(props.taskId), filePath);
+  }
+  // 回退兼容：直接使用 outputDir
+  if (props.outputDir) {
+    return `${props.outputDir}/${filePath}`;
+  }
+  return '';
+};
+
 // 获取结果数据
 const fetchOutputData = async () => {
-  if (!props.outputDir || !props.config?.outputs) return;
+  if ((!props.taskId && !props.outputDir) || !props.config?.outputs) return;
 
   loading.value = true;
   try {
     for (const output of props.config.outputs) {
-      const url = `${props.outputDir}/${output.path}`;
+      const url = buildFileUrl(output.path);
+      if (!url) continue;
+
       const response = await fetch(url);
 
       if (output.type === 'echarts') {
@@ -83,7 +99,7 @@ const parseCSV = (text: string): { columns: any[]; data: any[] } => {
 
   const data = lines.slice(1).map((line, idx) => {
     const values = line.split('\t');
-    const row: Record<string, string | number> = { key: idx };
+    const row: Record<string, number | string> = { key: idx };
     headers.forEach((h, i) => {
       row[h] = values[i] ?? '';
     });
@@ -105,15 +121,15 @@ const renderChart = (key: string) => {
 
 // 下载文件
 const downloadFile = (output: OutputItem) => {
-  if (!props.outputDir) return;
-  const url = `${props.outputDir}/${output.path}`;
+  const url = buildFileUrl(output.path);
+  if (!url) return;
   window.open(url, '_blank');
 };
 
 watch(
-  () => props.outputDir,
+  [() => props.taskId, () => props.outputDir],
   () => {
-    if (props.outputDir) {
+    if (props.taskId || props.outputDir) {
       fetchOutputData();
     }
   },
@@ -128,7 +144,7 @@ watch(activeKey, (key) => {
 });
 
 onMounted(() => {
-  if (props.outputDir) {
+  if (props.taskId || props.outputDir) {
     fetchOutputData();
   }
 });

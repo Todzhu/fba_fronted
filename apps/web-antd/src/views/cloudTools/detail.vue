@@ -26,7 +26,12 @@ import {
   Typography,
 } from 'ant-design-vue';
 
-import { getAnalysisTool } from '#/api/analysis-tools';
+import {
+  executeAnalysisTool,
+  getAnalysisTool,
+  getTaskStatus,
+  type TaskStatusResponse,
+} from '#/api/analysis-tools';
 
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
@@ -108,6 +113,10 @@ const hasResult = ref(false);
 const taskId = ref<string>('');
 const outputDir = ref<string>('');
 
+// ========== 组件引用 ==========
+const dataFileSelectorRef = ref<InstanceType<typeof DataFileSelector>>();
+
+
 // ========== 回退兼容：硬编码图表 ==========
 const chartRef = ref<EchartsUIType>();
 const { renderEcharts } = useEcharts(chartRef);
@@ -159,24 +168,53 @@ const submitAnalysis = async () => {
   }
 
   analyzing.value = true;
-  showGuide.value = false; // 关闭指南
-  message.loading('正在分析中，请稍候...', 0);
+  showGuide.value = false;
+  message.loading('正在提交分析任务...', 0);
 
   try {
-    // 模拟分析过程
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // 获取表格数据内容
+    const fileContents = dataFileSelectorRef.value?.getFileContents() ?? {};
+    
+    // 调用执行 API
+    const response = await executeAnalysisTool(toolId.value, {
+      files: inputFiles.value,
+      file_contents: fileContents,
+      params: formParams.value,
+    });
 
-    hasResult.value = true;
+    taskId.value = String(response.task_id);
     message.destroy();
-    message.success('分析完成！');
+    message.loading('任务已提交，正在分析中...', 0);
 
-    // 回退兼容：如果没有 output_config，使用硬编码图表
-    if (!tool.value?.output_config) {
-      setTimeout(() => renderLegacyChart(), 100);
+    // 轮询任务状态
+    const pollStatus = async (): Promise<TaskStatusResponse> => {
+      const status = await getTaskStatus(response.task_id);
+      if (status.status === 'pending' || status.status === 'running') {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return pollStatus();
+      }
+      return status;
+    };
+
+    const finalStatus = await pollStatus();
+    message.destroy();
+
+    if (finalStatus.status === 'completed') {
+      outputDir.value = finalStatus.output_dir || '';
+      hasResult.value = true;
+      message.success('分析完成！');
+
+      // 回退兼容：如果没有 output_config，使用硬编码图表
+      if (!tool.value?.output_config) {
+        setTimeout(() => renderLegacyChart(), 100);
+      }
+    } else {
+      message.error(finalStatus.error_message || '分析失败，请重试');
     }
-  } catch {
+  } catch (error: any) {
     message.destroy();
-    message.error('分析失败，请重试');
+    message.error(error?.message || '分析失败，请重试');
+    console.error(error);
   } finally {
     analyzing.value = false;
   }
@@ -477,8 +515,9 @@ onMounted(() => fetchTool());
               <!-- Tab 1: Data Files -->
               <TabPane key="data" tab="数据文件">
                 <div class="config-section">
-                  <DataFileSelector
+                <DataFileSelector
                     v-if="hasInputSchema"
+                    ref="dataFileSelectorRef"
                     v-model="inputFiles"
                     :schema="tool?.input_schema ?? null"
                     :example-data="tool?.example_data ?? null"
@@ -486,6 +525,7 @@ onMounted(() => fetchTool());
                   />
                   <DataFileSelector
                     v-else
+                    ref="dataFileSelectorRef"
                     v-model="inputFiles"
                     :schema="{
                       files: [{ key: 'data', label: '数据表', required: true }],

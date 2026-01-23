@@ -191,3 +191,56 @@ export async function updateCloudToolApi(
 export async function deleteCloudToolApi(id: number) {
   return requestClient.delete(`/api/v1/sys/cloud-tools/${id}`);
 }
+
+// ========== 分析任务执行 API ==========
+
+export interface ExecuteToolRequest {
+  files: Record<string, null | number>;
+  file_contents: Record<string, string>;
+  params: Record<string, unknown>;
+}
+
+export interface ExecuteToolResponse {
+  task_id: number;
+  status: string;
+  message: string;
+}
+
+export interface TaskStatusResponse {
+  id: number;
+  status: 'completed' | 'failed' | 'pending' | 'running';
+  output_dir: null | string;
+  error_message: null | string;
+  created_at: string;
+  started_at: null | string;
+  completed_at: null | string;
+}
+
+/**
+ * 执行分析工具
+ */
+export async function executeAnalysisTool(
+  toolId: number,
+  data: ExecuteToolRequest,
+) {
+  return requestClient.post<ExecuteToolResponse>(
+    `/api/v1/sys/analysis-tools/${toolId}/execute`,
+    data,
+  );
+}
+
+/**
+ * 查询任务状态
+ */
+export async function getTaskStatus(taskId: number) {
+  return requestClient.get<TaskStatusResponse>(
+    `/api/v1/sys/analysis-tools/tasks/${taskId}`,
+  );
+}
+
+/**
+ * 获取任务结果文件 URL
+ */
+export function getTaskFileUrl(taskId: number, filePath: string) {
+  return `/api/v1/sys/analysis-tools/tasks/${taskId}/files/${filePath}`;
+}

@@ -215,7 +215,7 @@ const downloadExample = async () => {
   }
 };
 
-// 导入文件（按指定 key）
+// 导入文件（按指定 key）- 本地解析，提交时通过 file_contents 发送
 const handleImportForKey = async (key: string, file: File) => {
   // 确保 fileDataMap[key] 存在
   if (!fileDataMap.value[key]) {
@@ -228,18 +228,24 @@ const handleImportForKey = async (key: string, file: File) => {
   
   const fileData = fileDataMap.value[key]!;
 
-  const content = await file.text();
-  const lines = content.split('\n').filter((line) => line.trim());
-  const data = lines.map((line) => line.split(/[,\t]/));
+  try {
+    const content = await file.text();
+    const lines = content.split('\n').filter((line) => line.trim());
+    const data = lines.map((line) => line.split(/[,\t]/));
 
-  fileData.data = data;
-  fileData.fileName = file.name;
-  updateFileId(key, Date.now());
+    fileData.data = data;
+    fileData.fileName = file.name;
+    updateFileId(key, Date.now()); // 标记有数据
+    
+    // 切换到对应的 Tab
+    activeTab.value = key;
+    
+    message.success(`${file.name} 导入成功`);
+  } catch (error) {
+    console.error('Import error:', error);
+    message.error('文件导入失败');
+  }
   
-  // 切换到对应的 Tab
-  activeTab.value = key;
-  
-  message.success(`${file.name} 导入成功`);
   return false; // 阻止默认上传
 };
 
@@ -281,7 +287,20 @@ const fillAllExamples = () => {
   loadAllExamples();
 };
 
-defineExpose({ fillAllExamples });
+// 获取所有文件内容（转换为 CSV 格式）
+const getFileContents = (): Record<string, string> => {
+  const contents: Record<string, string> = {};
+  for (const config of fileConfigs.value) {
+    const fileData = fileDataMap.value[config.key];
+    if (fileData && fileData.data.length > 0) {
+      // 将二维数组转换为 tab 分隔的 CSV
+      contents[config.key] = fileData.data.map((row) => row.join('\t')).join('\n');
+    }
+  }
+  return contents;
+};
+
+defineExpose({ fillAllExamples, getFileContents });
 </script>
 
 <template>
