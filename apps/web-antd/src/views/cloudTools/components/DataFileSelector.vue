@@ -46,6 +46,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Record<string, null | number>): void;
   (e: 'nextStep'): void;
+  (e: 'headers-change', headers: Record<string, string[]>): void;
 }>();
 
 // 文件配置列表 - 优先使用 example_data 生成 Tab，否则使用 input_schema.files
@@ -261,9 +262,22 @@ const handleClearForKey = (key: string) => {
   message.info('数据已清空');
 };
 
-// 更新文件 ID
+// 更新文件 ID 并在数据变化时提取表头
 const updateFileId = (key: string, fileId: null | number) => {
   emit('update:modelValue', { ...props.modelValue, [key]: fileId });
+  
+  // 数据变化时，提取所有文件的表头并通知父组件
+  const allHeaders: Record<string, string[]> = {};
+  for (const [fileKey, fileData] of Object.entries(fileDataMap.value)) {
+    if (fileData.data && fileData.data.length > 0) {
+      // 过滤掉空表头
+      const headers = fileData.data[0].filter(h => h.trim() !== '');
+      if (headers.length > 0) {
+        allHeaders[fileKey] = headers;
+      }
+    }
+  }
+  emit('headers-change', allHeaders);
 };
 
 // 表格数据变化

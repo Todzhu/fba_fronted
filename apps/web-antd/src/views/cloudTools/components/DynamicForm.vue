@@ -236,8 +236,8 @@ const handleSubmit = () => {
               </div>
             </template>
 
-            <!-- 下拉选择 -->
-            <template v-else-if="getWidgetType(prop) === 'select'">
+            <!-- 下拉选择 / 列名选择 -->
+            <template v-else-if="getWidgetType(prop) === 'select' || getWidgetType(prop) === 'column_select'">
               <Select
                 :value="(modelValue[prop.key] as string) ?? prop.default"
                 class="select-input"

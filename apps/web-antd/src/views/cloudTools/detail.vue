@@ -108,6 +108,38 @@ const renderedGuideHtml = computed(() => {
 const inputFiles = ref<Record<string, null | number>>({});
 const formParams = ref<Record<string, unknown>>({});
 
+// ========== 表头状态 ==========
+const currentHeaders = ref<Record<string, string[]>>({});
+const handleHeadersChange = (headers: Record<string, string[]>) => {
+  currentHeaders.value = headers;
+  console.log('[detail] Headers updated:', headers);
+};
+
+// 动态生成参数模式（注入表头选项）
+const dynamicParamSchema = computed(() => {
+  if (!tool.value?.param_schema) return null;
+
+  // 深拷贝原始 schema 以免污染原始数据
+  const schema = JSON.parse(JSON.stringify(tool.value.param_schema));
+
+  if (schema.properties) {
+    for (const [key, prop] of Object.entries(schema.properties) as any) {
+      if (prop.widget === 'column_select') {
+        // 智能获取列名选项
+        // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
+        const fileKey = prop.fileKey || tool.value.example_data?.[0]?.key || 'data_input';
+        const headers = currentHeaders.value[fileKey] || [];
+        
+        if (headers.length > 0) {
+          prop.type = 'string';
+          prop.enum = headers;
+        }
+      }
+    }
+  }
+  return schema;
+});
+
 // ========== 结果状态 ==========
 const hasResult = ref(false);
 const taskId = ref<string>('');
@@ -521,6 +553,7 @@ onMounted(() => fetchTool());
                     v-model="inputFiles"
                     :schema="tool?.input_schema ?? null"
                     :example-data="tool?.example_data ?? null"
+                    @headers-change="handleHeadersChange"
                     @next-step="activeTab = 'params'"
                   />
                   <DataFileSelector
@@ -531,6 +564,7 @@ onMounted(() => fetchTool());
                       files: [{ key: 'data', label: '数据表', required: true }],
                     }"
                     :example-data="tool?.example_data ?? null"
+                    @headers-change="handleHeadersChange"
                     @next-step="activeTab = 'params'"
                   />
                 </div>
@@ -542,7 +576,7 @@ onMounted(() => fetchTool());
                   <DynamicForm
                     v-if="hasParamSchema"
                     v-model="formParams"
-                    :schema="(tool?.param_schema as any) ?? null"
+                    :schema="(dynamicParamSchema as any) ?? null"
                     @reset="handleReset"
                     @import="handleImportParams"
                     @export="handleExportParams"
