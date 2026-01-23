@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { AnalysisTool, CloudToolUpdateParams } from '#/api/analysis-tools';
+import { uploadFile } from '#/api/user-file';
 
 /**
  * ToolConfigDrawer - 工具配置可视化编辑器
@@ -13,17 +14,23 @@ import { computed, ref, watch } from 'vue';
 
 import {
   Button,
+  Card,
+  Col,
   Drawer,
   Form,
   Input,
   message,
   Popconfirm,
+  Row,
   Select,
   Space,
   Switch,
   Table,
   Tabs,
+  Upload,
 } from 'ant-design-vue';
+
+import { MarkdownEditor } from '@vben/common-ui';
 
 import { updateCloudToolApi } from '#/api/analysis-tools';
 
@@ -61,6 +68,8 @@ interface ExampleItem {
   name: string;
   url: string;
   description: string;
+  fileName?: string; // 上传文件名
+  uploading?: boolean; // 上传状态
 }
 const exampleItems = ref<ExampleItem[]>([]);
 
@@ -200,11 +209,36 @@ const removeOutput = (index: number) => {
 };
 
 const addExample = () => {
-  exampleItems.value.push({ key: '', name: '', url: '', description: '' });
+  exampleItems.value.push({ key: '', name: '', url: '', description: '', fileName: '' });
 };
 
 const removeExample = (index: number) => {
   exampleItems.value.splice(index, 1);
+};
+
+// 示例文件上传处理
+const handleExampleUpload = async (index: number, file: File) => {
+  const item = exampleItems.value[index];
+  if (!item) return false;
+
+  item.uploading = true;
+  item.fileName = file.name;
+
+  try {
+    const result = await uploadFile(file);
+    // 构建完整的公开下载 URL
+    const userId = result.user_id;
+    const storagePath = result.storage_path || '';
+    item.url = `/api/v1/sys/my-data/example/${userId}/${storagePath}`;
+    message.success(`${file.name} 上传成功`);
+  } catch (error) {
+    message.error(`${file.name} 上传失败`);
+    console.error('Upload failed:', error);
+  } finally {
+    item.uploading = false;
+  }
+
+  return false; // 阻止默认上传行为
 };
 
 // ========== 保存 ==========
@@ -320,51 +354,53 @@ const outputColumns = [
   { title: '标题', dataIndex: 'title', width: 100 },
   { title: '操作', dataIndex: 'action', width: 60 },
 ];
-
-const exampleColumns = [
-  { title: 'Key', dataIndex: 'key', width: 100 },
-  { title: '名称', dataIndex: 'name', width: 120 },
-  { title: 'URL', dataIndex: 'url' },
-  { title: '描述', dataIndex: 'description', width: 150 },
-  { title: '操作', dataIndex: 'action', width: 60 },
-];
 </script>
 
 <template>
   <Drawer
     v-model:open="visible"
     :title="`配置: ${tool?.title || ''}`"
-    width="720"
+    width="960"
     :footer-style="{ textAlign: 'right' }"
+    class="config-drawer"
   >
     <Tabs v-model:active-key="activeTab">
       <!-- 基本信息 -->
       <Tabs.TabPane key="basic" tab="基本信息">
-        <Form layout="vertical">
-          <Form.Item label="执行引擎">
-            <Select v-model:value="basicInfo.runner_type">
-              <Select.Option value="r_script">R Script</Select.Option>
-              <Select.Option value="python">Python</Select.Option>
-              <Select.Option value="snakemake">Snakemake</Select.Option>
-            </Select>
-          </Form.Item>
-          <Form.Item label="脚本路径">
-            <Input
-              v-model:value="basicInfo.script_path"
-              placeholder="scripts/go_enrichment.R"
-            />
-          </Form.Item>
-          <Form.Item label="使用指南">
-            <Input
-              v-model:value="basicInfo.guide_doc"
-              placeholder="使用指南文档 URL 或 Markdown 内容"
-            />
-          </Form.Item>
+        <Form layout="vertical" class="basic-form">
+          <Row :gutter="16">
+            <Col :span="12">
+              <Form.Item label="执行引擎">
+                <Select v-model:value="basicInfo.runner_type">
+                  <Select.Option value="r_script">R Script</Select.Option>
+                  <Select.Option value="python">Python</Select.Option>
+                  <Select.Option value="snakemake">Snakemake</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col :span="12">
+              <Form.Item label="脚本路径">
+                <Input
+                  v-model:value="basicInfo.script_path"
+                  placeholder="scripts/go_enrichment.R"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item label="视频教程">
             <Input
               v-model:value="basicInfo.video_url"
-              placeholder="视频教程链接"
+              placeholder="视频教程链接 (如 Bilibili/YouTube)"
             />
+          </Form.Item>
+          <Form.Item label="使用指南 (Markdown)">
+            <div class="md-editor-wrapper">
+              <MarkdownEditor
+                v-model:value="basicInfo.guide_doc"
+                :height="320"
+                mode="wysiwyg"
+              />
+            </div>
           </Form.Item>
         </Form>
       </Tabs.TabPane>
@@ -527,53 +563,81 @@ const exampleColumns = [
 
       <!-- 示例数据 -->
       <Tabs.TabPane key="example" tab="示例数据">
-        <div class="tab-actions">
-          <Button type="primary" size="small" @click="addExample">
-            + 添加示例
-          </Button>
+        <div class="example-section">
+          <div class="section-header">
+            <span class="section-title">示例文件配置</span>
+            <Button type="primary" @click="addExample">
+              + 添加示例
+            </Button>
+          </div>
+
+          <div v-if="exampleItems.length === 0" class="empty-tip">
+            暂无示例数据，点击「添加示例」开始配置
+          </div>
+
+          <div class="example-list">
+            <Card
+              v-for="(item, index) in exampleItems"
+              :key="index"
+              class="example-card"
+            >
+              <template #title>
+                <div class="card-title">
+                  <span>示例 {{ index + 1 }}</span>
+                  <Popconfirm title="确定删除?" @confirm="removeExample(index)">
+                    <Button type="text" danger>删除</Button>
+                  </Popconfirm>
+                </div>
+              </template>
+
+              <Row :gutter="16">
+                <Col :span="12">
+                  <Form.Item label="Key" class="form-item">
+                    <Input
+                      v-model:value="item.key"
+                      placeholder="对应输入文件 key"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col :span="12">
+                  <Form.Item label="名称" class="form-item">
+                    <Input
+                      v-model:value="item.name"
+                      placeholder="示例名称"
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+
+              <Form.Item label="示例文件" class="form-item">
+                <div class="file-upload-row">
+                  <Upload
+                    :before-upload="(file: File) => handleExampleUpload(index, file)"
+                    :show-upload-list="false"
+                    accept=".csv,.txt,.xlsx,.xls,.tsv"
+                  >
+                    <Button :loading="item.uploading">
+                      {{ item.uploading ? '上传中...' : (item.fileName || '选择文件') }}
+                    </Button>
+                  </Upload>
+                  <Input
+                    v-model:value="item.url"
+                    class="file-url-input"
+                    placeholder="文件存储路径"
+                    :readonly="false"
+                  />
+                </div>
+              </Form.Item>
+
+              <Form.Item label="描述" class="form-item">
+                <Input
+                  v-model:value="item.description"
+                  placeholder="示例数据说明"
+                />
+              </Form.Item>
+            </Card>
+          </div>
         </div>
-        <Table
-          :columns="exampleColumns"
-          :data-source="exampleItems"
-          :pagination="false"
-          size="small"
-        >
-          <template #bodyCell="{ column, record, index }">
-            <template v-if="column.dataIndex === 'key'">
-              <Input
-                v-model:value="record.key"
-                size="small"
-                placeholder="对应文件key"
-              />
-            </template>
-            <template v-else-if="column.dataIndex === 'name'">
-              <Input
-                v-model:value="record.name"
-                size="small"
-                placeholder="示例名称"
-              />
-            </template>
-            <template v-else-if="column.dataIndex === 'url'">
-              <Input
-                v-model:value="record.url"
-                size="small"
-                placeholder="示例文件URL"
-              />
-            </template>
-            <template v-else-if="column.dataIndex === 'description'">
-              <Input
-                v-model:value="record.description"
-                size="small"
-                placeholder="描述"
-              />
-            </template>
-            <template v-else-if="column.dataIndex === 'action'">
-              <Popconfirm title="确定删除?" @confirm="removeExample(index)">
-                <Button type="link" danger size="small">删除</Button>
-              </Popconfirm>
-            </template>
-          </template>
-        </Table>
       </Tabs.TabPane>
     </Tabs>
 
@@ -589,7 +653,166 @@ const exampleColumns = [
 </template>
 
 <style scoped>
+.config-drawer :deep(.ant-drawer-body) {
+  padding: 16px 24px;
+}
+
+.basic-form {
+  max-width: 100%;
+}
+
+.md-editor-wrapper {
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.md-editor-wrapper :deep(.vditor) {
+  border: none;
+}
+
 .tab-actions {
   margin-bottom: 12px;
+}
+
+:deep(.ant-tabs-content) {
+  padding: 8px 0;
+}
+
+:deep(.ant-form-item) {
+  margin-bottom: 16px;
+}
+
+:deep(.ant-table) {
+  font-size: 13px;
+}
+
+:deep(.ant-table-thead > tr > th) {
+  padding: 8px 12px;
+  background: #fafafa;
+}
+
+:deep(.ant-table-tbody > tr > td) {
+  padding: 6px 8px;
+}
+
+/* 示例数据区域样式 */
+.example-section {
+  padding: 0 8px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.empty-tip {
+  padding: 48px 24px;
+  text-align: center;
+  color: #94a3b8;
+  background: #f8fafc;
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.example-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.example-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.example-card:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.example-card :deep(.ant-card-head) {
+  min-height: 48px;
+  padding: 0 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #f0f0f0;
+  border-radius: 12px 12px 0 0;
+}
+
+.example-card :deep(.ant-card-head-title) {
+  padding: 12px 0;
+}
+
+.example-card :deep(.ant-card-body) {
+  padding: 20px;
+}
+
+.card-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.form-item {
+  margin-bottom: 16px !important;
+}
+
+.form-item :deep(.ant-form-item-label) {
+  padding-bottom: 6px;
+}
+
+.form-item :deep(.ant-form-item-label > label) {
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.file-upload-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.file-url-input {
+  flex: 1;
+}
+
+/* 保留旧样式兼容 */
+.compact-form-item {
+  margin-bottom: 8px !important;
+}
+
+.compact-form-item :deep(.ant-form-item-label) {
+  padding-bottom: 4px;
+}
+
+.compact-form-item :deep(.ant-form-item-label > label) {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.upload-area {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.url-input {
+  flex: 1;
 }
 </style>

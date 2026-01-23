@@ -13,10 +13,12 @@ export interface UserFolder {
 
 export interface UserFile {
     id: number;
+    user_id: number;
     folder_id: number | null;
     name: string;
     original_name: string;
     path: string;
+    storage_path: string | null;
     size: number;
     mime_type: string | null;
     is_example: boolean;
@@ -41,28 +43,28 @@ export interface FileListParams {
  * 获取文件夹树
  */
 export async function getFolderTree() {
-    return requestClient.get<UserFolder[]>('/api/v1/cloud-tools/files/folders');
+    return requestClient.get<UserFolder[]>('/api/v1/sys/my-data/folders');
 }
 
 /**
  * 创建文件夹
  */
 export async function createFolder(data: { name: string; parent_id?: number | null }) {
-    return requestClient.post<UserFolder>('/api/v1/cloud-tools/files/folders', data);
+    return requestClient.post<UserFolder>('/api/v1/sys/my-data/folders', data);
 }
 
 /**
  * 重命名文件夹
  */
 export async function renameFolder(id: number, name: string) {
-    return requestClient.put<UserFolder>(`/api/v1/cloud-tools/files/folders/${id}`, { name });
+    return requestClient.put<UserFolder>(`/api/v1/sys/my-data/folders/${id}`, { name });
 }
 
 /**
  * 删除文件夹
  */
 export async function deleteFolder(id: number) {
-    return requestClient.delete(`/api/v1/cloud-tools/files/folders/${id}`);
+    return requestClient.delete(`/api/v1/sys/my-data/folders/${id}`);
 }
 
 // ========== 文件 API ==========
@@ -71,7 +73,7 @@ export async function deleteFolder(id: number) {
  * 获取文件列表
  */
 export async function getFileList(params?: FileListParams) {
-    return requestClient.get<FileListResponse>('/api/v1/cloud-tools/files', { params });
+    return requestClient.get<FileListResponse>('/api/v1/sys/my-data/files', { params });
 }
 
 /**
@@ -83,7 +85,7 @@ export async function uploadFile(file: File, folderId?: number | null) {
     if (folderId !== undefined && folderId !== null) {
         formData.append('folder_id', String(folderId));
     }
-    return requestClient.post<UserFile>('/api/v1/cloud-tools/files/upload', formData, {
+    return requestClient.post<UserFile>('/api/v1/sys/my-data/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     });
 }
@@ -92,12 +94,12 @@ export async function uploadFile(file: File, folderId?: number | null) {
  * 删除文件
  */
 export async function deleteFile(id: number) {
-    return requestClient.delete(`/api/v1/cloud-tools/files/${id}`);
+    return requestClient.delete(`/api/v1/sys/my-data/${id}`);
 }
 
 /**
  * 重命名文件
  */
 export async function renameFile(id: number, name: string) {
-    return requestClient.put<UserFile>(`/api/v1/cloud-tools/files/${id}`, { name });
+    return requestClient.put<UserFile>(`/api/v1/sys/my-data/${id}/rename`, { name });
 }

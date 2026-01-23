@@ -160,6 +160,21 @@ const renderSheet = () => {
   }, 100);
 };
 
+// ResizeObserver 以自动适应宽度
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  renderSheet();
+  
+  if (spreadsheetContainer.value) {
+    resizeObserver = new ResizeObserver(() => {
+      // 触发 x-spreadsheet 重新读取 width()
+      spreadsheetInstance?.reRender();
+    });
+    resizeObserver.observe(spreadsheetContainer.value);
+  }
+});
+
 // 暴露方法给父组件
 const getData = () => extractData();
 const setData = (data: string[][]) => {
@@ -173,14 +188,10 @@ const clearData = () => {
 
 defineExpose({ getData, setData, clearData });
 
-onMounted(() => {
-  renderSheet();
-});
-
 watch(
   () => props.data,
   () => {
-    renderSheet();
+    renderSheet(); // data 变化时完全重绘以确保一致性
   },
   { deep: true },
 );
@@ -216,8 +227,10 @@ watch(
 
 /* x-spreadsheet 样式覆盖 */
 :deep(.x-spreadsheet-toolbar) {
+  width: 100% !important; /* 强制铺满 */
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
+  box-sizing: border-box;
 }
 
 :deep(.x-spreadsheet-sheet) {
@@ -226,5 +239,10 @@ watch(
 
 :deep(.x-spreadsheet-bottombar) {
   display: none; /* 隐藏底部 sheet 切换栏 */
+}
+
+/* 强制容器宽度铺满，防止计算误差导致的留白 */
+:deep(.x-spreadsheet) {
+  width: 100% !important;
 }
 </style>

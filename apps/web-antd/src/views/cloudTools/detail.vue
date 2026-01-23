@@ -59,6 +59,46 @@ const hasOutputConfig = computed(() => {
   return config?.outputs && config.outputs.length > 0;
 });
 
+// 简单的 Markdown 转 HTML 函数
+function simpleMarkdownToHtml(md: string): string {
+  return md
+    // 标题
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    // 粗体和斜体
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // 代码块
+    .replace(/```[\s\S]*?```/g, (match) => {
+      const code = match.replace(/```\w*\n?/g, '').replace(/```$/g, '');
+      return `<pre><code>${code}</code></pre>`;
+    })
+    // 行内代码
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // 无序列表
+    .replace(/^\s*[-*+] (.*)$/gim, '<li>$1</li>')
+    // 有序列表
+    .replace(/^\s*\d+\. (.*)$/gim, '<li>$1</li>')
+    // 引用
+    .replace(/^> (.*)$/gim, '<blockquote>$1</blockquote>')
+    // 链接
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+    // 水平线
+    .replace(/^---$/gim, '<hr>')
+    // 换行
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+}
+
+// 渲染 guide_doc
+const renderedGuideHtml = computed(() => {
+  const doc = tool.value?.guide_doc;
+  if (!doc) return '';
+  return `<p>${simpleMarkdownToHtml(doc)}</p>`;
+});
+
 // ========== 表单状态 ==========
 const inputFiles = ref<Record<string, null | number>>({});
 const formParams = ref<Record<string, unknown>>({});
@@ -344,7 +384,14 @@ onMounted(() => fetchTool());
             <!-- 使用指南 (Embedded - High Priority) -->
             <div v-else-if="showGuide" class="guide-content">
               <div class="guide-card">
-                <Typography>
+                <!-- 使用 Vditor.md2html 渲染的纯 HTML -->
+                <div
+                  v-if="renderedGuideHtml"
+                  class="guide-md-content vditor-reset"
+                  v-html="renderedGuideHtml"
+                ></div>
+                <!-- Fallback: 默认通用指南 -->
+                <Typography v-else>
                   <Typography.Title :level="3">快速开始</Typography.Title>
                   <Typography.Paragraph>
                     欢迎使用在线分析工具。本工具支持多种格式的数据文件输入，并提供高度可配置的参数选项。
@@ -376,7 +423,7 @@ onMounted(() => fetchTool());
 
                   <Typography.Title :level="4">3. 查看结果</Typography.Title>
                   <Typography.Paragraph>
-                    点击“提交分析”后，系统将在左侧面板生成交互式图表。您可以：
+                    点击"提交分析"后，系统将在左侧面板生成交互式图表。您可以：
                     <ul>
                       <li>缩放和拖拽图表</li>
                       <li>导出图片 (PNG/PDF)</li>
@@ -434,6 +481,7 @@ onMounted(() => fetchTool());
                     v-if="hasInputSchema"
                     v-model="inputFiles"
                     :schema="tool?.input_schema ?? null"
+                    :example-data="tool?.example_data ?? null"
                     @next-step="activeTab = 'params'"
                   />
                   <DataFileSelector
@@ -442,6 +490,7 @@ onMounted(() => fetchTool());
                     :schema="{
                       files: [{ key: 'data', label: '数据表', required: true }],
                     }"
+                    :example-data="tool?.example_data ?? null"
                     @next-step="activeTab = 'params'"
                   />
                 </div>
@@ -702,11 +751,18 @@ onMounted(() => fetchTool());
 .result-content {
   display: flex;
   flex: 1;
+  min-height: 0; /* Important for flex child scrolling */
+  overflow: hidden;
+  background: #fff;
+}
+
+/* 非使用指南状态下居中显示 */
+.result-content:has(.loading-state),
+.result-content:has(.empty-state),
+.result-content:has(.chart-container) {
   align-items: center;
   justify-content: center;
   padding: 32px;
-  overflow-y: auto; /* Allow result content to scroll */
-  background: #fff;
 }
 
 .chart-container {
@@ -717,15 +773,107 @@ onMounted(() => fetchTool());
 .guide-content {
   display: flex;
   flex: 1;
-  justify-content: center;
   width: 100%;
+  height: 100%;
+  overflow-y: auto;
 }
 
 .guide-card {
   width: 100%;
-  max-width: 800px;
-  padding: 40px;
+  height: 100%;
+  padding: 0;
+  overflow-y: auto;
   background: #fff;
+}
+
+/* Markdown 内容样式 - 使用 Vditor 的 vditor-reset 基础样式 */
+.guide-md-content {
+  width: 100%;
+  padding: 24px 32px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #334155;
+}
+
+.guide-md-content h1 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+.guide-md-content h2 {
+  margin-top: 24px;
+  margin-bottom: 12px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.guide-md-content h3 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.guide-md-content p {
+  margin-bottom: 12px;
+}
+
+.guide-md-content ul,
+.guide-md-content ol {
+  padding-left: 24px;
+  margin-bottom: 12px;
+}
+
+.guide-md-content li {
+  margin-bottom: 6px;
+}
+
+.guide-md-content code {
+  padding: 2px 6px;
+  font-size: 13px;
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.guide-md-content pre {
+  padding: 16px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.guide-md-content blockquote {
+  padding-left: 16px;
+  margin: 12px 0;
+  color: #64748b;
+  border-left: 4px solid #3b82f6;
+}
+
+.guide-md-content table {
+  width: 100%;
+  margin-bottom: 12px;
+  border-collapse: collapse;
+}
+
+.guide-md-content th,
+.guide-md-content td {
+  padding: 8px 12px;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+}
+
+.guide-md-content th {
+  background: #f8fafc;
+  font-weight: 600;
 }
 
 .loading-state,

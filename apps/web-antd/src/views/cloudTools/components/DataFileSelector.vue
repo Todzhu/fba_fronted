@@ -3,14 +3,17 @@
  * DataFileSelector - Hiplot 风格数据文件选择器
  *
  * 功能：
+ * - 多文件 Tab 支持（根据 input_schema.files 动态生成）
  * - 可编辑电子表格（带工具栏）
  * - 文件导入/清空/模式切换
- * - 示例数据加载
+ * - 示例数据按 key 匹配加载
  */
-import { ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Space, Upload } from 'ant-design-vue';
+import { Button, Input, message, Space, Tabs, Upload } from 'ant-design-vue';
+
+import { baseRequestClient } from '../../../api/request';
 
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
 
@@ -26,9 +29,18 @@ interface InputSchema {
   files?: FileConfig[];
 }
 
+// 示例数据配置接口
+interface ExampleDataConfig {
+  key: string;
+  name: string;
+  url: string;
+  description?: string;
+}
+
 const props = defineProps<{
   modelValue: Record<string, null | number>;
   schema: InputSchema | null;
+  exampleData?: ExampleDataConfig[] | null; // 后端配置的示例数据
 }>();
 
 const emit = defineEmits<{
@@ -36,75 +48,210 @@ const emit = defineEmits<{
   (e: 'nextStep'): void;
 }>();
 
-// 表格数据
-const tableData = ref<string[][]>([]);
-const fileName = ref<string>('');
-const spreadsheetRef = ref<InstanceType<typeof SpreadsheetPreview>>();
+// 文件配置列表 - 优先使用 example_data 生成 Tab，否则使用 input_schema.files
+const fileConfigs = computed<FileConfig[]>(() => {
+  const examples = props.exampleData;
+  
+  // 如果有示例数据配置，以示例数据生成 Tab
+  if (examples && examples.length > 0) {
+    return examples.map(e => ({
+      key: e.key,
+      label: e.name || e.key,
+      required: false,
+    }));
+  }
+  
+  // 否则使用 input_schema.files
+  return props.schema?.files ?? [{ key: 'data', label: '数据表', required: true }];
+});
 
-// 示例数据
-const EXAMPLE_DATA: string[][] = [
+// 当前激活的 Tab
+const activeTab = ref<string>('');
+
+// 初始化激活 Tab
+watch(fileConfigs, (configs) => {
+  if (configs.length > 0 && !activeTab.value) {
+    activeTab.value = configs[0]!.key;
+  }
+}, { immediate: true });
+
+// 每个文件的表格数据和状态
+const fileDataMap = ref<Record<string, {
+  data: string[][];
+  fileName: string;
+  loading: boolean;
+}>>({});
+
+// 初始化文件数据
+watch(fileConfigs, (configs) => {
+  for (const config of configs) {
+    if (!fileDataMap.value[config.key]) {
+      fileDataMap.value[config.key] = {
+        data: [],
+        fileName: '',
+        loading: false,
+      };
+    }
+  }
+}, { immediate: true });
+
+// 电子表格引用
+const spreadsheetRefs = ref<Record<string, InstanceType<typeof SpreadsheetPreview>>>({});
+
+const exampleLoading = ref(false);
+
+// 默认示例数据（仅在后端未配置时使用）
+const DEFAULT_EXAMPLE: string[][] = [
   ['Symbol', 'logFC', 'P.Value'],
-  ['CPA1', '-2.26167392', '0.033757914'],
-  ['DNASE1L3', '-2.09717274', '1.65E-17'],
-  ['SLC4A10', '-1.97923271', '5.77E-10'],
-  ['AC006369.2', '-1.88358912', '3.64E-12'],
-  ['SNAP25', '-1.77576314', '4.90E-10'],
-  ['TMEM132C', '-1.69531470', '7.80E-10'],
-  ['DCX', '-1.63279422', '3.16E-09'],
-  ['FCRL2', '-1.58297783', '6.03E-06'],
-  ['NRG2', '-1.53649556', '1.69E-15'],
-  ['ASPA', '-1.49621648', '1.53E-15'],
-  ['SIT1', '-1.44991978', '1.84E-09'],
-  ['GPR174', '-1.40693860', '8.15E-09'],
-  ['DLGAP3', '-1.36991823', '9.92E-12'],
-  ['CUZD1', '-1.3450764', '0.023805989'],
-  ['EPB41L3', '-1.31928786', '3.07E-17'],
-  ['CCR5', '-1.29396276', '1.89E-09'],
-  ['SNCB', '-1.27339696', '1.35E-05'],
-  ['SCIMP', '-1.25222960', '2.49E-10'],
-  ['HHATL', '-1.23576815', '4.06E-05'],
+  ['CPA1', '-2.26', '0.034'],
+  ['DNASE1L3', '-2.10', '1.65E-17'],
+  ['SLC4A10', '-1.98', '5.77E-10'],
 ];
 
-// 加载示例数据
-const loadExample = () => {
-  tableData.value = EXAMPLE_DATA;
-  fileName.value = 'example_data.csv';
-  message.success('示例数据已加载');
-
-  // 更新 modelValue
-  updateFileId('data', Date.now());
+// 根据 key 获取对应的示例数据配置
+const getExampleByKey = (key: string): ExampleDataConfig | undefined => {
+  return props.exampleData?.find(e => e.key === key);
 };
 
-// 下载示例数据
-const downloadExample = () => {
-  const csvContent = EXAMPLE_DATA.map((row) => row.join('\t')).join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'example_data.csv';
-  link.click();
-  message.success('示例数据已下载');
+// 加载所有示例数据（从后端配置的 URL 加载）
+const loadAllExamples = async () => {
+  exampleLoading.value = true;
+  
+  try {
+    const examples = props.exampleData;
+    
+    if (examples && examples.length > 0) {
+      // 直接遍历示例数据加载
+      for (const example of examples) {
+        await loadExampleForFile(example.key, example);
+      }
+      message.success('示例数据已加载');
+    } else {
+      // 没有配置时，只为第一个文件加载默认数据
+      const firstKey = fileConfigs.value[0]?.key ?? 'data';
+      fileDataMap.value[firstKey] = {
+        data: DEFAULT_EXAMPLE,
+        fileName: 'example_data.csv',
+        loading: false,
+      };
+      updateFileId(firstKey, Date.now());
+      message.success('示例数据已加载');
+    }
+  } catch (error) {
+    console.error('Error loading examples:', error);
+    message.error('示例数据加载失败');
+  } finally {
+    exampleLoading.value = false;
+  }
 };
 
-// 导入文件
-const handleImport = async (file: File) => {
+// 为单个文件加载示例数据
+const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
+  // 确保 fileDataMap[key] 存在
+  if (!fileDataMap.value[key]) {
+    fileDataMap.value[key] = {
+      data: [],
+      fileName: '',
+      loading: false,
+    };
+  }
+  
+  const fileData = fileDataMap.value[key]!;
+  fileData.loading = true;
+  
+  try {
+    const response = await baseRequestClient.get(example.url);
+    const content = response.data as string;
+    const lines = content.split('\n').filter((line) => line.trim());
+    const data = lines.map((line) => line.split(/[,\t]/));
+
+    fileData.data = data;
+    fileData.fileName = example.name || 'example_data.csv';
+    updateFileId(key, Date.now());
+    console.log(`Loaded example for ${key}:`, data.length, 'rows');
+  } catch (error) {
+    console.error(`Error loading example for ${key}:`, error);
+    message.error(`加载示例 "${example.name}" 失败`);
+  } finally {
+    fileData.loading = false;
+  }
+};
+
+// Download example data
+const downloadExample = async () => {
+  const currentKey = activeTab.value;
+  const example = getExampleByKey(currentKey);
+
+  if (example) {
+    try {
+      const response = await baseRequestClient.get(example.url, {
+        responseType: 'blob',
+      });
+      const blob = response.data as Blob;
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = example.name || 'example_data.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      message.success('示例数据已下载');
+    } catch (error) {
+      console.error('Download error:', error);
+      message.error('下载失败');
+    }
+  } else {
+    // Default example data
+    const csvContent = DEFAULT_EXAMPLE.map((row) => row.join('\t')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'example_data.csv';
+    link.click();
+    message.success('示例数据已下载');
+  }
+};
+
+// 导入文件（按指定 key）
+const handleImportForKey = async (key: string, file: File) => {
+  // 确保 fileDataMap[key] 存在
+  if (!fileDataMap.value[key]) {
+    fileDataMap.value[key] = {
+      data: [],
+      fileName: '',
+      loading: false,
+    };
+  }
+  
+  const fileData = fileDataMap.value[key]!;
+
   const content = await file.text();
   const lines = content.split('\n').filter((line) => line.trim());
   const data = lines.map((line) => line.split(/[,\t]/));
 
-  tableData.value = data;
-  fileName.value = file.name;
-  updateFileId('data', Date.now());
+  fileData.data = data;
+  fileData.fileName = file.name;
+  updateFileId(key, Date.now());
+  
+  // 切换到对应的 Tab
+  activeTab.value = key;
+  
   message.success(`${file.name} 导入成功`);
   return false; // 阻止默认上传
 };
 
-// 清空表格
-const handleClear = () => {
-  tableData.value = [];
-  fileName.value = '';
-  spreadsheetRef.value?.clearData();
-  updateFileId('data', null);
+// 清空指定表格
+const handleClearForKey = (key: string) => {
+  const fileData = fileDataMap.value[key];
+  if (!fileData) return;
+
+  fileData.data = [];
+  fileData.fileName = '';
+  spreadsheetRefs.value[key]?.clearData();
+  updateFileId(key, null);
   message.info('数据已清空');
 };
 
@@ -114,10 +261,13 @@ const updateFileId = (key: string, fileId: null | number) => {
 };
 
 // 表格数据变化
-const handleDataChange = (data: string[][]) => {
-  tableData.value = data;
-  if (data.length > 0) {
-    updateFileId('data', Date.now());
+const handleDataChange = (key: string, data: string[][]) => {
+  const fileData = fileDataMap.value[key];
+  if (fileData) {
+    fileData.data = data;
+    if (data.length > 0) {
+      updateFileId(key, Date.now());
+    }
   }
 };
 
@@ -128,7 +278,7 @@ const goNext = () => {
 
 // 暴露方法
 const fillAllExamples = () => {
-  loadExample();
+  loadAllExamples();
 };
 
 defineExpose({ fillAllExamples });
@@ -139,26 +289,32 @@ defineExpose({ fillAllExamples });
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <Space>
-        <Button type="primary" @click="loadExample">示 例</Button>
+        <Button type="primary" :loading="exampleLoading" @click="loadAllExamples">示 例</Button>
         <Button @click="downloadExample">下载示例 数据表</Button>
       </Space>
     </div>
 
-    <!-- 文件输入行 -->
+    <!-- 文件输入行（所有文件配置） -->
     <div
-      v-for="file in schema?.files ?? [
-        { key: 'data', label: '数据表', required: true },
-      ]"
-      :key="file.key"
+      v-for="config in fileConfigs"
+      :key="config.key"
       class="file-input-row"
     >
       <label class="input-label">
-        <span v-if="file.required" class="required">*</span>
-        {{ file.label || '数据表' }}：
+        <span v-if="config.required" class="required">*</span>
+        <a-tooltip v-if="config.description" :title="config.description">
+          <span class="label-text has-desc">
+            {{ config.label || config.key }}
+            <Icon icon="mdi:help-circle-outline" class="desc-icon" />：
+          </span>
+        </a-tooltip>
+        <span v-else class="label-text">
+          {{ config.label || config.key }}：
+        </span>
       </label>
 
       <Input
-        :value="fileName || '请编辑下方表格'"
+        :value="fileDataMap[config.key]?.fileName || '请编辑下方表格'"
         readonly
         class="filename-input"
         placeholder="请编辑下方表格"
@@ -167,28 +323,37 @@ defineExpose({ fillAllExamples });
       <div class="action-buttons">
         <Upload
           :show-upload-list="false"
-          :before-upload="handleImport"
-          accept=".csv,.txt,.tsv"
+          :before-upload="(file: File) => handleImportForKey(config.key, file)"
+          accept=".csv,.txt,.tsv,.xls,.xlsx"
         >
           <Button type="primary" class="btn-import">导 入</Button>
         </Upload>
-        <Button danger class="btn-clear" @click="handleClear">清 空</Button>
+        <Button danger class="btn-clear" @click="handleClearForKey(config.key)">清 空</Button>
       </div>
     </div>
 
-    <!-- 数据表 Tab 标题 -->
-    <div class="table-tab">
-      <span class="tab-item active">数据表</span>
+    <!-- 多文件 Tab -->
+    <div class="table-tabs">
+      <Tabs v-model:activeKey="activeTab" size="small">
+        <Tabs.TabPane
+          v-for="config in fileConfigs"
+          :key="config.key"
+          :tab="config.label || config.key"
+        />
+      </Tabs>
     </div>
 
     <!-- 可编辑电子表格 -->
     <div class="spreadsheet-area">
-      <SpreadsheetPreview
-        ref="spreadsheetRef"
-        :data="tableData"
-        :show-toolbar="true"
-        @change="handleDataChange"
-      />
+      <template v-for="config in fileConfigs" :key="config.key">
+        <SpreadsheetPreview
+          v-if="activeTab === config.key"
+          :ref="(el: any) => { if (el) spreadsheetRefs[config.key] = el }"
+          :data="fileDataMap[config.key]?.data ?? []"
+          :show-toolbar="true"
+          @change="(data: string[][]) => handleDataChange(config.key, data)"
+        />
+      </template>
     </div>
 
     <!-- 底部提示 + 下一步 -->
@@ -229,10 +394,26 @@ defineExpose({ fillAllExamples });
   display: flex;
   gap: 4px;
   align-items: center;
-  min-width: 70px;
+  min-width: 120px; /* 固定宽度以确保输入框对齐 */
+  justify-content: flex-end; /* 标签文字右对齐，靠近输入框 */
   font-size: 14px;
   color: #1e293b;
-  white-space: nowrap;
+}
+
+.label-text {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.has-desc {
+  cursor: help;
+  border-bottom: 1px dashed #94a3b8;
+}
+
+.desc-icon {
+  font-size: 14px;
+  color: #64748b;
 }
 
 .required {
@@ -257,23 +438,16 @@ defineExpose({ fillAllExamples });
   min-width: 64px;
 }
 
-/* 数据表 Tab */
-.table-tab {
-  margin-top: 8px;
-  border-bottom: 1px solid #e2e8f0;
+.table-tabs {
+  margin-top: 0;
 }
 
-.tab-item {
-  display: inline-block;
-  padding: 8px 16px;
-  font-size: 14px;
-  color: #64748b;
-  cursor: pointer;
+.table-tabs :deep(.ant-tabs-nav) {
+  margin-bottom: 0;
 }
 
-.tab-item.active {
-  color: #09f;
-  border-bottom: 2px solid #09f;
+.table-tabs :deep(.ant-tabs-tab) {
+  padding: 4px 16px; /* 减小上下内边距 */
 }
 
 /* 电子表格区域 */
@@ -315,3 +489,4 @@ defineExpose({ fillAllExamples });
   border-radius: 8px;
 }
 </style>
+
