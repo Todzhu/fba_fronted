@@ -10,23 +10,24 @@
  */
 import { computed, ref, watch } from 'vue';
 
+// @ts-ignore
 import { Icon } from '@iconify/vue';
 import {
   Button,
   Collapse,
   CollapsePanel,
-  Form,
   Input,
   InputNumber,
   Select,
   Slider,
   Switch,
+  Tooltip,
 } from 'ant-design-vue';
 
 import OfficeColorPicker from './OfficeColorPicker.vue';
 
 interface SchemaProperty {
-  type: string;
+  type?: string; // 改为可选，因为从 schema 读取时可能为 undefined
   title?: string;
   description?: string;
   default?: unknown;
@@ -36,6 +37,7 @@ interface SchemaProperty {
   maximum?: number;
   step?: number;
   group?: string; // 分组名称
+  required?: boolean; // 支持属性内部的 required 标记
 }
 
 interface SchemaPropertyWithKey extends SchemaProperty {
@@ -46,6 +48,7 @@ interface ParamSchema {
   type: 'object';
   properties?: Record<string, SchemaProperty>;
   required?: string[];
+  order?: string[]; // 参数顺序
 }
 
 const props = defineProps<{
@@ -61,21 +64,29 @@ const emit = defineEmits<{
   (e: 'submit'): void;
 }>();
 
-// 解析 schema 属性列表
+// 解析 schema 属性列表（按 order 数组排序）
 const properties = computed(() => {
   if (!props.schema?.properties) return [];
-  return Object.entries(props.schema.properties).map(([key, prop]) => ({
+  const allKeys = Object.keys(props.schema.properties);
+  // 按 order 数组排序，未在 order 中的放到最后
+  const orderedKeys = props.schema.order
+    ? [
+        ...props.schema.order.filter((k) => allKeys.includes(k)),
+        ...allKeys.filter((k) => !props.schema!.order!.includes(k)),
+      ]
+    : allKeys;
+  return orderedKeys.map((key) => ({
     key,
-    ...prop,
+    ...props.schema!.properties![key],
   }));
 });
 
 // 按分组整理属性
 const groupedProperties = computed(() => {
-  const groups: Record<string, typeof properties.value> = {
-    特殊参数: [],
-    通用参数: [],
-  };
+  // 使用 Map 保持插入顺序，或者依赖对象的插入顺序（ES2015+）
+  // 这里为了稳健，我们建立一个 orderedGroups 数组来记录分组出现的顺序
+  const groupOrder: string[] = [];
+  const groups: Record<string, typeof properties.value> = {};
 
   for (const prop of properties.value) {
     let groupName = prop.group;
@@ -98,24 +109,15 @@ const groupedProperties = computed(() => {
 
     if (!groups[groupName]) {
       groups[groupName] = [];
+      groupOrder.push(groupName); // 记录新分组出现顺序
     }
-    groups[groupName].push(prop);
+    groups[groupName]!.push(prop);
   }
 
-  // 过滤空分组，确保通用参数在最后（或者根据需求调整顺序）
-  // 这里保持原本的对象遍历顺序，但我们可以强制排序
-  const ORDER = ['特殊参数', '通用参数'];
-  return Object.entries(groups)
-    .filter(([, items]) => items.length > 0)
-    .sort((a, b) => {
-      const idxA = ORDER.indexOf(a[0]);
-      const idxB = ORDER.indexOf(b[0]);
-      // 如果都在列表中，按列表顺序；否则放在最后
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return 0;
-    });
+  // 按照分组出现的顺序返回
+  return groupOrder.map(
+    (name) => [name, groups[name]] as [string, typeof properties.value],
+  );
 });
 
 // 默认展开所有分组
@@ -158,6 +160,8 @@ const getWidgetType = (prop: SchemaPropertyWithKey): string => {
   if (prop.enum) return 'select';
   if (prop.type === 'boolean') return 'switch';
   if (prop.type === 'integer' || prop.type === 'number') return 'slider';
+  if (prop.widget === 'int') return 'int';
+  if (prop.widget === 'float') return 'float';
 
   // 智能推断颜色类型
   const lowerKey = prop.key.toLowerCase();
@@ -200,19 +204,27 @@ const handleSubmit = () => {
         :key="groupName"
         :header="groupName"
       >
-        <Form layout="vertical" class="param-form">
-          <div v-for="prop in items" :key="prop.key" class="param-row">
+        <div class="param-grid">
+          <div v-for="prop in items" :key="prop.key" class="param-item">
             <!-- 标签 -->
             <div class="param-label">
               <span class="label-text">{{ prop.title || prop.key }}</span>
-              <Tooltip :title="prop.description || prop.title || prop.key">
+              <span v-if="prop.required || schema?.required?.includes(prop.key)" class="required-mark">*</span>
+              <Tooltip v-if="prop.description" placement="topLeft" :overlay-style="{ maxWidth: '320px' }">
+                <template #title>
+                  <div class="tooltip-content">
+                    <div class="tooltip-title">{{ prop.title || prop.key }}</div>
+                    <div class="tooltip-desc">{{ prop.description }}</div>
+                  </div>
+                </template>
                 <Icon
                   icon="ant-design:question-circle-outlined"
                   class="help-icon"
                 />
               </Tooltip>
-              <span class="colon">：</span>
             </div>
+            <!-- 输入控件 -->
+            <div class="param-control">
 
             <!-- 滑块+数字输入组合 -->
             <template v-if="getWidgetType(prop) === 'slider'">
@@ -237,7 +249,12 @@ const handleSubmit = () => {
             </template>
 
             <!-- 下拉选择 / 列名选择 -->
-            <template v-else-if="getWidgetType(prop) === 'select' || getWidgetType(prop) === 'column_select'">
+            <template
+              v-else-if="
+                getWidgetType(prop) === 'select' ||
+                getWidgetType(prop) === 'column_select'
+              "
+            >
               <Select
                 :value="(modelValue[prop.key] as string) ?? prop.default"
                 class="select-input"
@@ -259,7 +276,32 @@ const handleSubmit = () => {
               />
             </template>
 
-            <!-- 数字输入 -->
+            <!-- 整数输入 -->
+            <template v-else-if="getWidgetType(prop) === 'int'">
+              <InputNumber
+                :value="(modelValue[prop.key] as number) ?? prop.default"
+                :min="prop.minimum"
+                :max="prop.maximum"
+                :step="prop.step ?? 1"
+                :precision="0"
+                class="number-input-only"
+                @change="(val) => updateField(prop.key, val)"
+              />
+            </template>
+
+            <!-- 浮点数输入 -->
+            <template v-else-if="getWidgetType(prop) === 'float'">
+              <InputNumber
+                :value="(modelValue[prop.key] as number) ?? prop.default"
+                :min="prop.minimum"
+                :max="prop.maximum"
+                :step="prop.step ?? 0.01"
+                class="number-input-only"
+                @change="(val) => updateField(prop.key, val)"
+              />
+            </template>
+
+            <!-- 数字输入 (通用) -->
             <template v-else-if="getWidgetType(prop) === 'number'">
               <InputNumber
                 :value="(modelValue[prop.key] as number) ?? prop.default"
@@ -299,8 +341,9 @@ const handleSubmit = () => {
                 "
               />
             </template>
+            </div>
           </div>
-        </Form>
+        </div>
       </CollapsePanel>
     </Collapse>
 
@@ -363,49 +406,94 @@ const handleSubmit = () => {
 }
 
 :deep(.ant-collapse-header) {
-  padding: 12px 0 !important;
+  padding: 0 0 8px 0 !important; /* 减少标题上下间距 */
   font-weight: 500;
   color: #334155 !important;
 }
 
 :deep(.ant-collapse-content-box) {
-  padding: 16px 0 !important;
+  padding: 8px 0 !important; /* 减少内容区域内边距 */
 }
 
-/* 参数行 */
-.param-row {
+/* ========== 两列参数网格布局 ========== */
+.param-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 24px; /* 减少行间距 16px -> 12px */
+}
+
+/* 响应式：小屏幕单列 */
+@media (max-width: 768px) {
+  .param-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 单个参数项 (无边框极简风格) */
+.param-item {
   display: flex;
-  gap: 16px;
-  align-items: center;
-  padding: 10px 12px;
-  border-radius: 6px;
-  transition: all 0.2s;
+  flex-direction: column;
+  gap: 4px; /* 标签和输入框间距 6px -> 4px */
+  padding: 0; /* 去除内边距 */
+  /* 去除背景和边框 */
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
-.param-row:hover {
-  background-color: #f8fafc;
-}
-
+/* 标签样式 */
 .param-label {
   display: flex;
-  flex-shrink: 0;
   align-items: center;
-  justify-content: flex-end;
-  width: 140px;
-  min-width: 140px;
-  font-size: 14px;
+  margin-bottom: 2px;
+  font-size: 13px;
   font-weight: 500;
-  color: #475569;
+  color: #64748b; /* 颜色稍微淡一点，不再那么抢眼 */
+}
+
+.label-text {
+  margin-right: 4px;
 }
 
 .help-icon {
-  margin-left: 4px;
+  font-size: 13px;
   color: #94a3b8;
   cursor: help;
+  transition: color 0.2s ease;
 }
 
-.colon {
+.help-icon:hover {
+  color: #0099ff;
+}
+
+/* Tooltip 内容样式 */
+.tooltip-content {
+  padding: 4px 0;
+}
+
+.tooltip-title {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.tooltip-desc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.required-mark {
   margin-left: 2px;
+  margin-right: 2px;
+  font-weight: bold;
+  color: #ef4444;
+}
+
+/* 输入控件容器 */
+.param-control {
+  width: 100%;
 }
 
 /* 滑块+数字输入组合 */

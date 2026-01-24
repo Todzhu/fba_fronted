@@ -199,6 +199,23 @@ const submitAnalysis = async () => {
     }
   }
 
+  // 验证必填参数
+  const paramSchema = tool.value?.param_schema as null | {
+    properties?: Record<string, { title?: string; required?: boolean }>;
+  };
+  if (paramSchema?.properties) {
+    for (const [key, config] of Object.entries(paramSchema.properties)) {
+      if (config.required) {
+        const value = formParams.value[key];
+        // 检查值是否为空（null、undefined、空字符串）
+        if (value === null || value === undefined || value === '') {
+          message.warning(`${config.title || key} 是必填项`);
+          return;
+        }
+      }
+    }
+  }
+
   analyzing.value = true;
   showGuide.value = false;
   message.loading('正在提交分析任务...', 0);

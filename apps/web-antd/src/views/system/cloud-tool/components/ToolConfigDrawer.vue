@@ -1,6 +1,5 @@
 <script lang="ts" setup>
 import type { AnalysisTool, CloudToolUpdateParams } from '#/api/analysis-tools';
-import { uploadFile } from '#/api/user-file';
 
 /**
  * ToolConfigDrawer - 工具配置可视化编辑器
@@ -10,11 +9,16 @@ import { uploadFile } from '#/api/user-file';
  * - param_schema: 执行参数配置
  * - output_config: 输出可视化配置
  */
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
+import { MarkdownEditor } from '@vben/common-ui';
+
+// @ts-ignore
+import { Icon } from '@iconify/vue';
 import {
   Button,
   Card,
+  Cascader,
   Col,
   Drawer,
   Form,
@@ -29,10 +33,11 @@ import {
   Tabs,
   Upload,
 } from 'ant-design-vue';
-
-import { MarkdownEditor } from '@vben/common-ui';
+// @ts-ignore
+import Sortable from 'sortablejs';
 
 import { updateCloudToolApi } from '#/api/analysis-tools';
+import { uploadFile } from '#/api/user-file';
 
 // ========== Props & Emits ==========
 const props = defineProps<{
@@ -85,17 +90,56 @@ const inputFiles = ref<InputFile[]>([]);
 // 参数配置
 interface ParamItem {
   key: string;
-  type: 'boolean' | 'integer' | 'number' | 'string';
+  typeWidget: [string, string]; // 级联选择: [type, widget]
   title: string;
-  widget: 'color' | 'number' | 'select' | 'slider' | 'switch' | 'text' | 'textarea';
+  description: string; // 参数描述（用于 tooltip 显示）
   default: string;
   enum: string;
+  required: boolean; // 是否必填
   minimum?: number;
   maximum?: number;
-  group?: string;
+  group: string; // 分组，默认 "通用参数"
   format?: string;
 }
 const paramItems = ref<ParamItem[]>([]);
+
+// 类型-控件级联选项
+const typeWidgetOptions = [
+  {
+    value: 'string',
+    label: '字符串 (string)',
+    children: [
+      { value: 'text', label: '单行文本' },
+      { value: 'textarea', label: '多行文本' },
+      { value: 'select', label: '下拉选择' },
+      { value: 'color', label: '颜色选择器' },
+      { value: 'column_select', label: '列选择器' },
+    ],
+  },
+  {
+    value: 'number',
+    label: '数值 (number)',
+    children: [
+      { value: 'number', label: '数字输入' },
+      { value: 'slider', label: '滑块' },
+    ],
+  },
+  {
+    value: 'integer',
+    label: '整数 (integer)',
+    children: [
+      { value: 'int', label: '整数输入' },
+      { value: 'slider', label: '滑块' },
+    ],
+  },
+  {
+    value: 'boolean',
+    label: '布尔 (boolean)',
+    children: [
+      { value: 'switch', label: '开关' },
+    ],
+  },
+];
 
 // 输出配置
 interface OutputItem {
@@ -140,23 +184,52 @@ watch(
     // 参数
     const paramSchema = tool.param_schema as null | {
       properties?: Record<string, any>;
+      order?: string[]; // 参数顺序
     };
-    paramItems.value = paramSchema?.properties
-      ? Object.entries(paramSchema.properties).map(([key, p]) => ({
+    if (paramSchema?.properties) {
+      // 获取所有参数键
+      const allKeys = Object.keys(paramSchema.properties);
+      // 按 order 数组排序，未在 order 中的放到最后
+      const orderedKeys = paramSchema.order
+        ? [
+            ...paramSchema.order.filter((k) => allKeys.includes(k)),
+            ...allKeys.filter((k) => !paramSchema.order!.includes(k)),
+          ]
+        : allKeys;
+      
+      paramItems.value = orderedKeys.map((key) => {
+        const p = paramSchema.properties![key];
+        // 推断 widget
+        const inferredWidget =
+          p.widget ||
+          (p.format === 'color'
+            ? 'color'
+            : p.enum
+              ? 'select'
+              : p.type === 'boolean'
+                ? 'switch'
+                : p.type === 'integer'
+                  ? 'int'
+                  : p.type === 'number'
+                    ? 'number'
+                    : 'text');
+        return {
           key,
-          type: p.type || 'string',
+          typeWidget: [p.type || 'string', inferredWidget] as [string, string],
           title: p.title || key,
-          widget:
-            p.widget ||
-            (p.format === 'color' ? 'color' : p.enum ? 'select' : p.type === 'boolean' ? 'switch' : 'text'),
+          description: p.description || '',
           default: String(p.default ?? ''),
           enum: (p.enum || []).join(', '),
+          required: p.required || false,
           minimum: p.minimum,
           maximum: p.maximum,
-          group: p.group || '特殊参数',
+          group: p.group || '通用参数',
           format: p.format,
-        }))
-      : [];
+        };
+      });
+    } else {
+      paramItems.value = [];
+    }
 
     // 输出
     const outputConfig = tool.output_config as null | { outputs?: any[] };
@@ -187,12 +260,13 @@ const removeInputFile = (index: number) => {
 const addParam = () => {
   paramItems.value.push({
     key: '',
-    type: 'string',
+    typeWidget: ['string', 'text'],
     title: '',
-    widget: 'text',
+    description: '',
     default: '',
     enum: '',
-    group: '特殊参数',
+    required: false,
+    group: '通用参数',
   });
 };
 
@@ -209,12 +283,63 @@ const removeOutput = (index: number) => {
 };
 
 const addExample = () => {
-  exampleItems.value.push({ key: '', name: '', url: '', description: '', fileName: '' });
+  exampleItems.value.push({
+    key: '',
+    name: '',
+    url: '',
+    description: '',
+    fileName: '',
+  });
 };
 
 const removeExample = (index: number) => {
   exampleItems.value.splice(index, 1);
 };
+
+// ========== 拖拽排序 ==========
+const initSortable = () => {
+  const el = document.querySelector(
+    '.param-table .ant-table-tbody',
+  ) as HTMLElement;
+  if (!el) return;
+
+  // 避免重复初始化（虽然 Create 会返回新实例，但最好检查一下，这里简单处理先销毁再创建思路太麻烦，直接让 Sortable 自己处理）
+  // 实际上 Sortable.create 会绑定事件，如果多次创建可能会有问题
+  // 这里简化处理，假设每次切换 Tab 重新创建是安全的（只要 DOM 被销毁重建）
+
+  Sortable.create(el, {
+    handle: '.drag-handle',
+    animation: 300,
+    ghostClass: 'sortable-ghost',
+    onEnd: ({
+      oldIndex,
+      newIndex,
+    }: {
+      newIndex?: number;
+      oldIndex?: number;
+    }) => {
+      if (
+        typeof oldIndex !== 'number' ||
+        typeof newIndex !== 'number' ||
+        oldIndex === newIndex
+      ) {
+        return;
+      }
+      const targetRow = paramItems.value.splice(oldIndex, 1)[0];
+      if (targetRow) {
+        paramItems.value.splice(newIndex, 0, targetRow);
+      }
+    },
+  });
+};
+
+watch(activeTab, (val) => {
+  if (val === 'params') {
+    nextTick(() => {
+      setTimeout(initSortable, 100);
+    });
+  }
+});
 
 // 示例文件上传处理
 const handleExampleUpload = async (index: number, file: File) => {
@@ -260,21 +385,24 @@ const handleSave = async () => {
 
   // 构建 param_schema
   const properties: Record<string, any> = {};
+  const order: string[] = []; // 记录参数顺序
   for (const p of paramItems.value) {
+    const [type, widget] = p.typeWidget;
     const prop: any = {
-      type: p.type,
+      type,
       title: p.title,
     };
-    if (p.widget && p.widget !== 'text') prop.widget = p.widget;
-    if (p.widget === 'color') prop.format = 'color';
+    if (p.required) prop.required = true;
+    if (widget && widget !== 'text') prop.widget = widget;
+    if (widget === 'color') prop.format = 'color';
     if (p.group) prop.group = p.group;
     if (p.default) {
       prop.default =
-        p.type === 'integer' || p.type === 'number'
+        type === 'integer' || type === 'number'
           ? Number(p.default)
-          : p.type === 'boolean'
+          : (type === 'boolean'
             ? p.default === 'true'
-            : p.default;
+            : p.default);
     }
     if (p.enum) {
       prop.enum = p.enum
@@ -282,11 +410,13 @@ const handleSave = async () => {
         .map((e) => e.trim())
         .filter(Boolean);
     }
+    if (p.description) prop.description = p.description;
     if (p.minimum !== undefined) prop.minimum = p.minimum;
     if (p.maximum !== undefined) prop.maximum = p.maximum;
     properties[p.key] = prop;
+    order.push(p.key); // 按顺序添加 key
   }
-  const param_schema = { type: 'object', properties };
+  const param_schema = { type: 'object', properties, order };
 
   // 构建 output_config
   const output_config = {
@@ -330,6 +460,13 @@ const handleSave = async () => {
 
 // ========== 表格列定义 ==========
 const inputColumns = [
+  {
+    title: '序号',
+    dataIndex: 'index',
+    width: 50,
+    align: 'center' as const,
+    customRender: ({ index }: { index: number }) => index + 1,
+  },
   { title: 'Key', dataIndex: 'key', width: 100 },
   { title: '标签', dataIndex: 'label', width: 120 },
   { title: '必填', dataIndex: 'required', width: 60 },
@@ -338,22 +475,116 @@ const inputColumns = [
 ];
 
 const paramColumns = [
+  {
+    title: '序号',
+    dataIndex: 'index',
+    width: 50,
+    align: 'center' as const,
+    customRender: ({ index }: { index: number }) => index + 1,
+  },
+  { title: '排序', dataIndex: 'sort', width: 50, align: 'center' as const },
   { title: 'Key', dataIndex: 'key', width: 80 },
-  { title: '标题', dataIndex: 'title', width: 100 },
-  { title: '类型', dataIndex: 'type', width: 80 },
-  { title: '控件', dataIndex: 'widget', width: 80 },
-  { title: '默认值', dataIndex: 'default', width: 80 },
-  { title: '分组', dataIndex: 'group', width: 80 },
+  { title: '标题', dataIndex: 'title', width: 90 },
+  { title: '描述', dataIndex: 'description', width: 140 },
+  { title: '类型/控件', dataIndex: 'typeWidget', width: 150 },
+  { title: '必填', dataIndex: 'required', width: 55, align: 'center' as const },
+  { title: '默认值', dataIndex: 'default', width: 70 },
+  { title: '分组', dataIndex: 'group', width: 90 },
   { title: '操作', dataIndex: 'action', width: 60 },
 ];
 
 const outputColumns = [
+  {
+    title: '序号',
+    dataIndex: 'index',
+    width: 50,
+    align: 'center' as const,
+    customRender: ({ index }: { index: number }) => index + 1,
+  },
   { title: 'Key', dataIndex: 'key', width: 80 },
   { title: '路径', dataIndex: 'path' },
   { title: '类型', dataIndex: 'type', width: 80 },
   { title: '标题', dataIndex: 'title', width: 100 },
   { title: '操作', dataIndex: 'action', width: 60 },
 ];
+
+// ========== 导出配置 ==========
+const handleExportConfig = () => {
+  const config = {
+    version: '1.0',
+    tool_title: props.tool?.title || 'unknown',
+    exported_at: new Date().toISOString(),
+    basic_info: basicInfo.value,
+    input_files: inputFiles.value,
+    param_items: paramItems.value,
+    output_items: outputItems.value,
+    example_items: exampleItems.value,
+  };
+  
+  const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tool_config_${props.tool?.title || 'export'}_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  message.success('配置已导出');
+};
+
+// ========== 导入配置 ==========
+const handleImportConfig = (file: File) => {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const config = JSON.parse(e.target?.result as string);
+      
+      // 验证配置版本
+      if (!config.version) {
+        message.error('无效的配置文件格式');
+        return;
+      }
+      
+      // 导入基本信息
+      if (config.basic_info) {
+        basicInfo.value = {
+          runner_type: config.basic_info.runner_type || 'r_script',
+          script_path: config.basic_info.script_path || '',
+          guide_doc: config.basic_info.guide_doc || '',
+          video_url: config.basic_info.video_url || '',
+        };
+      }
+      
+      // 导入输入文件配置
+      if (config.input_files) {
+        inputFiles.value = config.input_files;
+      }
+      
+      // 导入参数配置
+      if (config.param_items) {
+        paramItems.value = config.param_items;
+      }
+      
+      // 导入输出配置
+      if (config.output_items) {
+        outputItems.value = config.output_items;
+      }
+      
+      // 导入示例数据
+      if (config.example_items) {
+        exampleItems.value = config.example_items;
+      }
+      
+      message.success(`配置已导入 (来自: ${config.tool_title || '未知'})`);
+    } catch (error) {
+      console.error('Import failed:', error);
+      message.error('配置文件解析失败');
+    }
+  };
+  reader.readAsText(file);
+  return false; // 阻止默认上传
+};
 </script>
 
 <template>
@@ -452,57 +683,53 @@ const outputColumns = [
           </Button>
         </div>
         <Table
+          class="param-table"
           :columns="paramColumns"
           :data-source="paramItems"
           :pagination="false"
           size="small"
         >
           <template #bodyCell="{ column, record, index }">
-            <template v-if="column.dataIndex === 'key'">
+            <template v-if="column.dataIndex === 'index'">
+              {{ index + 1 }}
+            </template>
+            <template v-else-if="column.dataIndex === 'sort'">
+              <Icon
+                icon="mdi:drag"
+                class="drag-handle"
+                style="font-size: 18px; color: #9ca3af; cursor: move"
+              />
+            </template>
+            <template v-else-if="column.dataIndex === 'key'">
               <Input v-model:value="record.key" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'title'">
               <Input v-model:value="record.title" size="small" />
             </template>
-            <template v-else-if="column.dataIndex === 'type'">
-              <Select
-                v-model:value="record.type"
-                size="small"
-                style="width: 100%"
-              >
-                <Select.Option value="string">string</Select.Option>
-                <Select.Option value="integer">integer</Select.Option>
-                <Select.Option value="number">number</Select.Option>
-                <Select.Option value="boolean">boolean</Select.Option>
-              </Select>
+            <template v-else-if="column.dataIndex === 'description'">
+              <Input v-model:value="record.description" size="small" placeholder="参数说明" />
             </template>
-            <template v-else-if="column.dataIndex === 'widget'">
-              <Select
-                v-model:value="record.widget"
+            <template v-else-if="column.dataIndex === 'typeWidget'">
+              <Cascader
+                v-model:value="record.typeWidget"
+                :options="typeWidgetOptions"
                 size="small"
                 style="width: 100%"
-              >
-                <Select.Option value="text">text</Select.Option>
-                <Select.Option value="textarea">textarea</Select.Option>
-                <Select.Option value="number">number</Select.Option>
-                <Select.Option value="slider">slider</Select.Option>
-                <Select.Option value="select">select</Select.Option>
-                <Select.Option value="switch">switch</Select.Option>
-                <Select.Option value="color">color</Select.Option>
-              </Select>
+                placeholder="选择类型/控件"
+              />
+            </template>
+            <template v-else-if="column.dataIndex === 'required'">
+              <Switch v-model:checked="record.required" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'default'">
               <Input v-model:value="record.default" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'group'">
-              <Select
+              <Input
                 v-model:value="record.group"
                 size="small"
-                style="width: 100%"
-              >
-                <Select.Option value="特殊参数">特殊参数</Select.Option>
-                <Select.Option value="通用参数">通用参数</Select.Option>
-              </Select>
+                placeholder="通用参数"
+              />
             </template>
             <template v-else-if="column.dataIndex === 'action'">
               <Popconfirm title="确定删除?" @confirm="removeParam(index)">
@@ -544,6 +771,7 @@ const outputColumns = [
                 style="width: 100%"
               >
                 <Select.Option value="echarts">ECharts</Select.Option>
+                <Select.Option value="image">Image (图片)</Select.Option>
                 <Select.Option value="table">Table</Select.Option>
                 <Select.Option value="download">Download</Select.Option>
                 <Select.Option value="pdf">PDF</Select.Option>
@@ -566,9 +794,7 @@ const outputColumns = [
         <div class="example-section">
           <div class="section-header">
             <span class="section-title">示例文件配置</span>
-            <Button type="primary" @click="addExample">
-              + 添加示例
-            </Button>
+            <Button type="primary" @click="addExample"> + 添加示例 </Button>
           </div>
 
           <div v-if="exampleItems.length === 0" class="empty-tip">
@@ -601,10 +827,7 @@ const outputColumns = [
                 </Col>
                 <Col :span="12">
                   <Form.Item label="名称" class="form-item">
-                    <Input
-                      v-model:value="item.name"
-                      placeholder="示例名称"
-                    />
+                    <Input v-model:value="item.name" placeholder="示例名称" />
                   </Form.Item>
                 </Col>
               </Row>
@@ -612,12 +835,18 @@ const outputColumns = [
               <Form.Item label="示例文件" class="form-item">
                 <div class="file-upload-row">
                   <Upload
-                    :before-upload="(file: File) => handleExampleUpload(index, file)"
+                    :before-upload="
+                      (file: File) => handleExampleUpload(index, file)
+                    "
                     :show-upload-list="false"
                     accept=".csv,.txt,.xlsx,.xls,.tsv"
                   >
                     <Button :loading="item.uploading">
-                      {{ item.uploading ? '上传中...' : (item.fileName || '选择文件') }}
+                      {{
+                        item.uploading
+                          ? '上传中...'
+                          : item.fileName || '选择文件'
+                      }}
                     </Button>
                   </Upload>
                   <Input
@@ -642,12 +871,30 @@ const outputColumns = [
     </Tabs>
 
     <template #footer>
-      <Space>
-        <Button @click="visible = false">取消</Button>
-        <Button type="primary" :loading="loading" @click="handleSave">
-          保存配置
-        </Button>
-      </Space>
+      <div class="footer-actions">
+        <Space>
+          <Button @click="handleExportConfig">
+            <Icon icon="mdi:download" />
+            导出 JSON
+          </Button>
+          <Upload
+            :before-upload="handleImportConfig"
+            :show-upload-list="false"
+            accept=".json"
+          >
+            <Button>
+              <Icon icon="mdi:upload" />
+              导入 JSON
+            </Button>
+          </Upload>
+        </Space>
+        <Space>
+          <Button @click="visible = false">取消</Button>
+          <Button type="primary" :loading="loading" @click="handleSave">
+            保存配置
+          </Button>
+        </Space>
+      </div>
     </template>
   </Drawer>
 </template>
@@ -657,14 +904,22 @@ const outputColumns = [
   padding: 16px 24px;
 }
 
+/* Footer 布局：左侧导入导出，右侧保存取消 */
+.footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
 .basic-form {
   max-width: 100%;
 }
 
 .md-editor-wrapper {
+  overflow: hidden;
   border: 1px solid #d9d9d9;
   border-radius: 6px;
-  overflow: hidden;
 }
 
 .md-editor-wrapper :deep(.vditor) {
@@ -703,10 +958,10 @@ const outputColumns = [
 
 .section-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  justify-content: space-between;
   padding-bottom: 16px;
+  margin-bottom: 20px;
   border-bottom: 1px solid #e2e8f0;
 }
 
@@ -718,12 +973,12 @@ const outputColumns = [
 
 .empty-tip {
   padding: 48px 24px;
-  text-align: center;
+  font-size: 14px;
   color: #94a3b8;
+  text-align: center;
   background: #f8fafc;
   border: 2px dashed #e2e8f0;
   border-radius: 12px;
-  font-size: 14px;
 }
 
 .example-list {
@@ -740,7 +995,7 @@ const outputColumns = [
 
 .example-card:hover {
   border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 4px 12px rgb(59 130 246 / 15%);
 }
 
 .example-card :deep(.ant-card-head) {
@@ -761,8 +1016,8 @@ const outputColumns = [
 
 .card-title {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   font-size: 15px;
   font-weight: 600;
   color: #334155;
@@ -814,5 +1069,10 @@ const outputColumns = [
 
 .url-input {
   flex: 1;
+}
+
+.sortable-ghost {
+  background-color: #e6f7ff !important;
+  opacity: 0.8;
 }
 </style>

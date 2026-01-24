@@ -10,16 +10,26 @@ import type { EchartsUIType } from '@vben/plugins/echarts';
 import { onMounted, ref, watch } from 'vue';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
+import { useAccessStore } from '@vben/stores';
 
+// @ts-ignore
 import { Icon } from '@iconify/vue';
-import { Button, Empty, message, Space, Spin, Table, Tabs } from 'ant-design-vue';
+import {
+  Button,
+  Empty,
+  message,
+  Space,
+  Spin,
+  Table,
+  Tabs,
+} from 'ant-design-vue';
 
 import { getTaskFileUrl } from '#/api/analysis-tools';
 
 interface OutputItem {
   key: string;
   path: string;
-  type: 'download' | 'echarts' | 'pdf' | 'table';
+  type: 'download' | 'echarts' | 'image' | 'pdf' | 'table';
   title?: string;
 }
 
@@ -28,14 +38,15 @@ interface OutputConfig {
 }
 
 const props = defineProps<{
-  config: OutputConfig | null;
-  taskId?: string;
+  config: null | OutputConfig;
   outputDir?: string;
+  taskId?: string;
 }>();
 
 const loading = ref(false);
 const activeKey = ref<string>('');
 const outputData = ref<Record<string, unknown>>({});
+const imageBlobUrls = ref<Record<string, string>>({}); // 存储图片 Blob URL
 
 // ECharts refs
 const chartRefs = ref<Record<string, EchartsUIType>>({});
@@ -62,13 +73,50 @@ const fetchOutputData = async () => {
       const url = buildFileUrl(output.path);
       if (!url) continue;
 
-      const response = await fetch(url);
+      // 使用 store 获取 Token
+      const accessStore = useAccessStore();
+      const token = accessStore.accessToken;
 
-      if (output.type === 'echarts') {
-        outputData.value[output.key] = await response.json();
-      } else if (output.type === 'table') {
-        const text = await response.text();
-        outputData.value[output.key] = parseCSV(text);
+      const headers: HeadersInit = {};
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(url, { headers });
+
+      if (!response.ok) {
+        console.error(
+          `Fetch failed for ${url}: ${response.status} ${response.statusText}`,
+        );
+        if (response.status === 401) {
+          message.error('图片加载认证失败，请重新登录');
+        }
+        continue;
+      }
+
+      switch (output.type) {
+        case 'echarts': {
+          outputData.value[output.key] = await response.json();
+
+          break;
+        }
+        case 'image': {
+          const blob = await response.blob();
+          const existingUrl = imageBlobUrls.value[output.key];
+          if (existingUrl) {
+            URL.revokeObjectURL(existingUrl);
+          }
+          imageBlobUrls.value[output.key] = URL.createObjectURL(blob);
+
+          break;
+        }
+        case 'table': {
+          const text = await response.text();
+          outputData.value[output.key] = parseCSV(text || '');
+
+          break;
+        }
+        // No default
       }
     }
 
@@ -163,8 +211,23 @@ onMounted(() => {
             <!-- ECharts -->
             <div v-if="output.type === 'echarts'" class="chart-container">
               <EchartsUI
-                :ref="(el: any) => { if (el) chartRefs[output.key] = el; }"
+                :ref="
+                  (el: any) => {
+                    if (el) chartRefs[output.key] = el;
+                  }
+                "
               />
+            </div>
+
+            <!-- Image -->
+            <div v-else-if="output.type === 'image'" class="image-container">
+              <img
+                v-if="imageBlobUrls[output.key]"
+                :src="imageBlobUrls[output.key]"
+                :alt="output.title || output.key"
+                class="result-image"
+              />
+              <Spin v-else />
             </div>
 
             <!-- Table -->
@@ -180,7 +243,10 @@ onMounted(() => {
             </div>
 
             <!-- Download -->
-            <div v-else-if="output.type === 'download'" class="download-container">
+            <div
+              v-else-if="output.type === 'download'"
+              class="download-container"
+            >
               <Space direction="vertical" align="center">
                 <Icon icon="mdi:file-download" class="download-icon" />
                 <Button type="primary" @click="downloadFile(output)">
@@ -202,6 +268,7 @@ onMounted(() => {
 .result-renderer {
   width: 100%;
   height: 100%;
+  padding: 0 16px; /* 添加左右内边距，让 Tab 不靠边 */
 }
 
 .chart-container {
@@ -225,5 +292,22 @@ onMounted(() => {
   font-size: 64px;
   color: var(--primary-color, #1890ff);
   opacity: 0.6;
+}
+
+.image-container {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 16px;
+  overflow: auto;
+  background-color: #fafafa;
+  border-radius: 8px;
+}
+
+.result-image {
+  max-width: 100%;
+  max-height: 600px;
+  object-fit: contain;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
 }
 </style>
