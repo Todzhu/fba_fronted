@@ -14,6 +14,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 import { useTabs } from '@vben/hooks';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
+import { useAccessStore } from '@vben/stores';
 
 import { Icon } from '@iconify/vue';
 import {
@@ -65,9 +66,59 @@ const hasOutputConfig = computed(() => {
 
 // 简单的 Markdown 转 HTML 函数
 function simpleMarkdownToHtml(md: string): string {
+  // 首先处理表格（需要在其他替换之前处理）
+  // 使用更灵活的正则，支持表格前有空白行或直接在文本后
+  const tableRegex =
+    /(?:^|\n\n?)((?:\|[^\n]+\|\n)+?\|[-:\s|]+\|\n(?:\|[^\n]+\|(?:\n|$))+)/gm;
+  md = md.replaceAll(tableRegex, (_match, table) => {
+    const lines = table.trim().split('\n');
+    if (lines.length < 2) return _match;
+
+    // 找到分隔行（包含 - 和可能的 : 用于对齐）
+    let separatorIndex = -1;
+    for (const [i, line] of lines.entries()) {
+      if (/^\|[\s\-:|]+\|$/.test(line.trim())) {
+        separatorIndex = i;
+        break;
+      }
+    }
+
+    if (separatorIndex === -1 || separatorIndex === 0) return _match;
+
+    // 表头是分隔行之前的所有行（通常只有一行）
+    const headerLine = lines[separatorIndex - 1];
+    // 表体是分隔行之后的所有行
+    const bodyLines = lines.slice(separatorIndex + 1);
+
+    // 解析表头
+    const headers = headerLine
+      .split('|')
+      .filter((cell: string) => cell.trim() !== '')
+      .map((cell: string) => `<th>${cell.trim()}</th>`)
+      .join('');
+
+    // 解析表体
+    const rows = bodyLines
+      .filter((row: string) => row.trim() !== '')
+      .map((row: string) => {
+        const cells = row
+          .split('|')
+          .filter((cell: string) => cell.trim() !== '')
+          .map((cell: string) => `<td>${cell.trim()}</td>`)
+          .join('');
+        return `<tr>${cells}</tr>`;
+      })
+      .join('');
+
+    return `\n<table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>\n`;
+  });
+
   return (
     md
-      // 标题
+      // 标题（从多到少，避免被提前匹配）
+      .replaceAll(/^###### (.*$)/gm, '<h6>$1</h6>')
+      .replaceAll(/^##### (.*$)/gm, '<h5>$1</h5>')
+      .replaceAll(/^#### (.*$)/gm, '<h4>$1</h4>')
       .replaceAll(/^### (.*$)/gm, '<h3>$1</h3>')
       .replaceAll(/^## (.*$)/gm, '<h2>$1</h2>')
       .replaceAll(/^# (.*$)/gm, '<h1>$1</h1>')
@@ -116,7 +167,6 @@ const formParams = ref<Record<string, unknown>>({});
 const currentHeaders = ref<Record<string, string[]>>({});
 const handleHeadersChange = (headers: Record<string, string[]>) => {
   currentHeaders.value = headers;
-  console.log('[detail] Headers updated:', headers);
 };
 
 // 动态生成参数模式（注入表头选项）
@@ -124,10 +174,10 @@ const dynamicParamSchema = computed(() => {
   if (!tool.value?.param_schema) return null;
 
   // 深拷贝原始 schema 以免污染原始数据
-  const schema = JSON.parse(JSON.stringify(tool.value.param_schema));
+  const schema = structuredClone(tool.value.param_schema);
 
   if (schema.properties) {
-    for (const [key, prop] of Object.entries(schema.properties) as any) {
+    for (const prop of Object.values(schema.properties) as any) {
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
@@ -349,9 +399,73 @@ const previewResult = () => {
     showGuide.value = false; // 关闭指南，显示结果
   }, 800);
 };
-const downloadResult = () => {
-  if (!hasResult.value) return message.warning('请先提交分析');
-  message.info('下载结果...');
+const downloadResult = async () => {
+  if (!hasResult.value || !taskId.value) {
+    return message.warning('请先提交分析');
+  }
+
+  // 获取 output_config 中的输出文件配置
+  const outputConfig = tool.value?.output_config as null | {
+    outputs?: Array<{
+      key: string;
+      path: string;
+      title?: string;
+      type?: string;
+    }>;
+  };
+  const outputs = outputConfig?.outputs || [];
+
+  if (outputs.length === 0) {
+    return message.warning('暂无可下载的结果文件');
+  }
+
+  message.loading({ content: '正在准备下载...', key: 'download' });
+
+  try {
+    // 下载所有输出文件
+    for (const output of outputs) {
+      const fileUrl = `/api/v1/sys/analysis-tools/tasks/${taskId.value}/files/${output.path}`;
+
+      // 使用 store 获取 Token 进行认证下载
+      const accessStore = useAccessStore();
+      const token = accessStore.accessToken;
+
+      const response = await fetch(fileUrl, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`下载失败: ${response.status}`);
+      }
+
+      // 获取文件 blob
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      // 创建下载链接
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = output.path.split('/').pop() || output.path;
+      document.body.append(link);
+      link.click();
+      link.remove();
+
+      // 释放 URL
+      URL.revokeObjectURL(url);
+
+      // 如果有多个文件，稍微延迟一下避免浏览器阻止
+      if (outputs.length > 1) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    }
+
+    message.success({ content: '下载完成', key: 'download' });
+  } catch (error) {
+    console.error('下载失败:', error);
+    message.error({ content: '下载失败，请重试', key: 'download' });
+  }
 };
 
 // 重置参数为默认值
@@ -505,9 +619,12 @@ onMounted(() => fetchTool());
                       <li>
                         <strong>通用参数</strong>：包括图表标题、配色方案等。
                       </li>
+                      <!-- eslint-disable vue/html-closing-bracket-newline -->
                       <li>
-                        <strong>特殊参数</strong>：根据具体分析方法设置的阈值、算法选项等。
+                        <strong>特殊参数</strong
+                        >：根据分析方法设置的阈值、算法选项等。
                       </li>
+                      <!-- eslint-enable vue/html-closing-bracket-newline -->
                     </ul>
                   </Typography.Paragraph>
 
@@ -883,36 +1000,68 @@ onMounted(() => fetchTool());
 /* Markdown 内容样式 - 使用 Vditor 的 vditor-reset 基础样式 */
 .guide-md-content {
   width: 100%;
-  padding: 24px 32px;
-  font-size: 15px;
-  line-height: 1.8;
+  padding: 20px 28px;
+  font-size: 13px;
+  line-height: 1.7;
   color: #334155;
 }
 
+/* h1 → h4 风格 */
 .guide-md-content h1 {
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   margin-top: 0;
-  margin-bottom: 16px;
-  font-size: 24px;
+  margin-bottom: 12px;
+  font-size: 15px;
   font-weight: 600;
   color: #1e293b;
   border-bottom: 1px solid #e2e8f0;
 }
 
+/* h2 → h5 风格 */
 .guide-md-content h2 {
-  margin-top: 24px;
-  margin-bottom: 12px;
-  font-size: 20px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-size: 14px;
   font-weight: 600;
   color: #1e293b;
 }
 
+/* h3 → h6 风格 */
 .guide-md-content h3 {
-  margin-top: 20px;
-  margin-bottom: 10px;
-  font-size: 16px;
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+/* h4 样式（当前主标题） */
+.guide-md-content h4 {
+  padding-bottom: 8px;
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: 15px;
   font-weight: 600;
   color: #1e293b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+/* h5 样式（二级标题） */
+.guide-md-content h5 {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* h6 样式（三级标题） */
+.guide-md-content h6 {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
 }
 
 .guide-md-content p {

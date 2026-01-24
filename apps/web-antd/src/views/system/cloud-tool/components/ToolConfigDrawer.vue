@@ -201,20 +201,17 @@ watch(
 
       paramItems.value = orderedKeys.map((key) => {
         const p = paramSchema.properties![key];
-        // 推断 widget
-        const inferredWidget =
-          p.widget ||
-          (p.format === 'color'
-            ? 'color'
-            : p.enum
-              ? 'select'
-              : p.type === 'boolean'
-                ? 'switch'
-                : p.type === 'integer'
-                  ? 'int'
-                  : p.type === 'number'
-                    ? 'number'
-                    : 'text');
+        // 推断 widget - 使用辅助函数避免嵌套三元
+        const inferWidget = (prop: any): string => {
+          if (prop.widget) return prop.widget;
+          if (prop.format === 'color') return 'color';
+          if (prop.enum) return 'select';
+          if (prop.type === 'boolean') return 'switch';
+          if (prop.type === 'integer') return 'int';
+          if (prop.type === 'number') return 'number';
+          return 'text';
+        };
+        const inferredWidget = inferWidget(p);
         return {
           key,
           typeWidget: [p.type || 'string', inferredWidget] as [string, string],
@@ -374,39 +371,60 @@ const handleSave = async () => {
 
   // 构建 input_schema
   const input_schema = {
-    files: inputFiles.value.map((f) => ({
-      key: f.key,
-      label: f.label,
-      required: f.required,
-      extensions: f.extensions
-        .split(',')
-        .map((e) => e.trim())
-        .filter(Boolean),
-    })),
+    files: inputFiles.value.map((f) => {
+      // 容错处理：extensions 可能是字符串或数组
+      let extensions: string[] = [];
+      if (Array.isArray(f.extensions)) {
+        extensions = f.extensions;
+      } else if (typeof f.extensions === 'string') {
+        extensions = f.extensions
+          .split(',')
+          .map((e) => e.trim())
+          .filter(Boolean);
+      }
+      return {
+        key: f.key,
+        label: f.label,
+        required: f.required,
+        extensions,
+      };
+    }),
   };
 
   // 构建 param_schema
   const properties: Record<string, any> = {};
   const order: string[] = []; // 记录参数顺序
   for (const p of paramItems.value) {
-    const [type, widget] = p.typeWidget;
+    // 容错处理：确保 typeWidget 是有效数组
+    const typeWidget = Array.isArray(p.typeWidget)
+      ? p.typeWidget
+      : ['string', 'text'];
+    const [type, widget] = typeWidget;
+
+    // 验证 key 是否有效
+    if (!p.key || p.key.trim() === '') {
+      console.warn('跳过无效参数：缺少 key', p);
+      continue;
+    }
+
     const prop: any = {
-      type,
-      title: p.title,
+      type: type || 'string',
+      title: p.title || p.key,
     };
     if (p.required) prop.required = true;
     if (widget && widget !== 'text') prop.widget = widget;
     if (widget === 'color') prop.format = 'color';
     if (p.group) prop.group = p.group;
-    if (p.default) {
-      prop.default =
-        type === 'integer' || type === 'number'
-          ? Number(p.default)
-          : type === 'boolean'
-            ? p.default === 'true'
-            : p.default;
+    if (p.default !== undefined && p.default !== '') {
+      if (type === 'integer' || type === 'number') {
+        prop.default = Number(p.default);
+      } else if (type === 'boolean') {
+        prop.default = String(p.default) === 'true';
+      } else {
+        prop.default = p.default;
+      }
     }
-    if (p.enum) {
+    if (p.enum && typeof p.enum === 'string' && p.enum.trim() !== '') {
       prop.enum = p.enum
         .split(',')
         .map((e) => e.trim())
@@ -493,10 +511,11 @@ const paramColumns = [
   { title: '排序', dataIndex: 'sort', width: 50, align: 'center' as const },
   { title: 'Key', dataIndex: 'key', width: 80 },
   { title: '标题', dataIndex: 'title', width: 90 },
-  { title: '描述', dataIndex: 'description', width: 140 },
+  { title: '描述', dataIndex: 'description', width: 120 },
   { title: '类型/控件', dataIndex: 'typeWidget', width: 150 },
   { title: '必填', dataIndex: 'required', width: 55, align: 'center' as const },
   { title: '默认值', dataIndex: 'default', width: 70 },
+  { title: '选项', dataIndex: 'enum', width: 120 },
   { title: '分组', dataIndex: 'group', width: 90 },
   { title: '操作', dataIndex: 'action', width: 60 },
 ];
@@ -544,57 +563,54 @@ const handleExportConfig = () => {
 };
 
 // ========== 导入配置 ==========
-const handleImportConfig = (file: File) => {
-  const reader = new FileReader();
-  reader.addEventListener('load', (e) => {
-    try {
-      const config = JSON.parse(e.target?.result as string);
+const handleImportConfig = async (file: File) => {
+  try {
+    const text = await file.text();
+    const config = JSON.parse(text);
 
-      // 验证配置版本
-      if (!config.version) {
-        message.error('无效的配置文件格式');
-        return;
-      }
-
-      // 导入基本信息
-      if (config.basic_info) {
-        basicInfo.value = {
-          runner_type: config.basic_info.runner_type || 'r_script',
-          script_path: config.basic_info.script_path || '',
-          guide_doc: config.basic_info.guide_doc || '',
-          video_url: config.basic_info.video_url || '',
-          env_type: config.basic_info.env_type || '',
-          env_config: config.basic_info.env_config || {},
-        };
-      }
-
-      // 导入输入文件配置
-      if (config.input_files) {
-        inputFiles.value = config.input_files;
-      }
-
-      // 导入参数配置
-      if (config.param_items) {
-        paramItems.value = config.param_items;
-      }
-
-      // 导入输出配置
-      if (config.output_items) {
-        outputItems.value = config.output_items;
-      }
-
-      // 导入示例数据
-      if (config.example_items) {
-        exampleItems.value = config.example_items;
-      }
-
-      message.success(`配置已导入 (来自: ${config.tool_title || '未知'})`);
-    } catch (error) {
-      console.error('Import failed:', error);
-      message.error('配置文件解析失败');
+    // 验证配置版本
+    if (!config.version) {
+      message.error('无效的配置文件格式');
+      return false;
     }
-  });
-  reader.readAsText(file);
+
+    // 导入基本信息
+    if (config.basic_info) {
+      basicInfo.value = {
+        runner_type: config.basic_info.runner_type || 'r_script',
+        script_path: config.basic_info.script_path || '',
+        guide_doc: config.basic_info.guide_doc || '',
+        video_url: config.basic_info.video_url || '',
+        env_type: config.basic_info.env_type || '',
+        env_config: config.basic_info.env_config || {},
+      };
+    }
+
+    // 导入输入文件配置
+    if (config.input_files) {
+      inputFiles.value = config.input_files;
+    }
+
+    // 导入参数配置
+    if (config.param_items) {
+      paramItems.value = config.param_items;
+    }
+
+    // 导入输出配置
+    if (config.output_items) {
+      outputItems.value = config.output_items;
+    }
+
+    // 导入示例数据
+    if (config.example_items) {
+      exampleItems.value = config.example_items;
+    }
+
+    message.success(`配置已导入 (来自: ${config.tool_title || '未知'})`);
+  } catch (error) {
+    console.error('Import failed:', error);
+    message.error('配置文件解析失败');
+  }
   return false; // 阻止默认上传
 };
 </script>
@@ -857,6 +873,14 @@ const handleImportConfig = (file: File) => {
             </template>
             <template v-else-if="column.dataIndex === 'default'">
               <Input v-model:value="record.default" size="small" />
+            </template>
+            <template v-else-if="column.dataIndex === 'enum'">
+              <Input
+                v-model:value="record.enum"
+                size="small"
+                placeholder="选项1,选项2,..."
+                :disabled="record.typeWidget?.[1] !== 'select'"
+              />
             </template>
             <template v-else-if="column.dataIndex === 'group'">
               <Input
