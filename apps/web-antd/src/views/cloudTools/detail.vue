@@ -8,7 +8,7 @@ import type { EchartsUIType } from '@vben/plugins/echarts';
 
 import type { AnalysisTool, TaskStatusResponse } from '#/api/analysis-tools';
 
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, toRaw, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
@@ -174,7 +174,8 @@ const dynamicParamSchema = computed(() => {
   if (!tool.value?.param_schema) return null;
 
   // 深拷贝原始 schema 以免污染原始数据
-  const schema = structuredClone(tool.value.param_schema);
+  // 注意：需要使用 toRaw 解包 Vue 响应式 Proxy，否则 structuredClone 会报错
+  const schema = structuredClone(toRaw(tool.value.param_schema));
 
   if (schema.properties) {
     for (const prop of Object.values(schema.properties) as any) {
