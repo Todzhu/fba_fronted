@@ -38,6 +38,10 @@ const emit = defineEmits<{
 const spreadsheetContainer = ref<HTMLElement | null>(null);
 let spreadsheetInstance: any = null;
 
+// 标志位：用于区分内部编辑变化和外部数据更新
+// 当用户在表格中编辑时，避免因 props.data 更新而触发重新渲染导致焦点丢失
+let isInternalChange = false;
+
 // 将 2D 数组转换为 x-spreadsheet 数据格式
 const transformData = (matrix: string[][]) => {
   const rows: Record<string, any> = {};
@@ -150,8 +154,14 @@ const renderSheet = () => {
   )
     .loadData(transformData(props.data))
     .change(() => {
+      // 设置标志位，表示这是内部编辑触发的变化
+      isInternalChange = true;
       // 数据变化时触发事件
       emit('change', extractData());
+      // 在下一个事件循环重置标志位
+      setTimeout(() => {
+        isInternalChange = false;
+      }, 0);
     });
 
   // 强制重新渲染以适应容器
@@ -191,7 +201,11 @@ defineExpose({ getData, setData, clearData });
 watch(
   () => props.data,
   () => {
-    renderSheet(); // data 变化时完全重绘以确保一致性
+    // 如果是内部编辑触发的变化，跳过重新渲染，避免焦点丢失
+    if (isInternalChange) {
+      return;
+    }
+    renderSheet(); // 外部 data 变化时完全重绘以确保一致性
   },
   { deep: true },
 );
