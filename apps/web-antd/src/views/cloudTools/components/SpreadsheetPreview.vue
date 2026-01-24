@@ -161,11 +161,11 @@ const renderSheet = () => {
 };
 
 // ResizeObserver 以自动适应宽度
-let resizeObserver: ResizeObserver | null = null;
+let resizeObserver: null | ResizeObserver = null;
 
 onMounted(() => {
   renderSheet();
-  
+
   if (spreadsheetContainer.value) {
     resizeObserver = new ResizeObserver(() => {
       // 触发 x-spreadsheet 重新读取 width()
@@ -227,10 +227,10 @@ watch(
 
 /* x-spreadsheet 样式覆盖 */
 :deep(.x-spreadsheet-toolbar) {
+  box-sizing: border-box;
   width: 100% !important; /* 强制铺满 */
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
-  box-sizing: border-box;
 }
 
 :deep(.x-spreadsheet-sheet) {

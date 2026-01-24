@@ -65,6 +65,8 @@ const basicInfo = ref({
   script_path: '',
   guide_doc: '',
   video_url: '',
+  env_type: '' as string, // 环境类型: singularity|conda|docker|system
+  env_config: {} as Record<string, any>, // 环境配置
 });
 
 // 示例数据配置
@@ -160,6 +162,8 @@ watch(
       script_path: tool.script_path || '',
       guide_doc: tool.guide_doc || '',
       video_url: tool.video_url || '',
+      env_type: tool.env_type || '',
+      env_config: tool.env_config || {},
     };
 
     // 示例数据
@@ -436,6 +440,12 @@ const handleSave = async () => {
 
   const updateData: CloudToolUpdateParams = {
     ...basicInfo.value,
+    // 处理环境配置的空值
+    env_type: basicInfo.value.env_type || null,
+    env_config:
+      Object.keys(basicInfo.value.env_config || {}).length > 0
+        ? basicInfo.value.env_config
+        : null,
     input_schema,
     param_schema,
     output_config,
@@ -553,6 +563,8 @@ const handleImportConfig = (file: File) => {
           script_path: config.basic_info.script_path || '',
           guide_doc: config.basic_info.guide_doc || '',
           video_url: config.basic_info.video_url || '',
+          env_type: config.basic_info.env_type || '',
+          env_config: config.basic_info.env_config || {},
         };
       }
 
@@ -618,7 +630,125 @@ const handleImportConfig = (file: File) => {
               </Form.Item>
             </Col>
           </Row>
-          <Form.Item label="视频教程">
+
+          <!-- 运行环境配置 -->
+          <Card size="small" title="运行环境配置" class="env-config-card">
+            <Row :gutter="16">
+              <Col :span="8">
+                <Form.Item label="环境类型">
+                  <Select
+                    v-model:value="basicInfo.env_type"
+                    placeholder="选择运行环境"
+                    allow-clear
+                    @change="() => (basicInfo.env_config = {})"
+                  >
+                    <Select.Option value="system">系统默认</Select.Option>
+                    <Select.Option value="singularity">
+                      Singularity (.sif)
+                    </Select.Option>
+                    <Select.Option value="conda">Conda 环境</Select.Option>
+                    <Select.Option value="docker">Docker 容器</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+
+              <!-- Singularity 配置 -->
+              <template v-if="basicInfo.env_type === 'singularity'">
+                <Col :span="16">
+                  <Form.Item label="容器镜像路径 (.sif)">
+                    <Input
+                      v-model:value="basicInfo.env_config.image"
+                      placeholder="/path/to/container.sif"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col :span="24">
+                  <Form.Item
+                    label="绑定目录 (每行一个，格式: /host:/container)"
+                  >
+                    <Input.TextArea
+                      :value="
+                        (basicInfo.env_config.bind_paths || []).join('\n')
+                      "
+                      :rows="2"
+                      placeholder="/data:/data&#10;/tmp:/tmp"
+                      @change="
+                        (e: Event) =>
+                          (basicInfo.env_config.bind_paths = (
+                            e.target as HTMLTextAreaElement
+                          ).value
+                            .split('\n')
+                            .filter(Boolean))
+                      "
+                    />
+                  </Form.Item>
+                </Col>
+              </template>
+
+              <!-- Conda 配置 -->
+              <template v-else-if="basicInfo.env_type === 'conda'">
+                <Col :span="8">
+                  <Form.Item label="环境名称">
+                    <Input
+                      v-model:value="basicInfo.env_config.env_name"
+                      placeholder="bioinfo_env"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col :span="8">
+                  <Form.Item label="Conda 路径 (可选)">
+                    <Input
+                      v-model:value="basicInfo.env_config.conda_path"
+                      placeholder="conda"
+                    />
+                  </Form.Item>
+                </Col>
+              </template>
+
+              <!-- Docker 配置 -->
+              <template v-else-if="basicInfo.env_type === 'docker'">
+                <Col :span="16">
+                  <Form.Item label="Docker 镜像">
+                    <Input
+                      v-model:value="basicInfo.env_config.image"
+                      placeholder="bioinfo/rstudio:latest"
+                    />
+                  </Form.Item>
+                </Col>
+                <Col :span="24">
+                  <Form.Item label="挂载卷 (每行一个，格式: /host:/container)">
+                    <Input.TextArea
+                      :value="(basicInfo.env_config.volumes || []).join('\n')"
+                      :rows="2"
+                      placeholder="/data:/data"
+                      @change="
+                        (e: Event) =>
+                          (basicInfo.env_config.volumes = (
+                            e.target as HTMLTextAreaElement
+                          ).value
+                            .split('\n')
+                            .filter(Boolean))
+                      "
+                    />
+                  </Form.Item>
+                </Col>
+              </template>
+
+              <!-- System 配置 -->
+              <template v-else-if="basicInfo.env_type === 'system'">
+                <Col :span="16">
+                  <Form.Item label="自定义可执行文件路径 (可选)">
+                    <Input
+                      v-model:value="basicInfo.env_config.executable"
+                      placeholder="/usr/bin/Rscript"
+                    />
+                  </Form.Item>
+                </Col>
+              </template>
+            </Row>
+          </Card>
+
+          <Form.Item label="视频教程" style="margin-top: 16px">
             <Input
               v-model:value="basicInfo.video_url"
               placeholder="视频教程链接 (如 Bilibili/YouTube)"

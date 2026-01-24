@@ -18,6 +18,9 @@ export interface AnalysisTool {
   output_config: null | Record<string, unknown>;
   runner_type: null | string;
   script_path: null | string;
+  // 运行环境配置
+  env_type: null | string;
+  env_config: null | Record<string, unknown>;
   // 辅助功能配置
   guide_doc: null | string; // 使用指南文档（Markdown 或 URL）
   video_url: null | string; // 视频教程链接
@@ -116,6 +119,9 @@ export interface CloudToolCreateParams {
   output_config?: null | Record<string, unknown>;
   runner_type?: null | string;
   script_path?: null | string;
+  // 运行环境配置
+  env_type?: null | string;
+  env_config?: null | Record<string, unknown>;
   // 辅助功能配置
   guide_doc?: null | string;
   video_url?: null | string;
@@ -137,6 +143,9 @@ export interface CloudToolUpdateParams {
   output_config?: null | Record<string, unknown>;
   runner_type?: null | string;
   script_path?: null | string;
+  // 运行环境配置
+  env_type?: null | string;
+  env_config?: null | Record<string, unknown>;
   // 辅助功能配置
   guide_doc?: null | string;
   video_url?: null | string;

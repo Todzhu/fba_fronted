@@ -14,7 +14,6 @@ import { Icon } from '@iconify/vue';
 import { Button, Input, message, Space, Tabs, Upload } from 'ant-design-vue';
 
 import { baseRequestClient } from '../../../api/request';
-
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
 
 interface FileConfig {
@@ -38,9 +37,9 @@ interface ExampleDataConfig {
 }
 
 const props = defineProps<{
+  exampleData?: ExampleDataConfig[] | null; // 后端配置的示例数据
   modelValue: Record<string, null | number>;
   schema: InputSchema | null;
-  exampleData?: ExampleDataConfig[] | null; // 后端配置的示例数据
 }>();
 
 const emit = defineEmits<{
@@ -52,52 +51,69 @@ const emit = defineEmits<{
 // 文件配置列表 - 优先使用 example_data 生成 Tab，否则使用 input_schema.files
 const fileConfigs = computed<FileConfig[]>(() => {
   const examples = props.exampleData;
-  
+
   // 如果有示例数据配置，以示例数据生成 Tab
   if (examples && examples.length > 0) {
-    return examples.map(e => ({
+    return examples.map((e) => ({
       key: e.key,
       label: e.name || e.key,
       required: false,
     }));
   }
-  
+
   // 否则使用 input_schema.files
-  return props.schema?.files ?? [{ key: 'data', label: '数据表', required: true }];
+  return (
+    props.schema?.files ?? [{ key: 'data', label: '数据表', required: true }]
+  );
 });
 
 // 当前激活的 Tab
 const activeTab = ref<string>('');
 
 // 初始化激活 Tab
-watch(fileConfigs, (configs) => {
-  if (configs.length > 0 && !activeTab.value) {
-    activeTab.value = configs[0]!.key;
-  }
-}, { immediate: true });
+watch(
+  fileConfigs,
+  (configs) => {
+    if (configs.length > 0 && !activeTab.value) {
+      activeTab.value = configs[0]!.key;
+    }
+  },
+  { immediate: true },
+);
 
 // 每个文件的表格数据和状态
-const fileDataMap = ref<Record<string, {
-  data: string[][];
-  fileName: string;
-  loading: boolean;
-}>>({});
+const fileDataMap = ref<
+  Record<
+    string,
+    {
+      data: string[][];
+      fileName: string;
+      loading: boolean;
+    }
+  >
+>({});
 
 // 初始化文件数据
-watch(fileConfigs, (configs) => {
-  for (const config of configs) {
-    if (!fileDataMap.value[config.key]) {
-      fileDataMap.value[config.key] = {
-        data: [],
-        fileName: '',
-        loading: false,
-      };
+watch(
+  fileConfigs,
+  (configs) => {
+    for (const config of configs) {
+      if (!fileDataMap.value[config.key]) {
+        fileDataMap.value[config.key] = {
+          data: [],
+          fileName: '',
+          loading: false,
+        };
+      }
     }
-  }
-}, { immediate: true });
+  },
+  { immediate: true },
+);
 
 // 电子表格引用
-const spreadsheetRefs = ref<Record<string, InstanceType<typeof SpreadsheetPreview>>>({});
+const spreadsheetRefs = ref<
+  Record<string, InstanceType<typeof SpreadsheetPreview>>
+>({});
 
 const exampleLoading = ref(false);
 
@@ -111,16 +127,16 @@ const DEFAULT_EXAMPLE: string[][] = [
 
 // 根据 key 获取对应的示例数据配置
 const getExampleByKey = (key: string): ExampleDataConfig | undefined => {
-  return props.exampleData?.find(e => e.key === key);
+  return props.exampleData?.find((e) => e.key === key);
 };
 
 // 加载所有示例数据（从后端配置的 URL 加载）
 const loadAllExamples = async () => {
   exampleLoading.value = true;
-  
+
   try {
     const examples = props.exampleData;
-    
+
     if (examples && examples.length > 0) {
       // 直接遍历示例数据加载
       for (const example of examples) {
@@ -156,10 +172,10 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       loading: false,
     };
   }
-  
+
   const fileData = fileDataMap.value[key]!;
   fileData.loading = true;
-  
+
   try {
     const response = await baseRequestClient.get(example.url);
     const content = response.data as string;
@@ -189,16 +205,16 @@ const downloadExample = async () => {
         responseType: 'blob',
       });
       const blob = response.data as Blob;
-      
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = example.name || 'example_data.csv';
-      document.body.appendChild(link);
+      document.body.append(link);
       link.click();
-      document.body.removeChild(link);
+      link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       message.success('示例数据已下载');
     } catch (error) {
       console.error('Download error:', error);
@@ -226,7 +242,7 @@ const handleImportForKey = async (key: string, file: File) => {
       loading: false,
     };
   }
-  
+
   const fileData = fileDataMap.value[key]!;
 
   try {
@@ -237,16 +253,16 @@ const handleImportForKey = async (key: string, file: File) => {
     fileData.data = data;
     fileData.fileName = file.name;
     updateFileId(key, Date.now()); // 标记有数据
-    
+
     // 切换到对应的 Tab
     activeTab.value = key;
-    
+
     message.success(`${file.name} 导入成功`);
   } catch (error) {
     console.error('Import error:', error);
     message.error('文件导入失败');
   }
-  
+
   return false; // 阻止默认上传
 };
 
@@ -265,13 +281,13 @@ const handleClearForKey = (key: string) => {
 // 更新文件 ID 并在数据变化时提取表头
 const updateFileId = (key: string, fileId: null | number) => {
   emit('update:modelValue', { ...props.modelValue, [key]: fileId });
-  
+
   // 数据变化时，提取所有文件的表头并通知父组件
   const allHeaders: Record<string, string[]> = {};
   for (const [fileKey, fileData] of Object.entries(fileDataMap.value)) {
     if (fileData.data && fileData.data.length > 0) {
       // 过滤掉空表头
-      const headers = fileData.data[0].filter(h => h.trim() !== '');
+      const headers = fileData.data[0].filter((h) => h.trim() !== '');
       if (headers.length > 0) {
         allHeaders[fileKey] = headers;
       }
@@ -308,7 +324,7 @@ const getFileContents = (): Record<string, string> => {
     // 优先从表格实例获取最新数据（确保编辑后的数据被正确捕获）
     const spreadsheetInstance = spreadsheetRefs.value[config.key];
     let data: string[][] = [];
-    
+
     if (spreadsheetInstance) {
       // 从表格实例获取当前数据
       data = spreadsheetInstance.getData() || [];
@@ -316,20 +332,28 @@ const getFileContents = (): Record<string, string> => {
       // 回退到缓存数据
       data = fileDataMap.value[config.key]?.data || [];
     }
-    
+
     if (data.length > 0) {
       // 将二维数组转换为 tab 分隔的 CSV
       // 移除每行末尾的空单元格，避免产生多余的 tab 字符
-      contents[config.key] = data.map((row) => {
-        // 找到最后一个非空单元格的索引
-        let lastNonEmptyIndex = row.length - 1;
-        while (lastNonEmptyIndex >= 0 && (row[lastNonEmptyIndex] === '' || row[lastNonEmptyIndex] === undefined || row[lastNonEmptyIndex] === null)) {
-          lastNonEmptyIndex--;
-        }
-        // 截取到最后一个非空单元格
-        const trimmedRow = lastNonEmptyIndex >= 0 ? row.slice(0, lastNonEmptyIndex + 1) : [];
-        return trimmedRow.join('\t');
-      }).join('\n');
+      contents[config.key] = data
+        .map((row) => {
+          // 找到最后一个非空单元格的索引
+          let lastNonEmptyIndex = row.length - 1;
+          while (
+            lastNonEmptyIndex >= 0 &&
+            (row[lastNonEmptyIndex] === '' ||
+              row[lastNonEmptyIndex] === undefined ||
+              row[lastNonEmptyIndex] === null)
+          ) {
+            lastNonEmptyIndex--;
+          }
+          // 截取到最后一个非空单元格
+          const trimmedRow =
+            lastNonEmptyIndex >= 0 ? row.slice(0, lastNonEmptyIndex + 1) : [];
+          return trimmedRow.join('\t');
+        })
+        .join('\n');
     }
   }
   return contents;
@@ -343,17 +367,19 @@ defineExpose({ fillAllExamples, getFileContents });
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <Space>
-        <Button type="primary" :loading="exampleLoading" @click="loadAllExamples">示 例</Button>
+        <Button
+          type="primary"
+          :loading="exampleLoading"
+          @click="loadAllExamples"
+        >
+          示 例
+        </Button>
         <Button @click="downloadExample">下载示例 数据表</Button>
       </Space>
     </div>
 
     <!-- 文件输入行（所有文件配置） -->
-    <div
-      v-for="config in fileConfigs"
-      :key="config.key"
-      class="file-input-row"
-    >
+    <div v-for="config in fileConfigs" :key="config.key" class="file-input-row">
       <label class="input-label">
         <span v-if="config.required" class="required">*</span>
         <a-tooltip v-if="config.description" :title="config.description">
@@ -382,13 +408,15 @@ defineExpose({ fillAllExamples, getFileContents });
         >
           <Button type="primary" class="btn-import">导 入</Button>
         </Upload>
-        <Button danger class="btn-clear" @click="handleClearForKey(config.key)">清 空</Button>
+        <Button danger class="btn-clear" @click="handleClearForKey(config.key)">
+          清 空
+        </Button>
       </div>
     </div>
 
     <!-- 多文件 Tab -->
     <div class="table-tabs">
-      <Tabs v-model:activeKey="activeTab" size="small">
+      <Tabs v-model:active-key="activeTab" size="small">
         <Tabs.TabPane
           v-for="config in fileConfigs"
           :key="config.key"
@@ -402,7 +430,11 @@ defineExpose({ fillAllExamples, getFileContents });
       <template v-for="config in fileConfigs" :key="config.key">
         <SpreadsheetPreview
           v-if="activeTab === config.key"
-          :ref="(el: any) => { if (el) spreadsheetRefs[config.key] = el }"
+          :ref="
+            (el: any) => {
+              if (el) spreadsheetRefs[config.key] = el;
+            }
+          "
           :data="fileDataMap[config.key]?.data ?? []"
           :show-toolbar="true"
           @change="(data: string[][]) => handleDataChange(config.key, data)"
@@ -448,16 +480,16 @@ defineExpose({ fillAllExamples, getFileContents });
   display: flex;
   gap: 4px;
   align-items: center;
-  min-width: 120px; /* 固定宽度以确保输入框对齐 */
   justify-content: flex-end; /* 标签文字右对齐，靠近输入框 */
+  min-width: 120px; /* 固定宽度以确保输入框对齐 */
   font-size: 14px;
   color: #1e293b;
 }
 
 .label-text {
   display: flex;
-  align-items: center;
   gap: 2px;
+  align-items: center;
 }
 
 .has-desc {
@@ -543,4 +575,3 @@ defineExpose({ fillAllExamples, getFileContents });
   border-radius: 8px;
 }
 </style>
-

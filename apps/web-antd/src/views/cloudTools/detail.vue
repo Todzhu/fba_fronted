@@ -6,13 +6,7 @@
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
-import type {
-  AnalysisTool,
-  executeAnalysisTool,
-  getAnalysisTool,
-  getTaskStatus,
-  type TaskStatusResponse,
-} from '#/api/analysis-tools';
+import type { AnalysisTool, TaskStatusResponse } from '#/api/analysis-tools';
 
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -31,6 +25,12 @@ import {
   Tabs,
   Typography,
 } from 'ant-design-vue';
+
+import {
+  executeAnalysisTool,
+  getAnalysisTool,
+  getTaskStatus,
+} from '#/api/analysis-tools';
 
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
@@ -506,8 +506,7 @@ onMounted(() => fetchTool());
                         <strong>通用参数</strong>：包括图表标题、配色方案等。
                       </li>
                       <li>
-                        <strong>特殊参数</strong
-                        >：根据具体分析方法设置的阈值、算法选项等。
+                        <strong>特殊参数</strong>：根据具体分析方法设置的阈值、算法选项等。
                       </li>
                     </ul>
                   </Typography.Paragraph>
