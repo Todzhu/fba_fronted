@@ -209,11 +209,21 @@ const handleSubmit = () => {
             <!-- 标签 -->
             <div class="param-label">
               <span class="label-text">{{ prop.title || prop.key }}</span>
-              <span v-if="prop.required || schema?.required?.includes(prop.key)" class="required-mark">*</span>
-              <Tooltip v-if="prop.description" placement="topLeft" :overlay-style="{ maxWidth: '320px' }">
+              <span
+                v-if="prop.required || schema?.required?.includes(prop.key)"
+                class="required-mark"
+                >*</span
+              >
+              <Tooltip
+                v-if="prop.description"
+                placement="topLeft"
+                :overlay-style="{ maxWidth: '320px' }"
+              >
                 <template #title>
                   <div class="tooltip-content">
-                    <div class="tooltip-title">{{ prop.title || prop.key }}</div>
+                    <div class="tooltip-title">
+                      {{ prop.title || prop.key }}
+                    </div>
                     <div class="tooltip-desc">{{ prop.description }}</div>
                   </div>
                 </template>
@@ -225,122 +235,134 @@ const handleSubmit = () => {
             </div>
             <!-- 输入控件 -->
             <div class="param-control">
+              <!-- 滑块+数字输入组合 -->
+              <template v-if="getWidgetType(prop) === 'slider'">
+                <div class="slider-input-combo">
+                  <Slider
+                    :value="
+                      (modelValue[prop.key] as number) ?? prop.default ?? 0
+                    "
+                    :min="prop.minimum ?? 0"
+                    :max="prop.maximum ?? 100"
+                    :step="prop.step ?? 0.01"
+                    class="slider"
+                    @change="(val) => updateField(prop.key, val)"
+                  />
+                  <InputNumber
+                    :value="
+                      (modelValue[prop.key] as number) ?? prop.default ?? 0
+                    "
+                    :min="prop.minimum"
+                    :max="prop.maximum"
+                    :step="prop.step ?? 0.01"
+                    class="number-input"
+                    @change="(val) => updateField(prop.key, val)"
+                  />
+                </div>
+              </template>
 
-            <!-- 滑块+数字输入组合 -->
-            <template v-if="getWidgetType(prop) === 'slider'">
-              <div class="slider-input-combo">
-                <Slider
-                  :value="(modelValue[prop.key] as number) ?? prop.default ?? 0"
-                  :min="prop.minimum ?? 0"
-                  :max="prop.maximum ?? 100"
-                  :step="prop.step ?? 0.01"
-                  class="slider"
+              <!-- 下拉选择 / 列名选择 -->
+              <template
+                v-else-if="
+                  getWidgetType(prop) === 'select' ||
+                  getWidgetType(prop) === 'column_select'
+                "
+              >
+                <Select
+                  :value="(modelValue[prop.key] as string) ?? prop.default"
+                  class="select-input"
+                  @change="(val) => updateField(prop.key, val)"
+                >
+                  <Select.Option
+                    v-for="opt in prop.enum"
+                    :key="opt"
+                    :value="opt"
+                  >
+                    {{ opt }}
+                  </Select.Option>
+                </Select>
+              </template>
+
+              <!-- 开关 -->
+              <template v-else-if="getWidgetType(prop) === 'switch'">
+                <Switch
+                  :checked="
+                    (modelValue[prop.key] as boolean) ?? prop.default ?? false
+                  "
+                  @change="(checked) => updateField(prop.key, checked)"
+                />
+              </template>
+
+              <!-- 整数输入 -->
+              <template v-else-if="getWidgetType(prop) === 'int'">
+                <InputNumber
+                  :value="(modelValue[prop.key] as number) ?? prop.default"
+                  :min="prop.minimum"
+                  :max="prop.maximum"
+                  :step="prop.step ?? 1"
+                  :precision="0"
+                  class="number-input-only"
                   @change="(val) => updateField(prop.key, val)"
                 />
+              </template>
+
+              <!-- 浮点数输入 -->
+              <template v-else-if="getWidgetType(prop) === 'float'">
                 <InputNumber
-                  :value="(modelValue[prop.key] as number) ?? prop.default ?? 0"
+                  :value="(modelValue[prop.key] as number) ?? prop.default"
                   :min="prop.minimum"
                   :max="prop.maximum"
                   :step="prop.step ?? 0.01"
-                  class="number-input"
+                  class="number-input-only"
                   @change="(val) => updateField(prop.key, val)"
                 />
-              </div>
-            </template>
+              </template>
 
-            <!-- 下拉选择 / 列名选择 -->
-            <template
-              v-else-if="
-                getWidgetType(prop) === 'select' ||
-                getWidgetType(prop) === 'column_select'
-              "
-            >
-              <Select
-                :value="(modelValue[prop.key] as string) ?? prop.default"
-                class="select-input"
-                @change="(val) => updateField(prop.key, val)"
-              >
-                <Select.Option v-for="opt in prop.enum" :key="opt" :value="opt">
-                  {{ opt }}
-                </Select.Option>
-              </Select>
-            </template>
-
-            <!-- 开关 -->
-            <template v-else-if="getWidgetType(prop) === 'switch'">
-              <Switch
-                :checked="
-                  (modelValue[prop.key] as boolean) ?? prop.default ?? false
-                "
-                @change="(checked) => updateField(prop.key, checked)"
-              />
-            </template>
-
-            <!-- 整数输入 -->
-            <template v-else-if="getWidgetType(prop) === 'int'">
-              <InputNumber
-                :value="(modelValue[prop.key] as number) ?? prop.default"
-                :min="prop.minimum"
-                :max="prop.maximum"
-                :step="prop.step ?? 1"
-                :precision="0"
-                class="number-input-only"
-                @change="(val) => updateField(prop.key, val)"
-              />
-            </template>
-
-            <!-- 浮点数输入 -->
-            <template v-else-if="getWidgetType(prop) === 'float'">
-              <InputNumber
-                :value="(modelValue[prop.key] as number) ?? prop.default"
-                :min="prop.minimum"
-                :max="prop.maximum"
-                :step="prop.step ?? 0.01"
-                class="number-input-only"
-                @change="(val) => updateField(prop.key, val)"
-              />
-            </template>
-
-            <!-- 数字输入 (通用) -->
-            <template v-else-if="getWidgetType(prop) === 'number'">
-              <InputNumber
-                :value="(modelValue[prop.key] as number) ?? prop.default"
-                :min="prop.minimum"
-                :max="prop.maximum"
-                class="number-input-only"
-                @change="(val) => updateField(prop.key, val)"
-              />
-            </template>
-
-            <!-- 颜色选择器 -->
-            <template v-else-if="getWidgetType(prop) === 'color'">
-              <div class="color-input-wrapper">
-                <OfficeColorPicker
-                  :model-value="
-                    (modelValue[prop.key] as string) ??
-                    prop.default ??
-                    '#000000'
-                  "
-                  :default-color="prop.default as string"
-                  @update:model-value="(val) => updateField(prop.key, val)"
+              <!-- 数字输入 (通用) -->
+              <template v-else-if="getWidgetType(prop) === 'number'">
+                <InputNumber
+                  :value="(modelValue[prop.key] as number) ?? prop.default"
+                  :min="prop.minimum"
+                  :max="prop.maximum"
+                  class="number-input-only"
+                  @change="(val) => updateField(prop.key, val)"
                 />
-              </div>
-            </template>
+              </template>
 
-            <!-- 文本输入 -->
-            <template v-else>
-              <Input
-                :value="(modelValue[prop.key] as string) ?? prop.default ?? ''"
-                :placeholder="
-                  prop.description || `请输入${prop.title || prop.key}`
-                "
-                class="text-input"
-                @change="
-                  (e: Event) =>
-                    updateField(prop.key, (e.target as HTMLInputElement).value)
-                "
-              />
-            </template>
+              <!-- 颜色选择器 -->
+              <template v-else-if="getWidgetType(prop) === 'color'">
+                <div class="color-input-wrapper">
+                  <OfficeColorPicker
+                    :model-value="
+                      (modelValue[prop.key] as string) ??
+                      prop.default ??
+                      '#000000'
+                    "
+                    :default-color="prop.default as string"
+                    @update:model-value="(val) => updateField(prop.key, val)"
+                  />
+                </div>
+              </template>
+
+              <!-- 文本输入 -->
+              <template v-else>
+                <Input
+                  :value="
+                    (modelValue[prop.key] as string) ?? prop.default ?? ''
+                  "
+                  :placeholder="
+                    prop.description || `请输入${prop.title || prop.key}`
+                  "
+                  class="text-input"
+                  @change="
+                    (e: Event) =>
+                      updateField(
+                        prop.key,
+                        (e.target as HTMLInputElement).value,
+                      )
+                  "
+                />
+              </template>
             </div>
           </div>
         </div>
@@ -372,6 +394,13 @@ const handleSubmit = () => {
 </template>
 
 <style scoped>
+/* 响应式：小屏幕单列 */
+@media (max-width: 768px) {
+  .param-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .dynamic-form {
   display: flex;
   flex-direction: column;
@@ -406,7 +435,7 @@ const handleSubmit = () => {
 }
 
 :deep(.ant-collapse-header) {
-  padding: 0 0 8px 0 !important; /* 减少标题上下间距 */
+  padding: 0 0 8px !important; /* 减少标题上下间距 */
   font-weight: 500;
   color: #334155 !important;
 }
@@ -422,19 +451,13 @@ const handleSubmit = () => {
   gap: 12px 24px; /* 减少行间距 16px -> 12px */
 }
 
-/* 响应式：小屏幕单列 */
-@media (max-width: 768px) {
-  .param-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* 单个参数项 (无边框极简风格) */
 .param-item {
   display: flex;
   flex-direction: column;
   gap: 4px; /* 标签和输入框间距 6px -> 4px */
   padding: 0; /* 去除内边距 */
+
   /* 去除背景和边框 */
   background: transparent;
   border: none;
@@ -463,7 +486,7 @@ const handleSubmit = () => {
 }
 
 .help-icon:hover {
-  color: #0099ff;
+  color: #09f;
 }
 
 /* Tooltip 内容样式 */
@@ -481,12 +504,12 @@ const handleSubmit = () => {
 .tooltip-desc {
   font-size: 12px;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgb(255 255 255 / 85%);
 }
 
 .required-mark {
-  margin-left: 2px;
   margin-right: 2px;
+  margin-left: 2px;
   font-weight: bold;
   color: #ef4444;
 }

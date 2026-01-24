@@ -135,9 +135,7 @@ const typeWidgetOptions = [
   {
     value: 'boolean',
     label: '布尔 (boolean)',
-    children: [
-      { value: 'switch', label: '开关' },
-    ],
+    children: [{ value: 'switch', label: '开关' }],
   },
 ];
 
@@ -182,10 +180,10 @@ watch(
     }));
 
     // 参数
-    const paramSchema = tool.param_schema as null | {
-      properties?: Record<string, any>;
+    const paramSchema = tool.param_schema as {
       order?: string[]; // 参数顺序
-    };
+      properties?: Record<string, any>;
+    } | null;
     if (paramSchema?.properties) {
       // 获取所有参数键
       const allKeys = Object.keys(paramSchema.properties);
@@ -196,7 +194,7 @@ watch(
             ...allKeys.filter((k) => !paramSchema.order!.includes(k)),
           ]
         : allKeys;
-      
+
       paramItems.value = orderedKeys.map((key) => {
         const p = paramSchema.properties![key];
         // 推断 widget
@@ -400,9 +398,9 @@ const handleSave = async () => {
       prop.default =
         type === 'integer' || type === 'number'
           ? Number(p.default)
-          : (type === 'boolean'
+          : type === 'boolean'
             ? p.default === 'true'
-            : p.default);
+            : p.default;
     }
     if (p.enum) {
       prop.enum = p.enum
@@ -520,15 +518,17 @@ const handleExportConfig = () => {
     output_items: outputItems.value,
     example_items: exampleItems.value,
   };
-  
-  const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+
+  const blob = new Blob([JSON.stringify(config, null, 2)], {
+    type: 'application/json',
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `tool_config_${props.tool?.title || 'export'}_${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a);
+  document.body.append(a);
   a.click();
-  document.body.removeChild(a);
+  a.remove();
   URL.revokeObjectURL(url);
   message.success('配置已导出');
 };
@@ -536,16 +536,16 @@ const handleExportConfig = () => {
 // ========== 导入配置 ==========
 const handleImportConfig = (file: File) => {
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.addEventListener('load', (e) => {
     try {
       const config = JSON.parse(e.target?.result as string);
-      
+
       // 验证配置版本
       if (!config.version) {
         message.error('无效的配置文件格式');
         return;
       }
-      
+
       // 导入基本信息
       if (config.basic_info) {
         basicInfo.value = {
@@ -555,33 +555,33 @@ const handleImportConfig = (file: File) => {
           video_url: config.basic_info.video_url || '',
         };
       }
-      
+
       // 导入输入文件配置
       if (config.input_files) {
         inputFiles.value = config.input_files;
       }
-      
+
       // 导入参数配置
       if (config.param_items) {
         paramItems.value = config.param_items;
       }
-      
+
       // 导入输出配置
       if (config.output_items) {
         outputItems.value = config.output_items;
       }
-      
+
       // 导入示例数据
       if (config.example_items) {
         exampleItems.value = config.example_items;
       }
-      
+
       message.success(`配置已导入 (来自: ${config.tool_title || '未知'})`);
     } catch (error) {
       console.error('Import failed:', error);
       message.error('配置文件解析失败');
     }
-  };
+  });
   reader.readAsText(file);
   return false; // 阻止默认上传
 };
@@ -707,7 +707,11 @@ const handleImportConfig = (file: File) => {
               <Input v-model:value="record.title" size="small" />
             </template>
             <template v-else-if="column.dataIndex === 'description'">
-              <Input v-model:value="record.description" size="small" placeholder="参数说明" />
+              <Input
+                v-model:value="record.description"
+                size="small"
+                placeholder="参数说明"
+              />
             </template>
             <template v-else-if="column.dataIndex === 'typeWidget'">
               <Cascader
@@ -907,8 +911,8 @@ const handleImportConfig = (file: File) => {
 /* Footer 布局：左侧导入导出，右侧保存取消 */
 .footer-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
   width: 100%;
 }
 

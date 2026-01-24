@@ -6,7 +6,13 @@
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
-import type { AnalysisTool } from '#/api/analysis-tools';
+import type {
+  AnalysisTool,
+  executeAnalysisTool,
+  getAnalysisTool,
+  getTaskStatus,
+  type TaskStatusResponse,
+} from '#/api/analysis-tools';
 
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -26,13 +32,6 @@ import {
   Typography,
 } from 'ant-design-vue';
 
-import {
-  executeAnalysisTool,
-  getAnalysisTool,
-  getTaskStatus,
-  type TaskStatusResponse,
-} from '#/api/analysis-tools';
-
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
 import ResultRenderer from './components/ResultRenderer.vue';
@@ -50,51 +49,56 @@ const activeTab = ref('data');
 
 // ========== 配置驱动计算属性 ==========
 const hasInputSchema = computed(() => {
-  const schema = tool.value?.input_schema as { files?: unknown[] } | null;
+  const schema = tool.value?.input_schema as null | { files?: unknown[] };
   return schema?.files && schema.files.length > 0;
 });
 
 const hasParamSchema = computed(() => {
-  const schema = tool.value?.param_schema as { properties?: object } | null;
+  const schema = tool.value?.param_schema as null | { properties?: object };
   return schema?.properties && Object.keys(schema.properties).length > 0;
 });
 
 const hasOutputConfig = computed(() => {
-  const config = tool.value?.output_config as { outputs?: unknown[] } | null;
+  const config = tool.value?.output_config as null | { outputs?: unknown[] };
   return config?.outputs && config.outputs.length > 0;
 });
 
 // 简单的 Markdown 转 HTML 函数
 function simpleMarkdownToHtml(md: string): string {
-  return md
-    // 标题
-    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    // 粗体和斜体
-    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // 代码块
-    .replace(/```[\s\S]*?```/g, (match) => {
-      const code = match.replace(/```\w*\n?/g, '').replace(/```$/g, '');
-      return `<pre><code>${code}</code></pre>`;
-    })
-    // 行内代码
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // 无序列表
-    .replace(/^\s*[-*+] (.*)$/gim, '<li>$1</li>')
-    // 有序列表
-    .replace(/^\s*\d+\. (.*)$/gim, '<li>$1</li>')
-    // 引用
-    .replace(/^> (.*)$/gim, '<blockquote>$1</blockquote>')
-    // 链接
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
-    // 水平线
-    .replace(/^---$/gim, '<hr>')
-    // 换行
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+  return (
+    md
+      // 标题
+      .replaceAll(/^### (.*$)/gm, '<h3>$1</h3>')
+      .replaceAll(/^## (.*$)/gm, '<h2>$1</h2>')
+      .replaceAll(/^# (.*$)/gm, '<h1>$1</h1>')
+      // 粗体和斜体
+      .replaceAll(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+      .replaceAll(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replaceAll(/\*(.+?)\*/g, '<em>$1</em>')
+      // 代码块
+      .replaceAll(/```[\s\S]*?```/g, (match) => {
+        const code = match.replaceAll(/```\w*\n?/g, '').replaceAll(/```$/g, '');
+        return `<pre><code>${code}</code></pre>`;
+      })
+      // 行内代码
+      .replaceAll(/`([^`]+)`/g, '<code>$1</code>')
+      // 无序列表
+      .replaceAll(/^\s*[-*+] (.*)$/gm, '<li>$1</li>')
+      // 有序列表
+      .replaceAll(/^\s*\d+\. (.*)$/gm, '<li>$1</li>')
+      // 引用
+      .replaceAll(/^> (.*)$/gm, '<blockquote>$1</blockquote>')
+      // 链接
+      .replaceAll(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        '<a href="$2" target="_blank">$1</a>',
+      )
+      // 水平线
+      .replaceAll(/^---$/gm, '<hr>')
+      // 换行
+      .replaceAll('\n\n', '</p><p>')
+      .replaceAll('\n', '<br>')
+  );
 }
 
 // 渲染 guide_doc
@@ -127,9 +131,10 @@ const dynamicParamSchema = computed(() => {
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
-        const fileKey = prop.fileKey || tool.value.example_data?.[0]?.key || 'data_input';
+        const fileKey =
+          prop.fileKey || tool.value.example_data?.[0]?.key || 'data_input';
         const headers = currentHeaders.value[fileKey] || [];
-        
+
         if (headers.length > 0) {
           prop.type = 'string';
           prop.enum = headers;
@@ -147,7 +152,6 @@ const outputDir = ref<string>('');
 
 // ========== 组件引用 ==========
 const dataFileSelectorRef = ref<InstanceType<typeof DataFileSelector>>();
-
 
 // ========== 回退兼容：硬编码图表 ==========
 const chartRef = ref<EchartsUIType>();
@@ -201,7 +205,7 @@ const submitAnalysis = async () => {
 
   // 验证必填参数
   const paramSchema = tool.value?.param_schema as null | {
-    properties?: Record<string, { title?: string; required?: boolean }>;
+    properties?: Record<string, { required?: boolean; title?: string }>;
   };
   if (paramSchema?.properties) {
     for (const [key, config] of Object.entries(paramSchema.properties)) {
@@ -223,7 +227,7 @@ const submitAnalysis = async () => {
   try {
     // 获取表格数据内容
     const fileContents = dataFileSelectorRef.value?.getFileContents() ?? {};
-    
+
     // 调用执行 API
     const response = await executeAnalysisTool(toolId.value, {
       files: inputFiles.value,
@@ -564,7 +568,7 @@ onMounted(() => fetchTool());
               <!-- Tab 1: Data Files -->
               <TabPane key="data" tab="数据文件">
                 <div class="config-section">
-                <DataFileSelector
+                  <DataFileSelector
                     v-if="hasInputSchema"
                     ref="dataFileSelectorRef"
                     v-model="inputFiles"
@@ -887,13 +891,13 @@ onMounted(() => fetchTool());
 }
 
 .guide-md-content h1 {
+  padding-bottom: 12px;
   margin-top: 0;
   margin-bottom: 16px;
   font-size: 24px;
   font-weight: 600;
   color: #1e293b;
   border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 12px;
 }
 
 .guide-md-content h2 {
@@ -963,8 +967,8 @@ onMounted(() => fetchTool());
 }
 
 .guide-md-content th {
-  background: #f8fafc;
   font-weight: 600;
+  background: #f8fafc;
 }
 
 .loading-state,
