@@ -305,10 +305,31 @@ const fillAllExamples = () => {
 const getFileContents = (): Record<string, string> => {
   const contents: Record<string, string> = {};
   for (const config of fileConfigs.value) {
-    const fileData = fileDataMap.value[config.key];
-    if (fileData && fileData.data.length > 0) {
+    // 优先从表格实例获取最新数据（确保编辑后的数据被正确捕获）
+    const spreadsheetInstance = spreadsheetRefs.value[config.key];
+    let data: string[][] = [];
+    
+    if (spreadsheetInstance) {
+      // 从表格实例获取当前数据
+      data = spreadsheetInstance.getData() || [];
+    } else {
+      // 回退到缓存数据
+      data = fileDataMap.value[config.key]?.data || [];
+    }
+    
+    if (data.length > 0) {
       // 将二维数组转换为 tab 分隔的 CSV
-      contents[config.key] = fileData.data.map((row) => row.join('\t')).join('\n');
+      // 移除每行末尾的空单元格，避免产生多余的 tab 字符
+      contents[config.key] = data.map((row) => {
+        // 找到最后一个非空单元格的索引
+        let lastNonEmptyIndex = row.length - 1;
+        while (lastNonEmptyIndex >= 0 && (row[lastNonEmptyIndex] === '' || row[lastNonEmptyIndex] === undefined || row[lastNonEmptyIndex] === null)) {
+          lastNonEmptyIndex--;
+        }
+        // 截取到最后一个非空单元格
+        const trimmedRow = lastNonEmptyIndex >= 0 ? row.slice(0, lastNonEmptyIndex + 1) : [];
+        return trimmedRow.join('\t');
+      }).join('\n');
     }
   }
   return contents;
