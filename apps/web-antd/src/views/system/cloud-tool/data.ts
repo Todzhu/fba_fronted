@@ -69,7 +69,8 @@ export function useColumns(
                 name: 'CellSwitch',
                 attrs: {
                     onChange: ({ row }: OnActionClickParams<AnalysisTool>) => {
-                        updateCloudToolApi(row.id, { status: row.status === 1 ? 0 : 1 }).then(() => {
+                        // CellSwitch 渲染器在调用 onChange 前已将 row.status 更新为新值
+                        updateCloudToolApi(row.id, { status: row.status }).then(() => {
                             message.success($t('ui.actionMessage.operationSuccess'));
                         });
                     },
