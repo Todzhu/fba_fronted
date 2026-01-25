@@ -8,7 +8,6 @@ import { Page } from '@vben/common-ui';
 
 import { Icon } from '@iconify/vue';
 import {
-  Card,
   Checkbox,
   Empty,
   Input,
@@ -23,6 +22,53 @@ import {
 } from '#/api/analysis-tools';
 
 const router = useRouter();
+
+// 获取 API 基础 URL
+const apiBaseUrl = import.meta.env.VITE_GLOB_API_URL || '';
+
+// 获取完整图片 URL（处理相对路径）
+const getFullImageUrl = (url: null | string | undefined) => {
+  if (!url) return '';
+  // 如果已经是完整 URL 或者是图标标识，直接返回
+  if (url.startsWith('http') || !url.includes('/')) {
+    return url;
+  }
+  // 拼接 API 基础 URL
+  return `${apiBaseUrl}${url}`;
+};
+
+// 分类颜色映射
+const categoryColors: Record<
+  string,
+  { bg: string; border: string; text: string }
+> = {
+  // 组学分类颜色
+  转录组学: { bg: '#fef3c7', border: '#f59e0b', text: '#b45309' },
+  蛋白组学: { bg: '#dbeafe', border: '#3b82f6', text: '#1d4ed8' },
+  代谢组学: { bg: '#fce7f3', border: '#ec4899', text: '#be185d' },
+  基因组学: { bg: '#e0e7ff', border: '#6366f1', text: '#4338ca' },
+  // 功能分类颜色
+  可视化: { bg: '#d1fae5', border: '#10b981', text: '#047857' },
+  富集分析: { bg: '#ede9fe', border: '#8b5cf6', text: '#6d28d9' },
+  数据预处理: { bg: '#fed7aa', border: '#f97316', text: '#c2410c' },
+  差异分析: { bg: '#fecaca', border: '#ef4444', text: '#b91c1c' },
+  网络分析: { bg: '#a5f3fc', border: '#06b6d4', text: '#0e7490' },
+  降维分析: { bg: '#bbf7d0', border: '#22c55e', text: '#15803d' },
+};
+
+// 获取分类颜色样式
+const getCategoryStyle = (category: string) => {
+  const color = categoryColors[category] || {
+    bg: '#f3f4f6',
+    border: '#9ca3af',
+    text: '#4b5563',
+  };
+  return {
+    backgroundColor: color.bg,
+    borderColor: color.border,
+    color: color.text,
+  };
+};
 
 const searchText = ref('');
 const activeOmics = ref('all');
@@ -169,64 +215,75 @@ onMounted(() => {
         class="py-12"
       />
 
-      <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card
+      <div
+        v-else
+        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+      >
+        <div
           v-for="tool in tools"
           :key="tool.id"
-          class="tool-card cursor-pointer transition-all hover:shadow-lg"
-          :bordered="false"
+          class="tool-card group cursor-pointer"
           @click="goToDetail(tool.id)"
         >
-          <div class="flex items-start">
-            <div
-              class="tool-icon-wrapper mr-3 flex-shrink-0"
-              :style="{
-                backgroundColor:
-                  tool.icon && tool.icon.includes('/') ? 'transparent' : undefined,
-              }"
-            >
-              <img
-                v-if="tool.icon && tool.icon.includes('/')"
-                :src="tool.icon"
-                class="h-full w-full object-contain"
-                alt="icon"
-              />
+          <!-- 左侧预览图区域 -->
+          <div class="tool-preview">
+            <img
+              v-if="tool.icon && tool.icon.includes('/')"
+              :src="getFullImageUrl(tool.icon)"
+              class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              alt="预览图"
+            />
+            <div v-else class="tool-preview-fallback">
               <Icon
-                v-else
                 :icon="tool.icon || 'mdi:chart-bar'"
-                class="text-3xl"
-                :style="{ color: tool.color || '#1890ff' }"
+                class="text-5xl"
+                :style="{ color: tool.color || '#3b82f6' }"
               />
             </div>
-            <div class="flex-1 overflow-hidden">
-              <h3
-                class="mb-1 truncate text-base font-bold text-gray-800 dark:text-gray-100"
+          </div>
+
+          <!-- 右侧内容区域 -->
+          <div class="tool-content">
+            <!-- 工具名称 -->
+            <h3 class="tool-title">{{ tool.title }}</h3>
+
+            <!-- 分类标签 -->
+            <div class="tool-tags">
+              <span
+                class="tool-tag"
+                :style="getCategoryStyle(tool.omics_category)"
               >
-                {{ tool.title }}
-              </h3>
-              <div class="flex flex-wrap gap-1 text-xs text-gray-500">
-                <span>{{ tool.omics_category }}</span>
-                <span>{{ tool.func_category }}</span>
+                {{ tool.omics_category }}
+              </span>
+              <span
+                v-if="tool.func_category"
+                class="tool-tag"
+                :style="getCategoryStyle(tool.func_category)"
+              >
+                {{ tool.func_category }}
+              </span>
+            </div>
+
+            <!-- 描述 -->
+            <p class="tool-description">
+              {{ tool.description }}
+            </p>
+
+            <!-- 底部统计 -->
+            <div class="tool-footer">
+              <div class="tool-stats">
+                <span class="tool-stat">
+                  <Icon icon="mdi:eye-outline" class="text-sm" />
+                  <span>{{ tool.views }} 浏览</span>
+                </span>
+                <span class="tool-stat">
+                  <Icon icon="mdi:star-outline" class="text-sm" />
+                  <span>{{ tool.stars }} 收藏</span>
+                </span>
               </div>
             </div>
           </div>
-
-          <p class="my-4 line-clamp-2 h-10 text-xs text-gray-500">
-            {{ tool.description }}
-          </p>
-
-          <div class="flex items-center justify-between text-xs text-gray-400">
-            <div class="flex gap-3">
-              <span class="flex items-center gap-1">
-                <Icon icon="mdi:eye-outline" /> {{ tool.views }}
-              </span>
-              <span class="flex items-center gap-1">
-                <Icon icon="mdi:star-outline" /> {{ tool.stars }}
-              </span>
-            </div>
-            <span class="font-medium text-blue-600">限时免费</span>
-          </div>
-        </Card>
+        </div>
       </div>
     </Spin>
 
@@ -243,30 +300,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Customize Button Styles to match image better */
-.filter-btn {
-  color: rgb(0 0 0 / 85%);
-  background-color: transparent; /* Default bg */
-  border-color: #d9d9d9;
-  border-radius: 2px;
-  box-shadow: none;
-}
-
-.dark .filter-btn {
-  color: rgb(255 255 255 / 85%);
-  border-color: #424242;
-}
-
-/* Ensure non-primary buttons look like the image (white bg, gray border) */
-.filter-btn:not(.ant-btn-primary) {
-  background-color: #fff;
-}
-
-.dark .filter-btn:not(.ant-btn-primary) {
-  background-color: transparent;
-}
-
-/* ... existing styles ... */
+/* 筛选区域样式 */
 .filter-row {
   display: flex;
   align-items: baseline;
@@ -280,8 +314,6 @@ onMounted(() => {
 .filter-label {
   flex-shrink: 0;
   width: 80px;
-
-  /* Removed margin-top to rely on baseline alignment or flex-start centering */
   font-weight: 600;
   color: var(--text-color);
 }
@@ -293,21 +325,186 @@ onMounted(() => {
   gap: 8px;
 }
 
+/* 工具卡片 - 水平布局 */
 .tool-card {
-  border: 1px solid var(--border-color);
+  display: flex;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
+  transition: all 0.3s ease;
 }
 
-.tool-icon-wrapper {
+.tool-card:hover {
+  border-color: #3b82f6;
+  box-shadow:
+    0 10px 25px -5px rgb(59 130 246 / 15%),
+    0 8px 10px -6px rgb(59 130 246 / 10%);
+  transform: translateY(-2px);
+}
+
+.dark .tool-card {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+.dark .tool-card:hover {
+  border-color: #60a5fa;
+  box-shadow:
+    0 10px 25px -5px rgb(96 165 250 / 20%),
+    0 8px 10px -6px rgb(96 165 250 / 15%);
+}
+
+/* 左侧预览图区域 */
+.tool-preview {
+  position: relative;
+  flex-shrink: 0;
+  width: 140px;
+  min-height: 140px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+}
+
+.dark .tool-preview {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+}
+
+.tool-preview-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
-  background-color: #f5f5f5;
-  border-radius: 8px;
+  width: 100%;
+  height: 100%;
 }
 
-.dark .tool-icon-wrapper {
-  background-color: #303030;
+/* 右侧内容区域 */
+.tool-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 16px 20px;
+}
+
+/* 标题 */
+.tool-title {
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #1f2937;
+  white-space: nowrap;
+}
+
+.dark .tool-title {
+  color: #f3f4f6;
+}
+
+/* 分类标签 - 边框样式 */
+.tool-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tool-tag {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid;
+  border-radius: 2px;
+}
+
+.tool-tag-primary {
+  color: #2563eb;
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.tool-tag-secondary {
+  color: #059669;
+  background: #ecfdf5;
+  border-color: #10b981;
+}
+
+.dark .tool-tag-primary {
+  color: #93c5fd;
+  background: rgb(59 130 246 / 15%);
+  border-color: #60a5fa;
+}
+
+.dark .tool-tag-secondary {
+  color: #6ee7b7;
+  background: rgb(16 185 129 / 15%);
+  border-color: #34d399;
+}
+
+/* 描述 */
+.tool-description {
+  display: -webkit-box;
+  height: 40px;
+  margin-bottom: 12px;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+  -webkit-box-orient: vertical;
+}
+
+.dark .tool-description {
+  color: #9ca3af;
+}
+
+/* 底部统计 */
+.tool-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.dark .tool-footer {
+  border-top-color: #374151;
+}
+
+.tool-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.tool-stat {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.dark .tool-stat {
+  color: #6b7280;
+}
+
+/* 限时免费按钮 - 更饱满 */
+.tool-badge {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 20px;
+  transition: all 0.2s;
+}
+
+.tool-badge:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: scale(1.02);
 }
 </style>

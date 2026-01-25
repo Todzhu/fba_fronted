@@ -3,7 +3,11 @@ import type { VbenFormProps } from '@vben/common-ui';
 import type { VxeTableGridOptions } from '@vben/plugins/vxe-table';
 
 import type { OnActionClickParams } from '#/adapter/vxe-table';
-import type { AnalysisTool, CloudToolCreateParams, CloudToolUpdateParams } from '#/api';
+import type {
+  AnalysisTool,
+  CloudToolCreateParams,
+  CloudToolUpdateParams,
+} from '#/api';
 
 import { computed, ref } from 'vue';
 
@@ -21,8 +25,13 @@ import {
   getCloudToolListApi,
   updateCloudToolApi,
 } from '#/api';
-import { formSchema, querySchema, useColumns } from '#/views/system/cloud-tool/data';
+import {
+  formSchema,
+  querySchema,
+  useColumns,
+} from '#/views/system/cloud-tool/data';
 
+import IconUploader from './components/IconUploader.vue';
 import ToolConfigDrawer from './components/ToolConfigDrawer.vue';
 
 const formOptions: VbenFormProps = {
@@ -76,6 +85,11 @@ function onRefresh() {
 
 function onActionClick({ code, row }: OnActionClickParams<AnalysisTool>) {
   switch (code) {
+    case 'config': {
+      configTool.value = row;
+      configDrawerOpen.value = true;
+      break;
+    }
     case 'delete': {
       deleteCloudToolApi(row.id).then(() => {
         message.success({
@@ -88,12 +102,8 @@ function onActionClick({ code, row }: OnActionClickParams<AnalysisTool>) {
     }
     case 'edit': {
       editId.value = row.id;
+      iconValue.value = row.icon || '';
       modalApi.setData(row).open();
-      break;
-    }
-    case 'config': {
-      configTool.value = row;
-      configDrawerOpen.value = true;
       break;
     }
   }
@@ -103,12 +113,15 @@ function onActionClick({ code, row }: OnActionClickParams<AnalysisTool>) {
 const configDrawerOpen = ref(false);
 const configTool = ref<AnalysisTool | null>(null);
 
+// 图标上传值（独立管理）
+const iconValue = ref('');
+
 const [Form, formApi] = useVbenForm({
   showDefaultActions: false,
   schema: formSchema,
 });
 
-const editId = ref<number | null>(null);
+const editId = ref<null | number>(null);
 
 const modalTitle = computed(() => {
   return editId.value
@@ -124,13 +137,18 @@ const [Modal, modalApi] = useVbenModal({
     if (valid) {
       modalApi.lock();
       try {
-        if (editId.value) {
-          const data = await formApi.getValues<CloudToolUpdateParams>();
-          await updateCloudToolApi(editId.value, data);
-        } else {
-          const data = await formApi.getValues<CloudToolCreateParams>();
-          await createCloudToolApi(data);
-        }
+        const formData = await formApi.getValues<
+          CloudToolCreateParams | CloudToolUpdateParams
+        >();
+        // 合并图标值
+        const dataWithIcon = { ...formData, icon: iconValue.value || null };
+
+        await (editId.value
+          ? updateCloudToolApi(
+              editId.value,
+              dataWithIcon as CloudToolUpdateParams,
+            )
+          : createCloudToolApi(dataWithIcon as CloudToolCreateParams));
         message.success($t('ui.actionMessage.operationSuccess'));
         await modalApi.close();
         onRefresh();
@@ -145,9 +163,11 @@ const [Modal, modalApi] = useVbenModal({
       formApi.resetForm();
       if (data) {
         editId.value = data.id;
+        iconValue.value = data.icon || '';
         formApi.setValues(data);
       } else {
         editId.value = null;
+        iconValue.value = '';
       }
     }
   },
@@ -166,6 +186,14 @@ const [Modal, modalApi] = useVbenModal({
     </Grid>
     <Modal :title="modalTitle">
       <Form />
+      <!-- 工具图标区域 - 与表单风格统一 -->
+      <div class="icon-section">
+        <div class="icon-section-header">
+          <span class="icon-section-label">工具图标</span>
+          <span class="icon-section-optional">(可选)</span>
+        </div>
+        <IconUploader v-model:value="iconValue" />
+      </div>
     </Modal>
     <ToolConfigDrawer
       v-model:open="configDrawerOpen"
@@ -174,3 +202,37 @@ const [Modal, modalApi] = useVbenModal({
     />
   </Page>
 </template>
+
+<style scoped>
+.icon-section {
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.dark .icon-section {
+  border-top-color: #374151;
+}
+
+.icon-section-header {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.icon-section-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.dark .icon-section-label {
+  color: #f3f4f6;
+}
+
+.icon-section-optional {
+  font-size: 12px;
+  color: #9ca3af;
+}
+</style>

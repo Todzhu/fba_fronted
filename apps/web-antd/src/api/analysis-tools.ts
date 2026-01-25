@@ -201,6 +201,23 @@ export async function deleteCloudToolApi(id: number) {
   return requestClient.delete(`/api/v1/sys/cloud-tools/${id}`);
 }
 
+/**
+ * 上传工具图标
+ */
+export async function uploadToolIconApi(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return requestClient.post<{ url: string }>(
+    '/api/v1/sys/files/upload',
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    },
+  );
+}
+
 // ========== 分析任务执行 API ==========
 
 export interface ExecuteToolRequest {

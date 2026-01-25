@@ -124,14 +124,6 @@ export const formSchema: VbenFormSchema[] = [
   },
   {
     component: 'Input',
-    fieldName: 'icon',
-    label: '图标标识',
-    componentProps: {
-      placeholder: '输入图标Class或图片URL(以/开头)',
-    },
-  },
-  {
-    component: 'Input',
     fieldName: 'color',
     label: '图标颜色',
   },
