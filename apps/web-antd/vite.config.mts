@@ -5,11 +5,12 @@ export default defineConfig(async () => {
     application: {},
     vite: {
       server: {
+        host: '0.0.0.0',
         proxy: {
           '/api': {
             changeOrigin: true,
             // 真实后端地址
-            target: 'http://localhost:8000',
+            target: 'http://172.16.12.13:8000',
             ws: true,
           },
         },

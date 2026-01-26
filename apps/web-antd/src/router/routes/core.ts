@@ -105,7 +105,7 @@ const coreRoutes: RouteRecordRaw[] = [
         path: 'tools',
         component: () => import('#/views/cloudTools/index.vue'),
         meta: {
-          title: '工具广场',
+          title: '分析工具',
         },
       },
       {

@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/cloudTools/index.vue'),
         meta: {
           icon: 'ant-design:tool-outlined',
-          title: '工具广场',
+          title: '分析工具',
         },
       },
       {

@@ -47,6 +47,7 @@ const loading = ref(false);
 const activeKey = ref<string>('');
 const outputData = ref<Record<string, unknown>>({});
 const imageBlobUrls = ref<Record<string, string>>({}); // 存储图片 Blob URL
+const fetchErrors = ref<Record<string, string>>({}); // 存储加载错误信息
 
 // ECharts refs
 const chartRefs = ref<Record<string, EchartsUIType>>({});
@@ -89,7 +90,11 @@ const fetchOutputData = async () => {
           `Fetch failed for ${url}: ${response.status} ${response.statusText}`,
         );
         if (response.status === 401) {
-          message.error('图片加载认证失败，请重新登录');
+          fetchErrors.value[output.key] = '认证失败，请重新登录';
+        } else if (response.status === 404) {
+          fetchErrors.value[output.key] = '结果文件不存在，分析可能失败';
+        } else {
+          fetchErrors.value[output.key] = `加载失败 (${response.status})`;
         }
         continue;
       }
@@ -227,6 +232,10 @@ onMounted(() => {
                 :alt="output.title || output.key"
                 class="result-image"
               />
+              <div v-else-if="fetchErrors[output.key]" class="error-state">
+                <Icon icon="mdi:alert-circle" class="error-icon" />
+                <span>{{ fetchErrors[output.key] }}</span>
+              </div>
               <Spin v-else />
             </div>
 
@@ -309,5 +318,19 @@ onMounted(() => {
   max-height: 600px;
   object-fit: contain;
   box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: #ff4d4f;
+}
+
+.error-icon {
+  font-size: 48px;
 }
 </style>

@@ -41,6 +41,18 @@ const route = useRoute();
 const router = useRouter();
 const { setTabTitle } = useTabs();
 
+// 获取 API 基础 URL
+const apiBaseUrl = import.meta.env.VITE_GLOB_API_URL || '';
+
+// 获取完整图片 URL（处理相对路径）
+const getFullImageUrl = (url: null | string | undefined) => {
+  if (!url) return '';
+  if (url.startsWith('http') || !url.includes('/')) {
+    return url;
+  }
+  return `${apiBaseUrl}${url}`;
+};
+
 // ========== 工具信息 ==========
 const toolId = computed(() => Number(route.params.id));
 const tool = ref<AnalysisTool | null>(null);
@@ -198,6 +210,8 @@ const dynamicParamSchema = computed(() => {
 
 // ========== 结果状态 ==========
 const hasResult = ref(false);
+const taskFailed = ref(false);
+const errorMessage = ref('');
 const taskId = ref<string>('');
 const outputDir = ref<string>('');
 
@@ -273,6 +287,8 @@ const submitAnalysis = async () => {
 
   analyzing.value = true;
   showGuide.value = false;
+  taskFailed.value = false;
+  errorMessage.value = '';
   message.loading('正在提交分析任务...', 0);
 
   try {
@@ -313,6 +329,8 @@ const submitAnalysis = async () => {
         setTimeout(() => renderLegacyChart(), 100);
       }
     } else {
+      taskFailed.value = true;
+      errorMessage.value = finalStatus.error_message || '分析失败，请重试';
       message.error(finalStatus.error_message || '分析失败，请重试');
     }
   } catch (error: any) {
@@ -537,11 +555,18 @@ onMounted(() => fetchTool());
             <div
               class="tool-icon"
               :style="{
-                backgroundColor: `${tool.color || '#1890ff'}15`,
+                backgroundColor: tool.icon?.includes('/') ? 'transparent' : `${tool.color || '#1890ff'}15`,
                 color: tool.color || '#1890ff',
+                overflow: 'hidden',
               }"
             >
-              <Icon :icon="tool.icon || 'mdi:chart-bar'" />
+              <img
+                v-if="tool.icon?.includes('/')"
+                :src="getFullImageUrl(tool.icon)"
+                alt="工具预览图"
+                class="tool-preview-img"
+              />
+              <Icon v-else :icon="tool.icon?.trim() || 'mdi:chart-bar'" />
             </div>
             <h1 class="tool-title">{{ tool.title }}</h1>
           </div>
@@ -662,6 +687,20 @@ onMounted(() => fetchTool());
               class="chart-container"
             >
               <EchartsUI ref="chartRef" />
+            </div>
+
+            <!-- 任务失败状态 -->
+            <div v-else-if="taskFailed" class="error-state">
+              <div class="error-state-visual">
+                <Icon icon="mdi:alert-circle-outline" />
+              </div>
+              <div class="text-center">
+                <h3 class="error-title">分析失败</h3>
+                <p class="error-desc">{{ errorMessage }}</p>
+                <Button type="primary" class="mt-4" @click="submitAnalysis">
+                  <Icon icon="mdi:refresh" /> 重新分析
+                </Button>
+              </div>
             </div>
 
             <div v-else class="empty-state">
@@ -810,6 +849,12 @@ onMounted(() => fetchTool());
   border-radius: 12px;
 }
 
+.tool-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .tool-title {
   margin: 0;
   font-size: 20px;
@@ -831,9 +876,9 @@ onMounted(() => fetchTool());
 /* Control Panel (now Right) */
 .control-panel {
   display: flex;
-  flex: 0 0 600px; /* Fixed width 600px */
+  flex: 0 0 550px; /* Fixed width 600px */
   flex-direction: column;
-  max-width: 600px;
+  max-width: 550px;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -971,6 +1016,7 @@ onMounted(() => fetchTool());
 /* 非使用指南状态下居中显示 */
 .result-content:has(.loading-state),
 .result-content:has(.empty-state),
+.result-content:has(.error-state),
 .result-content:has(.chart-container) {
   align-items: center;
   justify-content: center;
@@ -1170,6 +1216,52 @@ onMounted(() => fetchTool());
   background: #f8fafc;
   border: 1px dashed #e2e8f0;
   border-radius: 12px;
+}
+
+/* 错误状态样式 */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.error-state-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  color: #ff4d4f;
+  background: #fff2f0;
+  border: 1px dashed #ffccc7;
+  border-radius: 50%;
+}
+
+.error-state-visual .iconify {
+  font-size: 48px;
+}
+
+.error-title {
+  margin-bottom: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #ff4d4f;
+}
+
+.error-desc {
+  max-width: 500px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cf1322;
+  word-break: break-word;
+  white-space: pre-wrap;
+  background: #fff2f0;
+  border-radius: 8px;
 }
 
 /* Scientific Minimalism Design System */
