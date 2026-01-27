@@ -10,7 +10,7 @@ export default defineConfig(async () => {
           '/api': {
             changeOrigin: true,
             // 真实后端地址
-            target: 'http://172.16.12.13:8000',
+            target: 'http://localhost:8000',
             ws: true,
           },
         },
