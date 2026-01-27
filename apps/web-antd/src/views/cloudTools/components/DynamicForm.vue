@@ -25,6 +25,7 @@ import {
 } from 'ant-design-vue';
 
 import OfficeColorPicker from './OfficeColorPicker.vue';
+import PaletteSelect from './PaletteSelect.vue';
 
 interface SchemaProperty {
   type?: string; // 改为可选，因为从 schema 读取时可能为 undefined
@@ -217,9 +218,7 @@ const handleSubmit = () => {
               <span class="label-text">{{ prop.title || prop.key }}</span>
               <span
                 v-if="prop.required || schema?.required?.includes(prop.key)"
-                class="required-mark"
-                >*</span
-              >
+                class="required-mark">*</span>
               <Tooltip
                 v-if="prop.description"
                 placement="topLeft"
@@ -265,6 +264,19 @@ const handleSubmit = () => {
                     @change="(val) => updateField(prop.key, val)"
                   />
                 </div>
+              </template>
+
+              <!-- 调色板选择器 -->
+              <template v-else-if="getWidgetType(prop) === 'palette_select'">
+                <PaletteSelect
+                  :model-value="
+                    (modelValue[prop.key] as string) ?? prop.default ?? 'pal2'
+                  "
+                  :options="
+                    prop.enum || ['pal1', 'pal2', 'pal3', 'pal4', 'pal5']
+                  "
+                  @update:model-value="(val) => updateField(prop.key, val)"
+                />
               </template>
 
               <!-- 下拉选择 / 列名选择 -->

@@ -114,6 +114,7 @@ const typeWidgetOptions = [
       { value: 'text', label: '单行文本' },
       { value: 'textarea', label: '多行文本' },
       { value: 'select', label: '下拉选择' },
+      { value: 'palette_select', label: '调色板选择器' },
       { value: 'color', label: '颜色选择器' },
       { value: 'column_select', label: '列选择器' },
     ],

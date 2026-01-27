@@ -367,7 +367,7 @@ watch(
 
 const goBack = () => router.push('/analysis/tools');
 
-const showGuide = ref(false);
+const showGuide = ref(true);
 const openGuide = () => {
   showGuide.value = true;
 };
@@ -555,7 +555,9 @@ onMounted(() => fetchTool());
             <div
               class="tool-icon"
               :style="{
-                backgroundColor: tool.icon?.includes('/') ? 'transparent' : `${tool.color || '#1890ff'}15`,
+                backgroundColor: tool.icon?.includes('/')
+                  ? 'transparent'
+                  : `${tool.color || '#1890ff'}15`,
                 color: tool.color || '#1890ff',
                 overflow: 'hidden',
               }"
@@ -1258,7 +1260,7 @@ onMounted(() => fetchTool());
   font-size: 13px;
   line-height: 1.6;
   color: #cf1322;
-  word-break: break-word;
+  word-break: break-all;
   white-space: pre-wrap;
   background: #fff2f0;
   border-radius: 8px;
