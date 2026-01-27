@@ -51,10 +51,16 @@ interface ParamSchema {
   order?: string[]; // 参数顺序
 }
 
-const props = defineProps<{
-  modelValue: Record<string, unknown>;
-  schema: null | ParamSchema;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: Record<string, unknown>;
+    schema: null | ParamSchema;
+    showActions?: boolean;
+  }>(),
+  {
+    showActions: true,
+  },
+);
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Record<string, unknown>): void;
@@ -370,7 +376,7 @@ const handleSubmit = () => {
     </Collapse>
 
     <!-- 底部操作按钮 -->
-    <div class="form-actions">
+    <div v-if="showActions" class="form-actions">
       <Button @click="handleReset">重 置</Button>
       <Button type="primary" ghost @click="handleImport">
         <template #icon>
@@ -444,10 +450,10 @@ const handleSubmit = () => {
   padding: 8px 0 !important; /* 减少内容区域内边距 */
 }
 
-/* ========== 两列参数网格布局 ========== */
+/* ========== 参数网格布局（响应式） ========== */
 .param-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px 24px; /* 减少行间距 16px -> 12px */
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { UploadChangeParam, UploadProps } from 'ant-design-vue';
 
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
@@ -25,6 +25,13 @@ const fileList = ref<UploadProps['fileList']>([]);
 const progressPercent = computed(() => {
   if (!props.progress || props.progress.total === 0) return 0;
   return Math.round((props.progress.current / props.progress.total) * 100);
+});
+
+// 监听弹窗打开，清空文件列表
+watch(() => props.open, (newVal) => {
+  if (newVal) {
+    fileList.value = [];
+  }
 });
 
 const handleChange = (info: UploadChangeParam) => {

@@ -117,6 +117,24 @@ const coreRoutes: RouteRecordRaw[] = [
           hideInMenu: true,
         },
       },
+      {
+        name: 'ScPipeline',
+        path: 'sc-pipeline',
+        component: () => import('#/views/scPipeline/index.vue'),
+        meta: {
+          icon: 'mdi:dna',
+          title: '单细胞分析',
+        },
+      },
+      {
+        name: 'ScPipelineDetail',
+        path: 'sc-pipeline/:id',
+        component: () => import('#/views/scPipeline/detail.vue'),
+        meta: {
+          title: '分析详情',
+          hideInMenu: true,
+        },
+      },
     ],
   },
 ];
