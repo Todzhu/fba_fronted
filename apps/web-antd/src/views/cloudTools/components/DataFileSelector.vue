@@ -359,7 +359,31 @@ const getFileContents = (): Record<string, string> => {
   return contents;
 };
 
-defineExpose({ fillAllExamples, getFileContents });
+// 设置文件内容（从任务回填数据时使用）
+const setFileContents = (contents: Record<string, string>) => {
+  for (const [key, csvContent] of Object.entries(contents)) {
+    if (!csvContent) continue;
+    
+    // 解析 CSV 内容
+    const lines = csvContent.split('\n').filter((line) => line.trim());
+    const data = lines.map((line) => line.split(/[\t,]/));
+    
+    // 确保 fileDataMap[key] 存在
+    if (!fileDataMap.value[key]) {
+      fileDataMap.value[key] = {
+        data: [],
+        fileName: '',
+        loading: false,
+      };
+    }
+    
+    fileDataMap.value[key]!.data = data;
+    fileDataMap.value[key]!.fileName = `${key}.csv (历史数据)`;
+    updateFileId(key, Date.now());
+  }
+};
+
+defineExpose({ fillAllExamples, getFileContents, setFileContents });
 </script>
 
 <template>

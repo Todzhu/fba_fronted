@@ -47,6 +47,15 @@ const routes: RouteRecordRaw[] = [
           hideInMenu: true,
         },
       },
+      {
+        name: 'AnalysisTasks',
+        path: '/analysis/tasks',
+        component: () => import('#/views/cloudTools/tasks/index.vue'),
+        meta: {
+          icon: 'mdi:clipboard-list-outline',
+          title: '任务中心',
+        },
+      },
     ],
   },
 ];

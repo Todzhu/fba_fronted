@@ -221,6 +221,7 @@ export async function uploadToolIconApi(file: File) {
 // ========== 分析任务执行 API ==========
 
 export interface ExecuteToolRequest {
+  task_name?: string; // 用户自定义任务名称
   files: Record<string, null | number>;
   file_contents: Record<string, string>;
   params: Record<string, unknown>;
@@ -230,16 +231,36 @@ export interface ExecuteToolResponse {
   task_id: number;
   status: string;
   message: string;
+  is_long_running: boolean;
 }
 
 export interface TaskStatusResponse {
   id: number;
   status: 'completed' | 'failed' | 'pending' | 'running';
+  task_name: null | string;
+  tool_name: null | string;
+  tool_id: number;
+  progress: number;
   output_dir: null | string;
   error_message: null | string;
+  input_params: null | Record<string, unknown>;
+  input_files: null | Record<string, null | number>;
   created_at: string;
   started_at: null | string;
   completed_at: null | string;
+}
+
+export interface TaskListResponse {
+  items: TaskStatusResponse[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface TaskListParams {
+  status?: string;
+  page?: number;
+  page_size?: number;
 }
 
 /**
@@ -252,6 +273,16 @@ export async function executeAnalysisTool(
   return requestClient.post<ExecuteToolResponse>(
     `/api/v1/sys/analysis-tools/${toolId}/execute`,
     data,
+  );
+}
+
+/**
+ * 查询任务列表
+ */
+export async function getTaskList(params?: TaskListParams) {
+  return requestClient.get<TaskListResponse>(
+    '/api/v1/sys/analysis-tools/tasks',
+    { params },
   );
 }
 
@@ -270,3 +301,32 @@ export async function getTaskStatus(taskId: number) {
 export function getTaskFileUrl(taskId: number, filePath: string) {
   return `/api/v1/sys/analysis-tools/tasks/${taskId}/files/${filePath}`;
 }
+
+/**
+ * 删除任务
+ */
+export async function deleteTask(taskId: number) {
+  return requestClient.delete(`/api/v1/sys/analysis-tools/tasks/${taskId}`);
+}
+
+/**
+ * 批量删除任务
+ */
+export async function deleteTasksBatch(ids: number[]) {
+  const params = new URLSearchParams();
+  ids.forEach((id) => params.append('ids', String(id)));
+  return requestClient.delete(
+    `/api/v1/sys/analysis-tools/tasks/batch?${params.toString()}`,
+  );
+}
+
+/**
+ * 获取任务输入数据（用于回填表格）
+ */
+export async function getTaskInputData(taskId: number) {
+  return requestClient.get<{
+    file_contents: Record<string, string>;
+    input_params: Record<string, unknown>;
+  }>(`/api/v1/sys/analysis-tools/tasks/${taskId}/input-data`);
+}
+

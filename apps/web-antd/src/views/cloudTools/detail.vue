@@ -30,6 +30,7 @@ import {
 import {
   executeAnalysisTool,
   getAnalysisTool,
+  getTaskInputData,
   getTaskStatus,
 } from '#/api/analysis-tools';
 
@@ -304,6 +305,19 @@ const submitAnalysis = async () => {
 
     taskId.value = String(response.task_id);
     message.destroy();
+
+    // 长时间任务：跳转到任务中心
+    if (response.is_long_running) {
+      message.success('任务已提交，请在任务中心查看进度');
+      analyzing.value = false;
+      router.push({
+        path: '/analysis/tasks',
+        query: { highlight: String(response.task_id) },
+      });
+      return;
+    }
+
+    // 短时间任务：保持原有轮询逻辑
     message.loading('任务已提交，正在分析中...', 0);
 
     // 轮询任务状态
@@ -503,7 +517,62 @@ const handleExportParams = () => {
   message.success('参数导出成功');
 };
 
-onMounted(() => fetchTool());
+// 从 URL 参数加载已完成任务的结果
+const loadTaskResult = async (taskIdFromUrl: number) => {
+  try {
+    const status = await getTaskStatus(taskIdFromUrl);
+    if (status.status === 'completed') {
+      taskId.value = String(taskIdFromUrl);
+      outputDir.value = status.output_dir || '';
+      hasResult.value = true;
+      showGuide.value = false;
+      
+      // 加载任务输入数据（CSV 内容和参数）
+      try {
+        const inputData = await getTaskInputData(taskIdFromUrl);
+        // 回填参数
+        if (inputData.input_params) {
+          formParams.value = inputData.input_params as Record<string, unknown>;
+        }
+        // 回填表格数据
+        if (inputData.file_contents && Object.keys(inputData.file_contents).length > 0) {
+          // 使用 nextTick 确保 DataFileSelector 已挂载
+          setTimeout(() => {
+            dataFileSelectorRef.value?.setFileContents(inputData.file_contents);
+          }, 100);
+        }
+      } catch (e) {
+        console.error('加载任务输入数据失败:', e);
+      }
+      
+      message.success('已加载任务结果');
+    } else if (status.status === 'failed') {
+      taskFailed.value = true;
+      errorMessage.value = status.error_message || '任务执行失败';
+      showGuide.value = false;
+    }
+  } catch (error) {
+    console.error('加载任务结果失败:', error);
+  }
+};
+
+onMounted(async () => {
+  await fetchTool();
+  
+  // 检查 URL 中是否有 task_id 参数
+  const taskIdParam = route.query.task_id;
+  const taskNameParam = route.query.task_name;
+  
+  if (taskIdParam) {
+    await loadTaskResult(Number(taskIdParam));
+    
+    // 如果有任务名称，使用任务名称更新标签
+    if (taskNameParam && typeof taskNameParam === 'string') {
+      setTabTitle(taskNameParam);
+      document.title = `${taskNameParam} - FBA`;
+    }
+  }
+});
 </script>
 
 <template>
