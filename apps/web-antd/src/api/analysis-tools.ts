@@ -334,3 +334,11 @@ export async function getTaskInputData(taskId: number) {
   }>(`/api/v1/sys/analysis-tools/tasks/${taskId}/input-data`);
 }
 
+/**
+ * 更新任务名称
+ */
+export async function updateTaskName(taskId: number, taskName: string) {
+  return requestClient.put(
+    `/api/v1/sys/analysis-tools/tasks/${taskId}?task_name=${encodeURIComponent(taskName)}`,
+  );
+}

@@ -22,9 +22,10 @@ import {
   Table,
   Tag,
   Tooltip,
+  Typography,
 } from 'ant-design-vue';
 
-import { deleteTask, deleteTasksBatch, getTaskList } from '#/api/analysis-tools';
+import { deleteTask, deleteTasksBatch, getTaskList, updateTaskName } from '#/api/analysis-tools';
 
 const router = useRouter();
 
@@ -197,6 +198,25 @@ const handleRefresh = () => {
   fetchTasks();
 };
 
+// 更新任务名称
+const handleTaskNameChange = async (taskId: number, newName: string) => {
+  if (!newName.trim()) {
+    message.warning('任务名称不能为空');
+    return;
+  }
+  try {
+    await updateTaskName(taskId, newName.trim());
+    message.success('名称已更新');
+    // 更新本地数据
+    const task = tasks.value.find(t => t.id === taskId);
+    if (task) {
+      task.task_name = newName.trim();
+    }
+  } catch {
+    message.error('更新失败');
+  }
+};
+
 // 是否有运行中的任务
 const hasRunningTasks = computed(() =>
   tasks.value.some((t) => t.status === 'running' || t.status === 'pending'),
@@ -290,7 +310,11 @@ onUnmounted(() => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'task_name'">
-            <span class="task-name">{{ record.task_name || `任务 #${record.id}` }}</span>
+            <Typography.Text
+              :content="record.task_name || `任务 #${record.id}`"
+              :editable="{ onChange: (val: string) => handleTaskNameChange(record.id, val) }"
+              class="task-name"
+            />
           </template>
 
           <template v-else-if="column.key === 'tool_name'">
