@@ -23,7 +23,9 @@ import {
   Drawer,
   Form,
   Input,
+  InputNumber,
   message,
+  Modal,
   Popconfirm,
   Row,
   Select,
@@ -31,6 +33,8 @@ import {
   Switch,
   Table,
   Tabs,
+  Tag,
+  Tooltip,
   Upload,
 } from 'ant-design-vue';
 // @ts-ignore
@@ -258,7 +262,9 @@ const removeInputFile = (index: number) => {
 };
 
 const addParam = () => {
-  paramItems.value.push({
+  // 新增模式：设置索引为 -1，确认后再实际添加
+  editingParamIndex.value = -1;
+  editingParam.value = {
     key: '',
     typeWidget: ['string', 'text'],
     title: '',
@@ -267,11 +273,51 @@ const addParam = () => {
     enum: '',
     required: false,
     group: '通用参数',
-  });
+  };
+  paramEditVisible.value = true;
 };
 
 const removeParam = (index: number) => {
   paramItems.value.splice(index, 1);
+};
+
+// ========== 参数编辑对话框 ==========
+const paramEditVisible = ref(false);
+const editingParamIndex = ref(-1); // -1 表示新增模式
+const editingParam = ref<ParamItem>({
+  key: '',
+  typeWidget: ['string', 'text'],
+  title: '',
+  description: '',
+  default: '',
+  enum: '',
+  required: false,
+  group: '通用参数',
+});
+
+const openParamEditModal = (index: number) => {
+  editingParamIndex.value = index;
+  // 复制当前参数数据到编辑表单
+  editingParam.value = { ...paramItems.value[index]! };
+  paramEditVisible.value = true;
+};
+
+const handleParamEditOk = () => {
+  if (editingParamIndex.value === -1) {
+    // 新增模式：添加到列表
+    paramItems.value.push({ ...editingParam.value });
+  } else {
+    // 编辑模式：更新现有项
+    paramItems.value[editingParamIndex.value] = { ...editingParam.value };
+  }
+  paramEditVisible.value = false;
+  editingParamIndex.value = -1;
+};
+
+const handleParamEditCancel = () => {
+  // 取消时直接关闭，不做任何修改
+  paramEditVisible.value = false;
+  editingParamIndex.value = -1;
 };
 
 const addOutput = () => {
@@ -502,23 +548,13 @@ const inputColumns = [
 ];
 
 const paramColumns = [
-  {
-    title: '序号',
-    dataIndex: 'index',
-    width: 50,
-    align: 'center' as const,
-    customRender: ({ index }: { index: number }) => index + 1,
-  },
   { title: '排序', dataIndex: 'sort', width: 50, align: 'center' as const },
-  { title: 'Key', dataIndex: 'key', width: 80 },
-  { title: '标题', dataIndex: 'title', width: 90 },
-  { title: '描述', dataIndex: 'description', width: 120 },
-  { title: '类型/控件', dataIndex: 'typeWidget', width: 150 },
-  { title: '必填', dataIndex: 'required', width: 55, align: 'center' as const },
-  { title: '默认值', dataIndex: 'default', width: 70 },
-  { title: '选项', dataIndex: 'enum', width: 120 },
-  { title: '分组', dataIndex: 'group', width: 90 },
-  { title: '操作', dataIndex: 'action', width: 60 },
+  { title: 'Key', dataIndex: 'key', width: 120 },
+  { title: '标题', dataIndex: 'title', width: 140 },
+  { title: '类型', dataIndex: 'typeWidget', width: 160 },
+  { title: '必填', dataIndex: 'required', width: 60, align: 'center' as const },
+  { title: '分组', dataIndex: 'group', width: 100 },
+  { title: '操作', dataIndex: 'action', width: 120, align: 'center' as const },
 ];
 
 const outputColumns = [
@@ -837,10 +873,7 @@ const handleImportConfig = async (file: File) => {
           size="small"
         >
           <template #bodyCell="{ column, record, index }">
-            <template v-if="column.dataIndex === 'index'">
-              {{ index + 1 }}
-            </template>
-            <template v-else-if="column.dataIndex === 'sort'">
+            <template v-if="column.dataIndex === 'sort'">
               <Icon
                 icon="mdi:drag"
                 class="drag-handle"
@@ -848,55 +881,136 @@ const handleImportConfig = async (file: File) => {
               />
             </template>
             <template v-else-if="column.dataIndex === 'key'">
-              <Input v-model:value="record.key" size="small" />
+              <span class="param-key">{{ record.key || '-' }}</span>
             </template>
             <template v-else-if="column.dataIndex === 'title'">
-              <Input v-model:value="record.title" size="small" />
-            </template>
-            <template v-else-if="column.dataIndex === 'description'">
-              <Input
-                v-model:value="record.description"
-                size="small"
-                placeholder="参数说明"
-              />
+              <Tooltip v-if="record.description" :title="record.description">
+                <span class="param-title">{{ record.title || record.key }}</span>
+              </Tooltip>
+              <span v-else class="param-title">{{ record.title || record.key }}</span>
             </template>
             <template v-else-if="column.dataIndex === 'typeWidget'">
-              <Cascader
-                v-model:value="record.typeWidget"
-                :options="typeWidgetOptions"
-                size="small"
-                style="width: 100%"
-                placeholder="选择类型/控件"
-              />
+              <Tag color="blue">
+                {{ record.typeWidget?.[0] || 'string' }}
+              </Tag>
+              <Tag>{{ record.typeWidget?.[1] || 'text' }}</Tag>
             </template>
             <template v-else-if="column.dataIndex === 'required'">
-              <Switch v-model:checked="record.required" size="small" />
-            </template>
-            <template v-else-if="column.dataIndex === 'default'">
-              <Input v-model:value="record.default" size="small" />
-            </template>
-            <template v-else-if="column.dataIndex === 'enum'">
-              <Input
-                v-model:value="record.enum"
-                size="small"
-                placeholder="选项1,选项2,..."
-                :disabled="record.typeWidget?.[1] !== 'select'"
-              />
+              <Tag v-if="record.required" color="red">必填</Tag>
+              <span v-else class="optional-text">可选</span>
             </template>
             <template v-else-if="column.dataIndex === 'group'">
-              <Input
-                v-model:value="record.group"
-                size="small"
-                placeholder="通用参数"
-              />
+              <span class="group-text">{{ record.group || '通用参数' }}</span>
             </template>
             <template v-else-if="column.dataIndex === 'action'">
-              <Popconfirm title="确定删除?" @confirm="removeParam(index)">
-                <Button type="link" danger size="small">删除</Button>
-              </Popconfirm>
+              <Space :size="4">
+                <Button type="link" size="small" @click="openParamEditModal(index)">
+                  编辑
+                </Button>
+                <Popconfirm title="确定删除?" @confirm="removeParam(index)">
+                  <Button type="link" danger size="small">删除</Button>
+                </Popconfirm>
+              </Space>
             </template>
           </template>
         </Table>
+
+        <!-- 参数编辑对话框 -->
+        <Modal
+          v-model:open="paramEditVisible"
+          :title="editingParamIndex === -1 ? '添加参数' : '编辑参数'"
+          width="560px"
+          :mask-closable="false"
+          @ok="handleParamEditOk"
+          @cancel="handleParamEditCancel"
+        >
+          <Form layout="vertical" class="param-edit-form">
+            <Row :gutter="16">
+              <Col :span="12">
+                <Form.Item label="参数 Key" required>
+                  <Input v-model:value="editingParam.key" placeholder="参数唯一标识" />
+                </Form.Item>
+              </Col>
+              <Col :span="12">
+                <Form.Item label="参数标题">
+                  <Input v-model:value="editingParam.title" placeholder="显示名称" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item label="参数描述">
+              <Input.TextArea
+                v-model:value="editingParam.description"
+                :rows="2"
+                placeholder="参数说明，用于 tooltip 提示"
+              />
+            </Form.Item>
+
+            <Row :gutter="16">
+              <Col :span="12">
+                <Form.Item label="类型/控件">
+                  <Cascader
+                    v-model:value="editingParam.typeWidget"
+                    :options="typeWidgetOptions"
+                    placeholder="选择类型和控件"
+                    style="width: 100%"
+                  />
+                </Form.Item>
+              </Col>
+              <Col :span="12">
+                <Form.Item label="默认值">
+                  <Input v-model:value="editingParam.default" placeholder="默认值" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row :gutter="16">
+              <Col :span="12">
+                <Form.Item label="分组">
+                  <Input v-model:value="editingParam.group" placeholder="通用参数" />
+                </Form.Item>
+              </Col>
+              <Col :span="12">
+                <Form.Item label="必填">
+                  <Switch v-model:checked="editingParam.required" />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Form.Item
+              v-if="editingParam.typeWidget?.[1] === 'select'"
+              label="选项列表"
+            >
+              <Input.TextArea
+                v-model:value="editingParam.enum"
+                :rows="2"
+                placeholder="多个选项用逗号分隔，如: 选项1,选项2,选项3"
+              />
+            </Form.Item>
+
+            <Row
+              v-if="['number', 'integer'].includes(editingParam.typeWidget?.[0] || '')"
+              :gutter="16"
+            >
+              <Col :span="12">
+                <Form.Item label="最小值">
+                  <InputNumber
+                    v-model:value="editingParam.minimum"
+                    style="width: 100%"
+                  />
+                </Form.Item>
+              </Col>
+              <Col :span="12">
+                <Form.Item label="最大值">
+                  <InputNumber
+                    v-model:value="editingParam.maximum"
+                    style="width: 100%"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          </Form>
+        </Modal>
       </Tabs.TabPane>
 
       <!-- 输出配置 -->
@@ -1233,5 +1347,49 @@ const handleImportConfig = async (file: File) => {
 .sortable-ghost {
   background-color: #e6f7ff !important;
   opacity: 0.8;
+}
+
+/* 参数表格只读样式 */
+.param-key {
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 12px;
+  color: #1e40af;
+  background: #eff6ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.param-title {
+  color: #334155;
+  cursor: default;
+}
+
+.param-title:hover {
+  color: #3b82f6;
+}
+
+.optional-text {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.group-text {
+  font-size: 12px;
+  color: #64748b;
+}
+
+/* 参数编辑对话框样式 */
+.param-edit-form {
+  padding: 8px 0;
+}
+
+.param-edit-form :deep(.ant-form-item) {
+  margin-bottom: 16px;
+}
+
+.param-edit-form :deep(.ant-form-item-label > label) {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
 }
 </style>
