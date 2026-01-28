@@ -373,50 +373,14 @@ const openGuide = () => {
 };
 
 const previewResult = () => {
-  // 如果已有结果，直接切换视图，不重新生成
+  // 如果已有结果，直接切换视图
   if (hasResult.value) {
     showGuide.value = false;
     return;
   }
 
-  message.loading({ content: '生成预览数据中...', key: 'preview' });
-  setTimeout(() => {
-    hasResult.value = true;
-    message.success({ content: '预览结果已生成', key: 'preview' });
-
-    // 渲染更丰富的预览图表
-    renderEcharts({
-      title: { text: '示例分析结果预览 (Mock Data)', left: 'center' },
-      tooltip: { trigger: 'axis' },
-      legend: { data: ['Sample A', 'Sample B'], bottom: 0 },
-      grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      },
-      yAxis: { type: 'value' },
-      series: [
-        {
-          name: 'Sample A',
-          type: 'line',
-          stack: 'Total',
-          areaStyle: {},
-          emphasis: { focus: 'series' },
-          data: [120, 132, 101, 134, 90, 230, 210],
-        },
-        {
-          name: 'Sample B',
-          type: 'line',
-          stack: 'Total',
-          areaStyle: {},
-          emphasis: { focus: 'series' },
-          data: [220, 182, 191, 234, 290, 330, 310],
-        },
-      ],
-    });
-    showGuide.value = false; // 关闭指南，显示结果
-  }, 800);
+  // 切换到结果视图，显示空状态提示（引导用户操作）
+  showGuide.value = false;
 };
 const downloadResult = async () => {
   if (!hasResult.value || !taskId.value) {
@@ -710,9 +674,9 @@ onMounted(() => fetchTool());
                 <Icon icon="mdi:chart-timeline-variant" />
               </div>
               <div class="text-center">
-                <h3 class="empty-title">准备就绪</h3>
+                <h3 class="empty-title">暂无分析结果</h3>
                 <p class="empty-desc">
-                  请在左侧配置数据和参数，点击"提交分析"查看结果
+                  请先在右侧上传数据、调整参数，然后点击"提交分析"
                 </p>
               </div>
             </div>
