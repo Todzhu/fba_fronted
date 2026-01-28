@@ -25,6 +25,8 @@ export interface AnalysisTool {
   guide_doc: null | string; // 使用指南文档（Markdown 或 URL）
   video_url: null | string; // 视频教程链接
   example_data: ExampleDataConfig[] | null; // 示例数据配置
+  // 执行行为配置
+  is_long_running?: boolean; // 提交后是否跳转任务中心
   created_time: string;
   updated_time: null | string;
 }
@@ -150,6 +152,8 @@ export interface CloudToolUpdateParams {
   guide_doc?: null | string;
   video_url?: null | string;
   example_data?: ExampleDataConfig[] | null;
+  // 执行行为配置
+  is_long_running?: boolean;
 }
 
 export interface CloudToolListParams {

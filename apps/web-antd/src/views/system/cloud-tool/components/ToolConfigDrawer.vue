@@ -71,6 +71,7 @@ const basicInfo = ref({
   video_url: '',
   env_type: '' as string, // 环境类型: singularity|conda|docker|system
   env_config: {} as Record<string, any>, // 环境配置
+  is_long_running: false, // 提交后是否跳转到任务中心
 });
 
 // 示例数据配置
@@ -169,6 +170,7 @@ watch(
       video_url: tool.video_url || '',
       env_type: tool.env_type || '',
       env_config: tool.env_config || {},
+      is_long_running: (tool as any).is_long_running || false,
     };
 
     // 示例数据
@@ -511,6 +513,7 @@ const handleSave = async () => {
       Object.keys(basicInfo.value.env_config || {}).length > 0
         ? basicInfo.value.env_config
         : null,
+    is_long_running: basicInfo.value.is_long_running || false,
     input_schema,
     param_schema,
     output_config,
@@ -620,6 +623,7 @@ const handleImportConfig = async (file: File) => {
         video_url: config.basic_info.video_url || '',
         env_type: config.basic_info.env_type || '',
         env_config: config.basic_info.env_config || {},
+        is_long_running: config.basic_info.is_long_running || false,
       };
     }
 
@@ -680,6 +684,17 @@ const handleImportConfig = async (file: File) => {
                   v-model:value="basicInfo.script_path"
                   placeholder="scripts/go_enrichment.R"
                 />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row :gutter="16">
+            <Col :span="12">
+              <Form.Item label="提交后跳转到任务中心">
+                <Switch v-model:checked="basicInfo.is_long_running" />
+                <span class="switch-hint">
+                  {{ basicInfo.is_long_running ? '是 - 适合长时间任务' : '否 - 在当前页面等待结果' }}
+                </span>
               </Form.Item>
             </Col>
           </Row>
@@ -1391,5 +1406,11 @@ const handleImportConfig = async (file: File) => {
   font-size: 13px;
   font-weight: 500;
   color: #475569;
+}
+
+.switch-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #64748b;
 }
 </style>
