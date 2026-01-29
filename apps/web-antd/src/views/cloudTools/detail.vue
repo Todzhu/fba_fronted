@@ -297,10 +297,15 @@ const submitAnalysis = async () => {
     const fileContents = dataFileSelectorRef.value?.getFileContents() ?? {};
     // 获取二进制文件 URL（示例数据等）
     const fileUrls = dataFileSelectorRef.value?.getFileUrls?.() ?? {};
+    // 获取平台文件 ID
+    const fileIds = dataFileSelectorRef.value?.getFileIds?.() ?? {};
+
+    // 合并 files 参数：优先使用平台文件 ID
+    const filesParam = { ...inputFiles.value, ...fileIds };
 
     // 调用执行 API
     const response = await executeAnalysisTool(toolId.value, {
-      files: inputFiles.value,
+      files: filesParam,
       file_contents: fileContents,
       file_urls: fileUrls,
       params: formParams.value,

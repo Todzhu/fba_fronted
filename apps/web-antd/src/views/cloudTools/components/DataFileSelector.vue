@@ -11,10 +11,11 @@
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Space, Tabs, Upload } from 'ant-design-vue';
+import { Button, Input, message, Space, Tabs, Upload, Dropdown, Menu } from 'ant-design-vue';
 
 import { baseRequestClient } from '../../../api/request';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
+import PlatformFileSelector from './PlatformFileSelector.vue';
 
 interface FileConfig {
   key: string;
@@ -119,6 +120,7 @@ const fileDataMap = ref<
       loading: boolean;
       fileType: 'tabular' | 'binary'; // 文件类型
       fileUrl?: string; // 二进制文件的下载 URL
+      fileId?: number; // 平台文件 ID
     }
   >
 >({});
@@ -457,18 +459,48 @@ const setFileContents = (contents: Record<string, string>) => {
     }
     
     fileDataMap.value[key]!.data = data;
-    fileDataMap.value[key]!.fileName = `${key}.csv (历史数据)`;
+  fileDataMap.value[key]!.fileName = `${key}.csv (历史数据)`;
     fileDataMap.value[key]!.fileType = 'tabular';
     updateFileId(key, Date.now());
   }
 };
 
-// 获取二进制文件的 URL（用于示例数据等）
+// 平台文件选择相关
+const platformSelectorOpen = ref(false);
+const currentSelectorKey = ref('');
+
+const openPlatformSelector = (key: string) => {
+  currentSelectorKey.value = key;
+  platformSelectorOpen.value = true;
+};
+
+const handlePlatformFileSelect = (file: any) => {
+  if (!currentSelectorKey.value) return;
+  
+  const key = currentSelectorKey.value;
+  fileDataMap.value[key]!.fileName = file.name;
+  fileDataMap.value[key]!.fileType = 'binary'; // 假设平台选择的都是二进制文件，或者根据扩展名判断
+  fileDataMap.value[key]!.fileId = Number(file.id);
+  
+  // 简单根据后缀判断类型
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const binaryExts = ['rds', 'rdata', 'rda', 'h5ad', 'h5', 'loom', 'zarr', 'hdf5'];
+  if (binaryExts.includes(ext)) {
+     fileDataMap.value[key]!.fileType = 'binary';
+  } else {
+     fileDataMap.value[key]!.fileType = 'tabular';
+  }
+  
+  updateFileId(key, Date.now()); // 触发更新
+  message.success(`已选择文件: ${file.name}`);
+};
+
+// 获取二进制文件的 URL（用于示例数据等）和 ID
 const getFileUrls = (): Record<string, string> => {
   const urls: Record<string, string> = {};
   for (const config of fileConfigs.value) {
     const fileData = fileDataMap.value[config.key];
-    // 只处理二进制文件且有 fileUrl 的情况
+    // 只处理二进制文件且有 fileUrl 的情况（示例文件）
     if (fileData?.fileType === 'binary' && fileData.fileUrl) {
       urls[config.key] = fileData.fileUrl;
     }
@@ -476,7 +508,18 @@ const getFileUrls = (): Record<string, string> => {
   return urls;
 };
 
-defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls });
+const getFileIds = (): Record<string, number> => {
+   const ids: Record<string, number> = {};
+   for (const config of fileConfigs.value) {
+      const fileData = fileDataMap.value[config.key];
+      if (fileData?.fileId) {
+         ids[config.key] = fileData.fileId;
+      }
+   }
+   return ids;
+}
+
+defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, getFileIds });
 
 </script>
 
@@ -519,13 +562,30 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls })
         />
 
         <div class="action-buttons">
-          <Upload
-            :show-upload-list="false"
-            :before-upload="(file: File) => handleBinaryImportForKey(config.key, file)"
-            accept=".rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5"
-          >
-            <Button type="primary" class="btn-import">上 传</Button>
-          </Upload>
+          <Dropdown>
+            <Button type="primary" class="btn-import">
+              <Space>
+                上 传
+                <Icon icon="ant-design:down-outlined" />
+              </Space>
+            </Button>
+            <template #overlay>
+              <Menu>
+                <Menu.Item key="local">
+                  <Upload
+                    :show-upload-list="false"
+                    :before-upload="(file: File) => handleBinaryImportForKey(config.key, file)"
+                    accept=".rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5"
+                  >
+                    <div>上传本地文件</div>
+                  </Upload>
+                </Menu.Item>
+                <Menu.Item key="platform" @click="openPlatformSelector(config.key)">
+                  从我的数据选择
+                </Menu.Item>
+              </Menu>
+            </template>
+          </Dropdown>
         </div>
       </div>
 
@@ -657,6 +717,12 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls })
       <Button type="primary" class="btn-next" @click="goNext">下一步</Button>
     </div>
 
+    <!-- 平台文件选择器 -->
+    <PlatformFileSelector
+      v-model:open="platformSelectorOpen"
+      :accept="allBinaryMode ? '.rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5' : undefined"
+      @select="handlePlatformFileSelect"
+    />
   </div>
 </template>
 
