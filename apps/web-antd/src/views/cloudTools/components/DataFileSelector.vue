@@ -14,7 +14,6 @@ import { Icon } from '@iconify/vue';
 import { Button, Input, message, Space, Tabs, Upload } from 'ant-design-vue';
 
 import { baseRequestClient } from '../../../api/request';
-import { uploadFile } from '../../../api/user-file';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
 
 interface FileConfig {
@@ -36,9 +35,6 @@ interface ExampleDataConfig {
   url: string;
   description?: string;
 }
-
-// 可编辑的表格文件扩展名
-const EDITABLE_EXTENSIONS = ['csv', 'tsv', 'txt', 'xls', 'xlsx'];
 
 const props = defineProps<{
   exampleData?: ExampleDataConfig[] | null; // 后端配置的示例数据
@@ -134,23 +130,6 @@ const getExampleByKey = (key: string): ExampleDataConfig | undefined => {
   return props.exampleData?.find((e) => e.key === key);
 };
 
-// 从 URL 或文件名中提取扩展名
-const getExtension = (urlOrName: string): string => {
-  const match = urlOrName.match(/\.([^./\\?#]+)(?:[?#]|$)/i);
-  return match ? match[1].toLowerCase() : '';
-};
-
-// 判断文件是否为可编辑的表格类型
-const isEditableTableFile = (key: string): boolean => {
-  const example = getExampleByKey(key);
-  if (example) {
-    const ext = getExtension(example.url || example.name);
-    return EDITABLE_EXTENSIONS.includes(ext);
-  }
-  // 默认情况下假定是可编辑的
-return true;
-};
-
 // 加载所有示例数据（从后端配置的 URL 加载）
 const loadAllExamples = async () => {
   exampleLoading.value = true;
@@ -198,44 +177,15 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
   fileData.loading = true;
 
   try {
-    // 判断是否为可编辑的表格文件
-    const ext = getExtension(example.url || example.name);
-    const isEditable = EDITABLE_EXTENSIONS.includes(ext);
+    const response = await baseRequestClient.get(example.url);
+    const content = response.data as string;
+    const lines = content.split('\n').filter((line) => line.trim());
+    const data = lines.map((line) => line.split(/[,\t]/));
 
-    if (isEditable) {
-      // 表格文件：下载并解析内容
-      const response = await baseRequestClient.get(example.url);
-      const content = response.data as string;
-      const lines = content.split('\n').filter((line) => line.trim());
-      const data = lines.map((line) => line.split(/[,\t]/));
-
-      fileData.data = data;
-      fileData.fileName = example.name || 'example_data.csv';
-      console.log(`Loaded example for ${key}:`, data.length, 'rows');
-      updateFileId(key, Date.now());  // 表格文件用临时ID，通过file_contents提交
-    } else {
-      // 非表格文件（如RDS/H5AD）：下载后重新上传到用户空间获取真实file_id
-      fileData.data = [];
-      fileData.fileName = example.name || example.url.split('/').pop() || 'example_file';
-      console.log(`Loading binary example for ${key}:`, fileData.fileName);
-      
-      try {
-        // 1. 下载示例文件
-        const response = await baseRequestClient.get(example.url, {
-          responseType: 'blob',
-        });
-        const blob = response.data as Blob;
-        
-        // 2. 转换为 File 对象并上传
-        const file = new File([blob], fileData.fileName, { type: blob.type });
-        const uploadResult = await uploadFile(file);
-        updateFileId(key, uploadResult.id);  // 使用服务器返回的真实 file_id
-        console.log(`Uploaded binary example for ${key}, file_id:`, uploadResult.id);
-      } catch (uploadError) {
-        console.error(`Upload binary example failed for ${key}:`, uploadError);
-        message.error(`示例文件上传失败`);
-      }
-    }
+    fileData.data = data;
+    fileData.fileName = example.name || 'example_data.csv';
+    updateFileId(key, Date.now());
+    console.log(`Loaded example for ${key}:`, data.length, 'rows');
   } catch (error) {
     console.error(`Error loading example for ${key}:`, error);
     message.error(`加载示例 "${example.name}" 失败`);
@@ -294,52 +244,23 @@ const handleImportForKey = async (key: string, file: File) => {
   }
 
   const fileData = fileDataMap.value[key]!;
-  fileData.loading = true;  // 设置loading状态
 
   try {
-    // 获取文件扩展名
-    const ext = getExtension(file.name);
-    const isEditable = EDITABLE_EXTENSIONS.includes(ext);
+    const content = await file.text();
+    const lines = content.split('\n').filter((line) => line.trim());
+    const data = lines.map((line) => line.split(/[,\t]/));
 
-    if (isEditable) {
-      // 表格文件：检查大小限制（超过10MB警告）
-      if (file.size > 10 * 1024 * 1024) {
-        message.warning('大文件可能导致浏览器卡顿，建议使用文件上传模式');
-      }
+    fileData.data = data;
+    fileData.fileName = file.name;
+    updateFileId(key, Date.now()); // 标记有数据
 
-      const content = await file.text();
-      const lines = content.split('\n').filter((line) => line.trim());
-      const data = lines.map((line) => line.split(/[,\t]/));
-
-      fileData.data = data;
-      fileData.fileName = file.name;
-      message.success(`${file.name} 导入成功`);
-    } else {
-      // 非表格文件（RDS/H5AD等）：先上传到服务器获取真实 file_id
-      fileData.data = [];
-      fileData.fileName = file.name;
-      
-      try {
-        const uploadResult = await uploadFile(file);
-        updateFileId(key, uploadResult.id);  // 使用服务器返回的真实 file_id
-        message.success(`${file.name} 上传成功`);
-      } catch (uploadError) {
-        console.error('Upload error:', uploadError);
-        message.error(`${file.name} 上传失败`);
-        fileData.loading = false;
-        return false;
-      }
-    }
-
-    if (isEditable) {
-      updateFileId(key, Date.now());  // CSV等文件用临时ID，通过file_contents提交
-    }
+    // 切换到对应的 Tab
     activeTab.value = key;
+
+    message.success(`${file.name} 导入成功`);
   } catch (error) {
     console.error('Import error:', error);
     message.error('文件导入失败');
-  } finally {
-    fileData.loading = false;  // 清除loading状态
   }
 
   return false; // 阻止默认上传
@@ -507,15 +428,9 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents });
         <Upload
           :show-upload-list="false"
           :before-upload="(file: File) => handleImportForKey(config.key, file)"
-          accept=".csv,.txt,.tsv,.xls,.xlsx,.rds,.h5ad,.h5"
+          accept=".csv,.txt,.tsv,.xls,.xlsx"
         >
-          <Button 
-            type="primary" 
-            class="btn-import"
-            :loading="fileDataMap[config.key]?.loading"
-          >
-            导 入
-          </Button>
+          <Button type="primary" class="btn-import">导 入</Button>
         </Upload>
         <Button danger class="btn-clear" @click="handleClearForKey(config.key)">
           清 空
@@ -534,12 +449,11 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents });
       </Tabs>
     </div>
 
-    <!-- 可编辑电子表格（仅对表格文件显示） -->
+    <!-- 可编辑电子表格 -->
     <div class="spreadsheet-area">
       <template v-for="config in fileConfigs" :key="config.key">
-        <!-- 表格文件：显示电子表格 -->
         <SpreadsheetPreview
-          v-if="activeTab === config.key && isEditableTableFile(config.key)"
+          v-if="activeTab === config.key"
           :ref="
             (el: any) => {
               if (el) spreadsheetRefs[config.key] = el;
@@ -549,28 +463,6 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents });
           :show-toolbar="true"
           @change="(data: string[][]) => handleDataChange(config.key, data)"
         />
-        <!-- 非表格文件：显示文件信息卡片 -->
-        <div
-          v-else-if="activeTab === config.key && !isEditableTableFile(config.key)"
-          class="binary-file-info"
-        >
-          <!-- 已加载状态 -->
-          <div v-if="fileDataMap[config.key]?.fileName" class="binary-file-card loaded">
-            <Icon icon="mdi:file-check" class="file-icon success" />
-            <div class="file-details">
-              <div class="file-name">{{ fileDataMap[config.key]?.fileName }}</div>
-              <div class="file-desc">此文件类型不支持在线编辑，将直接作为输入文件使用</div>
-            </div>
-          </div>
-          <!-- 未加载状态 -->
-          <div v-else class="binary-file-card empty">
-            <Icon icon="mdi:file-question-outline" class="file-icon pending" />
-            <div class="file-details">
-              <div class="file-name">{{ config.label || config.key }}</div>
-              <div class="file-desc">请点击上方「示例」按钮加载示例数据，或点击「导入」上传文件</div>
-            </div>
-          </div>
-        </div>
       </template>
     </div>
 
@@ -705,55 +597,5 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents });
   height: 40px;
   font-size: 14px;
   border-radius: 8px;
-}
-
-/* 非表格文件信息卡片 */
-.binary-file-info {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 200px;
-  background: #f8fafc;
-  border: 1px dashed #e2e8f0;
-  border-radius: 8px;
-}
-
-.binary-file-card {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  padding: 24px 32px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
-}
-
-.binary-file-card .file-icon {
-  font-size: 48px;
-}
-
-.binary-file-card .file-icon.success {
-  color: #22c55e;
-}
-
-.binary-file-card .file-icon.pending {
-  color: #94a3b8;
-}
-
-.file-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.file-name {
-  font-size: 16px;
-  font-weight: 500;
-  color: #1e293b;
-}
-
-.file-desc {
-  font-size: 13px;
-  color: #64748b;
 }
 </style>

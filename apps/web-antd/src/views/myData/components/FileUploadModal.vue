@@ -67,6 +67,17 @@ const handleCancel = () => {
   }
 };
 
+// 文件大小限制：500MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+const beforeUpload = (file: File) => {
+  if (file.size > MAX_FILE_SIZE) {
+    message.error(`文件 "${file.name}" 超过 500MB 限制`);
+    return Upload.LIST_IGNORE;
+  }
+  return false; // 阻止自动上传，手动上传
+};
+
 const customRequest = ({ onSuccess }: any) => {
   setTimeout(() => {
     onSuccess('ok');
@@ -95,6 +106,7 @@ const customRequest = ({ onSuccess }: any) => {
         name="file"
         :multiple="true"
         :custom-request="customRequest"
+        :before-upload="beforeUpload"
         @change="handleChange"
       >
         <p class="ant-upload-drag-icon">
