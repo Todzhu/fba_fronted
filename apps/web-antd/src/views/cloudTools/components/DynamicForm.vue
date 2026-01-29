@@ -145,7 +145,8 @@ watch(
     if (!schema?.properties) return;
     const defaults: Record<string, unknown> = {};
     for (const [key, prop] of Object.entries(schema.properties)) {
-      if (prop.default !== undefined && props.modelValue[key] === undefined) {
+      // 使用 || 让空字符串也能被默认值替换
+      if (prop.default !== undefined && !props.modelValue[key]) {
         defaults[key] = prop.default;
       }
     }
@@ -366,7 +367,7 @@ const handleSubmit = () => {
               <template v-else>
                 <Input
                   :value="
-                    (modelValue[prop.key] as string) ?? prop.default ?? ''
+                    (modelValue[prop.key] as string) || (prop.default as string) || ''
                   "
                   :placeholder="
                     prop.description || `请输入${prop.title || prop.key}`
@@ -618,6 +619,15 @@ const handleSubmit = () => {
 :deep(.ant-select-selector) {
   border-color: #e2e8f0 !important;
   border-radius: 6px !important;
+}
+
+/* 确保输入框内的值显示为正常深色（非 placeholder 样式） */
+:deep(.ant-input) {
+  color: #1e293b !important;
+}
+
+:deep(.ant-input::placeholder) {
+  color: #94a3b8 !important;
 }
 
 :deep(.ant-input:hover),

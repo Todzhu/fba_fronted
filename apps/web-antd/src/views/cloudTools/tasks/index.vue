@@ -94,7 +94,7 @@ const columns = [
   {
     title: '操作',
     key: 'action',
-    width: 140,
+    width: 180,
     fixed: 'right' as const,
   },
 ];
@@ -215,6 +215,15 @@ const handleTaskNameChange = async (taskId: number, newName: string) => {
   } catch {
     message.error('更新失败');
   }
+};
+
+// 日志弹窗
+const logModalVisible = ref(false);
+const currentLogTask = ref<TaskStatusResponse | null>(null);
+
+const viewTaskLog = (task: TaskStatusResponse) => {
+  currentLogTask.value = task;
+  logModalVisible.value = true;
 };
 
 // 是否有运行中的任务
@@ -370,6 +379,15 @@ onUnmounted(() => {
                   <Icon icon="mdi:eye-outline" style="font-size: 18px" />
                 </Button>
               </Tooltip>
+              <Tooltip title="查看日志">
+                <Button
+                  type="link"
+                  size="small"
+                  @click="viewTaskLog(record as TaskStatusResponse)"
+                >
+                  <Icon icon="mdi:file-document-outline" style="font-size: 18px" />
+                </Button>
+              </Tooltip>
               <Popconfirm
                 title="确定要删除此任务吗？"
                 ok-text="删除"
@@ -387,6 +405,38 @@ onUnmounted(() => {
         </template>
       </Table>
     </div>
+
+    <!-- 日志弹窗 -->
+    <Modal
+      v-model:visible="logModalVisible"
+      :title="`任务日志 - ${currentLogTask?.task_name || '任务 #' + currentLogTask?.id}`"
+      :footer="null"
+      width="700px"
+    >
+      <div class="log-content">
+        <div v-if="currentLogTask?.status === 'failed'" class="log-error">
+          <div class="log-label">错误信息：</div>
+          <pre class="log-text">{{ currentLogTask?.error_message || '无错误信息' }}</pre>
+        </div>
+        <div v-else-if="currentLogTask?.status === 'completed'" class="log-success">
+          <Icon icon="mdi:check-circle" class="success-icon" />
+          <span>任务执行成功</span>
+        </div>
+        <div v-else-if="currentLogTask?.status === 'running'" class="log-running">
+          <Icon icon="mdi:loading" class="loading-icon" />
+          <span>任务正在运行中...</span>
+        </div>
+        <div v-else class="log-pending">
+          <Icon icon="mdi:clock-outline" class="pending-icon" />
+          <span>任务等待执行</span>
+        </div>
+        <div class="log-meta">
+          <p><strong>创建时间：</strong>{{ formatTime(currentLogTask?.created_at ?? null) }}</p>
+          <p v-if="currentLogTask?.started_at"><strong>开始时间：</strong>{{ formatTime(currentLogTask?.started_at) }}</p>
+          <p v-if="currentLogTask?.completed_at"><strong>完成时间：</strong>{{ formatTime(currentLogTask?.completed_at) }}</p>
+        </div>
+      </div>
+    </Modal>
   </Page>
 </template>
 
@@ -428,6 +478,94 @@ onUnmounted(() => {
 .task-name {
   font-weight: 500;
   color: #374151;
+}
+
+/* 日志弹窗样式 */
+.log-content {
+  padding: 8px;
+}
+
+.log-label {
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.log-text {
+  max-height: 400px;
+  padding: 16px;
+  overflow-y: auto;
+  font-family: "Consolas", "Monaco", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #dc2626;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+}
+
+.log-success,
+.log-running,
+.log-pending {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 24px;
+  font-size: 16px;
+}
+
+.log-success {
+  color: #16a34a;
+  background: #f0fdf4;
+  border-radius: 8px;
+}
+
+.log-running {
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 8px;
+}
+
+.log-pending {
+  color: #6b7280;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.success-icon {
+  font-size: 24px;
+  color: #16a34a;
+}
+
+.loading-icon {
+  font-size: 24px;
+  color: #2563eb;
+  animation: spin 1s linear infinite;
+}
+
+.pending-icon {
+  font-size: 24px;
+  color: #6b7280;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.log-meta {
+  padding: 16px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #6b7280;
+  background: #f9fafb;
+  border-radius: 8px;
+}
+
+.log-meta p {
+  margin: 4px 0;
 }
 </style>
 

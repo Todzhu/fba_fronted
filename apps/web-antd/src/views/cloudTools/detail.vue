@@ -230,7 +230,7 @@ const fetchTool = async () => {
     tool.value = await getAnalysisTool(toolId.value);
     // 动态更新页签标题为工具名称
     if (tool.value?.title) {
-      document.title = `${tool.value.title} - FBA`;
+      document.title = `${tool.value.title} - ${import.meta.env.VITE_APP_TITLE || 'CWMDA'}`;
       setTabTitle(tool.value.title);
     }
 
@@ -569,7 +569,7 @@ onMounted(async () => {
     // 如果有任务名称，使用任务名称更新标签
     if (taskNameParam && typeof taskNameParam === 'string') {
       setTabTitle(taskNameParam);
-      document.title = `${taskNameParam} - FBA`;
+      document.title = `${taskNameParam} - ${import.meta.env.VITE_APP_TITLE || 'CWMDA'}`;
     }
   }
 });
