@@ -81,6 +81,34 @@ watch(
   { immediate: true },
 );
 
+// 二进制文件扩展名（不可解析为表格）
+const BINARY_EXTENSIONS = ['rds', 'h5ad', 'h5', 'rdata', 'rda', 'loom', 'zarr', 'hdf5'];
+
+// 判断是否为二进制文件
+const isBinaryFile = (filename: string): boolean => {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  return BINARY_EXTENSIONS.includes(ext);
+};
+
+// 判断是否全部为二进制文件模式（隐藏表格区域）
+const allBinaryMode = computed(() => {
+  const examples = props.exampleData;
+  if (!examples || examples.length === 0) return false;
+  
+  const result = examples.every((e) => {
+    // 优先使用 URL 判断（URL 通常包含真实文件扩展名）
+    const urlFileName = e.url?.split('/').pop() || '';
+    const nameFileName = e.name || '';
+    // 两者都检查
+    const isBinary = isBinaryFile(urlFileName) || isBinaryFile(nameFileName);
+    console.log(`[allBinaryMode] key=${e.key}, url=${e.url}, name=${e.name}, isBinary=${isBinary}`);
+    return isBinary;
+  });
+  
+  console.log(`[allBinaryMode] result=${result}`);
+  return result;
+});
+
 // 每个文件的表格数据和状态
 const fileDataMap = ref<
   Record<
@@ -89,6 +117,8 @@ const fileDataMap = ref<
       data: string[][];
       fileName: string;
       loading: boolean;
+      fileType: 'tabular' | 'binary'; // 文件类型
+      fileUrl?: string; // 二进制文件的下载 URL
     }
   >
 >({});
@@ -103,6 +133,7 @@ watch(
           data: [],
           fileName: '',
           loading: false,
+          fileType: 'tabular',
         };
       }
     }
@@ -150,6 +181,7 @@ const loadAllExamples = async () => {
         data: DEFAULT_EXAMPLE,
         fileName: 'example_data.csv',
         loading: false,
+        fileType: 'tabular',
       };
       updateFileId(firstKey, Date.now());
       message.success('示例数据已加载');
@@ -170,22 +202,43 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       data: [],
       fileName: '',
       loading: false,
+      fileType: 'tabular',
     };
   }
 
   const fileData = fileDataMap.value[key]!;
   fileData.loading = true;
 
-  try {
-    const response = await baseRequestClient.get(example.url);
-    const content = response.data as string;
-    const lines = content.split('\n').filter((line) => line.trim());
-    const data = lines.map((line) => line.split(/[,\t]/));
+  // 判断文件类型 - 优先使用 URL 判断（URL 包含真实扩展名，name 可能是中文描述）
+  const urlFileName = example.url?.split('/').pop() || '';
+  const displayName = example.name || urlFileName || 'file';
+  const isBinary = isBinaryFile(urlFileName) || isBinaryFile(displayName);
 
-    fileData.data = data;
-    fileData.fileName = example.name || 'example_data.csv';
-    updateFileId(key, Date.now());
-    console.log(`Loaded example for ${key}:`, data.length, 'rows');
+
+  try {
+    if (isBinary) {
+      // 二进制文件：不解析内容，只记录下载 URL
+      fileData.data = [];
+      fileData.fileName = displayName;
+      fileData.fileType = 'binary';
+      fileData.fileUrl = example.url;
+      updateFileId(key, Date.now());
+      console.log(`Loaded binary example for ${key}: ${displayName}`);
+    } else {
+      // 表格文件：解析 CSV/TSV
+      const response = await baseRequestClient.get(example.url);
+      const content = response.data as string;
+      const lines = content.split('\n').filter((line) => line.trim());
+      const data = lines.map((line) => line.split(/[,\t]/));
+
+      fileData.data = data;
+      fileData.fileName = displayName;
+      fileData.fileType = 'tabular';
+      fileData.fileUrl = undefined;
+      updateFileId(key, Date.now());
+      console.log(`Loaded example for ${key}:`, data.length, 'rows');
+    }
+
   } catch (error) {
     console.error(`Error loading example for ${key}:`, error);
     message.error(`加载示例 "${example.name}" 失败`);
@@ -240,6 +293,7 @@ const handleImportForKey = async (key: string, file: File) => {
       data: [],
       fileName: '',
       loading: false,
+      fileType: 'tabular',
     };
   }
 
@@ -252,6 +306,7 @@ const handleImportForKey = async (key: string, file: File) => {
 
     fileData.data = data;
     fileData.fileName = file.name;
+    fileData.fileType = 'tabular';
     updateFileId(key, Date.now()); // 标记有数据
 
     // 切换到对应的 Tab
@@ -263,6 +318,29 @@ const handleImportForKey = async (key: string, file: File) => {
     message.error('文件导入失败');
   }
 
+  return false; // 阻止默认上传
+};
+
+// 导入二进制文件（RDS/H5AD 等）- 不解析内容，只记录文件引用
+const handleBinaryImportForKey = (key: string, file: File) => {
+  // 确保 fileDataMap[key] 存在
+  if (!fileDataMap.value[key]) {
+    fileDataMap.value[key] = {
+      data: [],
+      fileName: '',
+      loading: false,
+      fileType: 'binary',
+    };
+  }
+
+  const fileData = fileDataMap.value[key]!;
+  fileData.fileName = file.name;
+  fileData.fileType = 'binary';
+  fileData.fileUrl = URL.createObjectURL(file); // 临时 URL 用于预览/下载
+  fileData.data = []; // 二进制文件不解析
+  updateFileId(key, Date.now());
+
+  message.success(`${file.name} 已选择`);
   return false; // 阻止默认上传
 };
 
@@ -285,7 +363,7 @@ const updateFileId = (key: string, fileId: null | number) => {
   // 数据变化时，提取所有文件的表头并通知父组件
   const allHeaders: Record<string, string[]> = {};
   for (const [fileKey, fileData] of Object.entries(fileDataMap.value)) {
-    if (fileData.data && fileData.data.length > 0) {
+    if (fileData.data && fileData.data.length > 0 && fileData.data[0]) {
       // 过滤掉空表头
       const headers = fileData.data[0].filter((h) => h.trim() !== '');
       if (headers.length > 0) {
@@ -301,7 +379,7 @@ const handleDataChange = (key: string, data: string[][]) => {
   const fileData = fileDataMap.value[key];
   if (fileData) {
     fileData.data = data;
-    if (data.length > 0) {
+    if (fileData?.data && fileData.data.length > 0) {
       updateFileId(key, Date.now());
     }
   }
@@ -374,16 +452,32 @@ const setFileContents = (contents: Record<string, string>) => {
         data: [],
         fileName: '',
         loading: false,
+        fileType: 'tabular',
       };
     }
     
     fileDataMap.value[key]!.data = data;
     fileDataMap.value[key]!.fileName = `${key}.csv (历史数据)`;
+    fileDataMap.value[key]!.fileType = 'tabular';
     updateFileId(key, Date.now());
   }
 };
 
-defineExpose({ fillAllExamples, getFileContents, setFileContents });
+// 获取二进制文件的 URL（用于示例数据等）
+const getFileUrls = (): Record<string, string> => {
+  const urls: Record<string, string> = {};
+  for (const config of fileConfigs.value) {
+    const fileData = fileDataMap.value[config.key];
+    // 只处理二进制文件且有 fileUrl 的情况
+    if (fileData?.fileType === 'binary' && fileData.fileUrl) {
+      urls[config.key] = fileData.fileUrl;
+    }
+  }
+  return urls;
+};
+
+defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls });
+
 </script>
 
 <template>
@@ -398,84 +492,171 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents });
         >
           示 例
         </Button>
-        <Button @click="downloadExample">下载示例 数据表</Button>
+        <Button v-if="!allBinaryMode" @click="downloadExample">下载示例 数据表</Button>
+        <!-- 二进制模式提示 -->
+        <span v-if="allBinaryMode" class="binary-hint-text">
+          <Icon icon="mdi:information-outline" class="hint-icon-inline" />
+          点击「示例」按钮加载示例数据文件
+        </span>
       </Space>
     </div>
 
-    <!-- 文件输入行（所有文件配置） -->
-    <div v-for="config in fileConfigs" :key="config.key" class="file-input-row">
-      <label class="input-label">
-        <span v-if="config.required" class="required">*</span>
-        <a-tooltip v-if="config.description" :title="config.description">
-          <span class="label-text has-desc">
-            {{ config.label || config.key }}
-            <Icon icon="mdi:help-circle-outline" class="desc-icon" />：
+    <!-- ========== 全二进制模式：与普通模式一致的行布局 ========== -->
+    <template v-if="allBinaryMode">
+      <div v-for="config in fileConfigs" :key="config.key" class="file-input-row">
+        <label class="input-label">
+          <span v-if="config.required" class="required">*</span>
+          <span class="label-text">
+            {{ config.label || config.key }}：
           </span>
-        </a-tooltip>
-        <span v-else class="label-text">
-          {{ config.label || config.key }}：
-        </span>
-      </label>
+        </label>
 
-      <Input
-        :value="fileDataMap[config.key]?.fileName || '请编辑下方表格'"
-        readonly
-        class="filename-input"
-        placeholder="请编辑下方表格"
-      />
+        <Input
+          :value="fileDataMap[config.key]?.fileName || '请选择文件'"
+          readonly
+          class="filename-input"
+          placeholder="请选择文件"
+        />
 
-      <div class="action-buttons">
-        <Upload
-          :show-upload-list="false"
-          :before-upload="(file: File) => handleImportForKey(config.key, file)"
-          accept=".csv,.txt,.tsv,.xls,.xlsx"
-        >
-          <Button type="primary" class="btn-import">导 入</Button>
-        </Upload>
-        <Button danger class="btn-clear" @click="handleClearForKey(config.key)">
-          清 空
-        </Button>
+        <div class="action-buttons">
+          <Upload
+            :show-upload-list="false"
+            :before-upload="(file: File) => handleBinaryImportForKey(config.key, file)"
+            accept=".rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5"
+          >
+            <Button type="primary" class="btn-import">上 传</Button>
+          </Upload>
+        </div>
       </div>
-    </div>
 
-    <!-- 多文件 Tab -->
-    <div class="table-tabs">
-      <Tabs v-model:active-key="activeTab" size="small">
-        <Tabs.TabPane
-          v-for="config in fileConfigs"
-          :key="config.key"
-          :tab="config.label || config.key"
+      <!-- 二进制文件状态卡片 -->
+      <div 
+        class="binary-file-card" 
+        :class="{ 'card-success': fileDataMap[fileConfigs[0]?.key]?.fileName }"
+      >
+        <Icon 
+          :icon="fileDataMap[fileConfigs[0]?.key]?.fileName ? 'mdi:check-circle' : 'mdi:file-document-outline'" 
+          class="file-card-icon" 
         />
-      </Tabs>
-    </div>
+        <div class="file-card-info">
+          <div class="file-card-name">
+            {{ fileDataMap[fileConfigs[0]?.key]?.fileName || '请选择数据文件' }}
+          </div>
+          <div class="file-card-hint">
+            {{ fileDataMap[fileConfigs[0]?.key]?.fileName 
+              ? '文件已选择，可以进行下一步' 
+              : '点击「示例」按钮或「上传」按钮选择 RDS/H5AD 文件' 
+            }}
+          </div>
+        </div>
+      </div>
 
-    <!-- 可编辑电子表格 -->
-    <div class="spreadsheet-area">
-      <template v-for="config in fileConfigs" :key="config.key">
-        <SpreadsheetPreview
-          v-if="activeTab === config.key"
-          :ref="
-            (el: any) => {
-              if (el) spreadsheetRefs[config.key] = el;
-            }
-          "
-          :data="fileDataMap[config.key]?.data ?? []"
-          :show-toolbar="true"
-          @change="(data: string[][]) => handleDataChange(config.key, data)"
+    </template>
+
+
+
+
+    <!-- ========== 普通模式：表格编辑模式 ========== -->
+    <template v-else>
+      <!-- 文件输入行（所有文件配置） -->
+      <div v-for="config in fileConfigs" :key="config.key" class="file-input-row">
+        <label class="input-label">
+          <span v-if="config.required" class="required">*</span>
+          <a-tooltip v-if="config.description" :title="config.description">
+            <span class="label-text has-desc">
+              {{ config.label || config.key }}
+              <Icon icon="mdi:help-circle-outline" class="desc-icon" />：
+            </span>
+          </a-tooltip>
+          <span v-else class="label-text">
+            {{ config.label || config.key }}：
+          </span>
+        </label>
+
+        <Input
+          :value="fileDataMap[config.key]?.fileName || '请编辑下方表格'"
+          readonly
+          class="filename-input"
+          placeholder="请编辑下方表格"
         />
-      </template>
-    </div>
+
+        <div class="action-buttons">
+          <Upload
+            :show-upload-list="false"
+            :before-upload="(file: File) => handleImportForKey(config.key, file)"
+            accept=".csv,.txt,.tsv,.xls,.xlsx"
+          >
+            <Button type="primary" class="btn-import">导 入</Button>
+          </Upload>
+          <Button danger class="btn-clear" @click="handleClearForKey(config.key)">
+            清 空
+          </Button>
+        </div>
+      </div>
+
+      <!-- 多文件 Tab -->
+      <div class="table-tabs">
+        <Tabs v-model:active-key="activeTab" size="small">
+          <Tabs.TabPane
+            v-for="config in fileConfigs"
+            :key="config.key"
+            :tab="config.label || config.key"
+          />
+        </Tabs>
+      </div>
+
+      <!-- 可编辑电子表格 / 二进制文件卡片 -->
+      <div class="spreadsheet-area">
+        <template v-for="config in fileConfigs" :key="config.key">
+          <!-- 二进制文件：卡片展示 -->
+          <div
+            v-if="activeTab === config.key && fileDataMap[config.key]?.fileType === 'binary'"
+            class="binary-file-card"
+          >
+            <Icon icon="mdi:file-document-outline" class="file-card-icon" />
+            <div class="file-card-info">
+              <div class="file-card-name">{{ fileDataMap[config.key]?.fileName }}</div>
+              <div class="file-card-hint">该文件为特殊格式（如 RDS、H5AD），无法在线预览</div>
+            </div>
+            <a
+              v-if="fileDataMap[config.key]?.fileUrl"
+              :href="fileDataMap[config.key]?.fileUrl"
+              download
+            >
+              <Button type="primary">下载文件</Button>
+            </a>
+          </div>
+
+          <!-- 表格文件：电子表格 -->
+          <SpreadsheetPreview
+            v-else-if="activeTab === config.key"
+            :ref="
+              (el: any) => {
+                if (el) spreadsheetRefs[config.key] = el;
+              }
+            "
+            :data="fileDataMap[config.key]?.data ?? []"
+            :show-toolbar="true"
+            @change="(data: string[][]) => handleDataChange(config.key, data)"
+          />
+        </template>
+      </div>
+    </template>
+
+
 
     <!-- 底部提示 + 下一步 -->
     <div class="footer">
-      <div class="hint">
+      <div v-if="!allBinaryMode" class="hint">
         <Icon icon="mdi:information-outline" class="hint-icon" />
         <span>
           对于较大的数据文件，在线编辑可能会导致卡顿，请切换到文件模式；在文件模式下，表格不可编辑且仅展示1000行；超过100M的文件请先上传到云盘
         </span>
       </div>
+      <div v-else></div>
       <Button type="primary" class="btn-next" @click="goNext">下一步</Button>
     </div>
+
   </div>
 </template>
 
@@ -597,5 +778,94 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents });
   height: 40px;
   font-size: 14px;
   border-radius: 8px;
+}
+
+/* 二进制模式提示卡片 */
+.hint-binary {
+  color: #3b82f6;
+}
+
+/* 二进制模式内联提示文字 */
+.binary-hint-text {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.hint-icon-inline {
+  font-size: 14px;
+  color: #3b82f6;
+}
+
+
+
+/* 二进制文件列表容器 */
+.binary-files-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 二进制文件卡片 */
+.binary-file-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 80px;
+  padding: 20px 24px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+/* 成功状态：绿色 */
+.binary-file-card.card-success {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #86efac;
+  border-style: solid;
+}
+
+.binary-file-card.card-success .file-card-icon {
+  color: #22c55e;
+}
+
+.binary-file-card.card-success .file-card-name {
+  color: #166534;
+}
+
+.binary-file-card.card-success .file-card-hint {
+  color: #16a34a;
+}
+
+
+/* 表格区域内的卡片需要更大高度 */
+.spreadsheet-area .binary-file-card {
+  min-height: 200px;
+}
+
+.file-card-icon {
+  flex-shrink: 0;
+  font-size: 48px;
+  color: #64748b;
+}
+
+.file-card-info {
+  flex: 1;
+}
+
+.file-card-name {
+  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.file-card-hint {
+  font-size: 13px;
+  color: #64748b;
 }
 </style>

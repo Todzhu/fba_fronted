@@ -295,13 +295,17 @@ const submitAnalysis = async () => {
   try {
     // 获取表格数据内容
     const fileContents = dataFileSelectorRef.value?.getFileContents() ?? {};
+    // 获取二进制文件 URL（示例数据等）
+    const fileUrls = dataFileSelectorRef.value?.getFileUrls?.() ?? {};
 
     // 调用执行 API
     const response = await executeAnalysisTool(toolId.value, {
       files: inputFiles.value,
       file_contents: fileContents,
+      file_urls: fileUrls,
       params: formParams.value,
     });
+
 
     taskId.value = String(response.task_id);
     message.destroy();

@@ -228,8 +228,10 @@ export interface ExecuteToolRequest {
   task_name?: string; // 用户自定义任务名称
   files: Record<string, null | number>;
   file_contents: Record<string, string>;
+  file_urls?: Record<string, string>; // 二进制文件URL（示例数据等）
   params: Record<string, unknown>;
 }
+
 
 export interface ExecuteToolResponse {
   task_id: number;
