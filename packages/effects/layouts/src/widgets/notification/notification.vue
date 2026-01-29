@@ -97,11 +97,6 @@ function handleClick(item: NotificationItem) {
               @click="handleClick(item)"
             >
               <span
-                v-if="!item.isRead"
-                class="bg-primary absolute right-2 top-2 h-2 w-2 rounded"
-              ></span>
-
-              <span
                 class="relative flex h-10 w-10 shrink-0 overflow-hidden rounded-full"
               >
                 <img
@@ -111,7 +106,17 @@ function handleClick(item: NotificationItem) {
                 />
               </span>
               <div class="flex flex-col gap-1 leading-none">
-                <p class="font-semibold">{{ item.title }}</p>
+                <div class="flex items-center gap-2">
+                  <p class="font-semibold">{{ item.title }}</p>
+                  <span 
+                    v-if="!item.isRead" 
+                    class="rounded bg-blue-500 px-1.5 py-0.5 text-xs text-white"
+                  >未读</span>
+                  <span 
+                    v-else 
+                    class="rounded bg-gray-200 px-1.5 py-0.5 text-xs text-gray-500"
+                  >已读</span>
+                </div>
                 <p class="text-muted-foreground my-1 line-clamp-2 text-xs">
                   {{ item.message }}
                 </p>
