@@ -11,7 +11,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Space, Tabs, Upload, Dropdown, Menu } from 'ant-design-vue';
+import { Button, Input, message, Space, Spin, Tabs, Upload, Dropdown, Menu } from 'ant-design-vue';
 
 import { baseRequestClient } from '../../../api/request';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
@@ -300,6 +300,8 @@ const handleImportForKey = async (key: string, file: File) => {
   }
 
   const fileData = fileDataMap.value[key]!;
+  fileData.loading = true; // 开始加载
+  message.loading({ content: '正在解析文件，请稍候...', key: 'fileImport' });
 
   try {
     const content = await file.text();
@@ -314,10 +316,12 @@ const handleImportForKey = async (key: string, file: File) => {
     // 切换到对应的 Tab
     activeTab.value = key;
 
-    message.success(`${file.name} 导入成功`);
+    message.success({ content: `${file.name} 导入成功`, key: 'fileImport' });
   } catch (error) {
     console.error('Import error:', error);
-    message.error('文件导入失败');
+    message.error({ content: '文件导入失败', key: 'fileImport' });
+  } finally {
+    fileData.loading = false; // 结束加载
   }
 
   return false; // 阻止默认上传
@@ -667,39 +671,41 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
 
       <!-- 可编辑电子表格 / 二进制文件卡片 -->
       <div class="spreadsheet-area">
-        <template v-for="config in fileConfigs" :key="config.key">
-          <!-- 二进制文件：卡片展示 -->
-          <div
-            v-if="activeTab === config.key && fileDataMap[config.key]?.fileType === 'binary'"
-            class="binary-file-card"
-          >
-            <Icon icon="mdi:file-document-outline" class="file-card-icon" />
-            <div class="file-card-info">
-              <div class="file-card-name">{{ fileDataMap[config.key]?.fileName }}</div>
-              <div class="file-card-hint">该文件为特殊格式（如 RDS、H5AD），无法在线预览</div>
-            </div>
-            <a
-              v-if="fileDataMap[config.key]?.fileUrl"
-              :href="fileDataMap[config.key]?.fileUrl"
-              download
+        <Spin :spinning="fileDataMap[activeTab]?.loading" tip="正在解析文件...">
+          <template v-for="config in fileConfigs" :key="config.key">
+            <!-- 二进制文件：卡片展示 -->
+            <div
+              v-if="activeTab === config.key && fileDataMap[config.key]?.fileType === 'binary'"
+              class="binary-file-card"
             >
-              <Button type="primary">下载文件</Button>
-            </a>
-          </div>
+              <Icon icon="mdi:file-document-outline" class="file-card-icon" />
+              <div class="file-card-info">
+                <div class="file-card-name">{{ fileDataMap[config.key]?.fileName }}</div>
+                <div class="file-card-hint">该文件为特殊格式（如 RDS、H5AD），无法在线预览</div>
+              </div>
+              <a
+                v-if="fileDataMap[config.key]?.fileUrl"
+                :href="fileDataMap[config.key]?.fileUrl"
+                download
+              >
+                <Button type="primary">下载文件</Button>
+              </a>
+            </div>
 
-          <!-- 表格文件：电子表格 -->
-          <SpreadsheetPreview
-            v-else-if="activeTab === config.key"
-            :ref="
-              (el: any) => {
-                if (el) spreadsheetRefs[config.key] = el;
-              }
-            "
-            :data="fileDataMap[config.key]?.data ?? []"
-            :show-toolbar="true"
-            @change="(data: string[][]) => handleDataChange(config.key, data)"
-          />
-        </template>
+            <!-- 表格文件：电子表格 -->
+            <SpreadsheetPreview
+              v-else-if="activeTab === config.key"
+              :ref="
+                (el: any) => {
+                  if (el) spreadsheetRefs[config.key] = el;
+                }
+              "
+              :data="fileDataMap[config.key]?.data ?? []"
+              :show-toolbar="true"
+              @change="(data: string[][]) => handleDataChange(config.key, data)"
+            />
+          </template>
+        </Spin>
       </div>
     </template>
 
