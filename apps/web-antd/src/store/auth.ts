@@ -5,7 +5,6 @@ import type { CaptchaResult, LoginParams, MyUserInfo } from '#/api';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { LOGIN_PATH } from '@vben/constants';
 import { preferences } from '@vben/preferences';
 import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
 
@@ -118,7 +117,7 @@ export const useAuthStore = defineStore('auth', () => {
     return false;
   }
 
-  async function logout(redirect: boolean = true) {
+  async function logout(_redirect: boolean = true) {
     try {
       await logoutApi();
     } catch {
@@ -127,14 +126,9 @@ export const useAuthStore = defineStore('auth', () => {
     resetAllStores();
     accessStore.setLoginExpired(false);
 
-    // 回登录页带上当前路由地址
+    // 回首页
     await router.replace({
-      path: LOGIN_PATH,
-      query: redirect
-        ? {
-            redirect: encodeURIComponent(router.currentRoute.value.fullPath),
-          }
-        : {},
+      path: '/index',
     });
   }
 

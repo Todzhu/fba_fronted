@@ -292,7 +292,7 @@ catalogs:
       specifier: ^4.3.2
       version: 4.3.2
     lucide-vue-next:
-      specifier: ^0.507.0
+      specifier: 0.507.0
       version: 0.507.0
     nitropack:
       specifier: ^2.11.13
@@ -643,6 +643,9 @@ importers:
       dayjs:
         specifier: 'catalog:'
         version: 1.11.19
+      lucide-vue-next:
+        specifier: 'catalog:'
+        version: 0.507.0(vue@3.5.24(typescript@5.9.3))
       mitt:
         specifier: ^3.0.1
         version: 3.0.1

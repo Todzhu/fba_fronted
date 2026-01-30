@@ -6,11 +6,11 @@ const routes: RouteRecordRaw[] = [
     meta: {
       hideInMenu: true,
       ignoreAccess: true,
-      title: '工具广场',
+      title: 'BioCloud - 多组学生信分析云平台',
     },
     name: 'LandingPage',
     path: '/index',
-    alias: ['/landing', '/plaza'],
+    alias: ['/landing', '/home'],
   },
 ];
 

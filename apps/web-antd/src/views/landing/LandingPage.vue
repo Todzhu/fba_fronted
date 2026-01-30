@@ -1,641 +1,707 @@
 <script setup lang="ts">
-import type { AnalysisTool } from '#/api';
-
-import { computed, onMounted, ref, watch } from 'vue';
+/**
+ * BioCloud Landing Page - 故事叙述型
+ * 路由: /index
+ * 设计: 痛点共鸣 → 解决方案 → 工具展示 → 信任背书
+ */
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import {
   Activity,
-  ArrowUpDown,
-  Bot,
-  Box,
-  ChevronLeft,
+  BarChart3,
+  CheckCircle,
   ChevronRight,
   Clock,
-  Dna,
-  Eye,
+  Database,
   FileText,
-  Filter,
-  Flame,
-  Globe,
-  Heart,
+  FlaskConical,
   Layers,
-  LockOpen,
-  LogIn,
-  Moon,
+  LineChart,
+  PieChart,
+  RefreshCw,
   Search,
-  XCircle,
+  Share2,
+  Sparkles,
+  Users,
+  Zap,
 } from 'lucide-vue-next';
 
-import { fetchAnalysisToolCategories, fetchAnalysisToolList } from '#/api';
+import AuthModal from './components/AuthModal.vue';
 
-// Router is provided by Vue Router
+const router = useRouter();
+const showAuthModal = ref(false);
 
-// Loading State
-const loading = ref(false);
+// Mock 数据 - 热门工具
+const popularTools = ref([
+  {
+    id: 1,
+    name: 'ROE 富集分析',
+    description: '计算基因集的观察/期望比值',
+    category: 'Bulk RNA',
+    icon: BarChart3,
+    uses: 1234,
+    image:
+      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=250&fit=crop',
+  },
+  {
+    id: 2,
+    name: '火山图',
+    description: '差异表达基因可视化',
+    category: 'Bulk RNA',
+    icon: LineChart,
+    uses: 3567,
+    image:
+      'https://images.unsplash.com/photo-1576086213369-97a306d36557?w=400&h=250&fit=crop',
+  },
+  {
+    id: 3,
+    name: 'PCA 降维',
+    description: '主成分分析与可视化',
+    category: 'scRNA-seq',
+    icon: Layers,
+    uses: 2890,
+    image:
+      'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=400&h=250&fit=crop',
+  },
+  {
+    id: 4,
+    name: '热图绑制',
+    description: '表达量热图聚类可视化',
+    category: '可视化',
+    icon: Database,
+    uses: 4521,
+    image:
+      'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?w=400&h=250&fit=crop',
+  },
+  {
+    id: 5,
+    name: 'KEGG/GO 通路',
+    description: '深入解析基因功能通路与生物学意义',
+    category: 'Enrichment',
+    icon: BarChart3,
+    uses: 2100,
+    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71',
+  },
+  {
+    id: 6,
+    name: '生存分析',
+    description: '临床预后评估与生存曲线绘制 (KM-Plot)',
+    category: 'Clinical',
+    icon: Activity,
+    uses: 1890,
+    image: 'https://images.unsplash.com/photo-1576086213369-97a306d36557',
+  },
+  {
+    id: 7,
+    name: 'Venn 韦恩图',
+    description: '多组数据交集与差异可视化',
+    category: 'Basic',
+    icon: PieChart,
+    uses: 5600,
+    image: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9',
+  },
+  {
+    id: 8,
+    name: '互作网络',
+    description: '探索关键基因与蛋白相互作用关系 (PPI)',
+    category: 'Network',
+    icon: Share2,
+    uses: 3200,
+    image: 'https://images.unsplash.com/photo-1529810314902-366916060c2c',
+  },
+]);
 
-// Search & Filter State
+// Mock 数据 - KPI 统计
+const stats = ref([
+  { label: '分析工具', value: '50+', icon: FlaskConical },
+  { label: '注册用户', value: '1,000+', icon: Users },
+  { label: '分析任务', value: '10,000+', icon: FileText },
+  { label: '平均响应', value: '<30s', icon: Clock },
+]);
+
+// Mock 数据 - 用户痛点
+const painPoints = ref([
+  { icon: '🖥️', text: '命令行太复杂，学习成本高' },
+  { icon: '🔄', text: '参数调了几十遍，结果还是不对' },
+  { icon: '📁', text: '数据文件乱放，找不到上次的分析结果' },
+  { icon: '🔍', text: '分析结果不可重现，无法追溯参数' },
+]);
+
+// Mock 数据 - 解决方案
+const solutions = ref([
+  {
+    icon: Zap,
+    title: '云工具',
+    description: '50+ 专业分析工具，可视化配置，即时出结果',
+    color: 'from-blue-500 to-blue-600',
+  },
+  {
+    icon: Layers,
+    title: '云流程',
+    description: 'scRNA-seq 12步完整流程，每步可调参，状态可追溯',
+    color: 'from-orange-500 to-orange-600',
+  },
+  {
+    icon: Database,
+    title: '数据管理',
+    description: '个人云盘 + 项目关联，数据归档井井有条',
+    color: 'from-emerald-500 to-emerald-600',
+  },
+  {
+    icon: RefreshCw,
+    title: '任务追溯',
+    description: '参数快照、一键重跑、结果对比，完整可复现',
+    color: 'from-purple-500 to-purple-600',
+  },
+]);
+
+// Mock 数据 - 组学分类
+const omicsCategories = ref([
+  { name: 'Bulk RNA-seq', count: 18, color: 'bg-blue-100 text-blue-700' },
+  { name: 'scRNA-seq', count: 15, color: 'bg-orange-100 text-orange-700' },
+  { name: '蛋白组学', count: 8, color: 'bg-emerald-100 text-emerald-700' },
+  { name: '代谢组学', count: 6, color: 'bg-purple-100 text-purple-700' },
+  { name: '可视化', count: 12, color: 'bg-pink-100 text-pink-700' },
+]);
+
+// 搜索
 const searchQuery = ref('');
-const activeCategory = ref('');
 
-// Data from API
-const tools = ref<AnalysisTool[]>([]);
-const categoryList = ref<string[]>([]);
-const totalCount = ref(0);
-
-// Pagination
-const currentPage = ref(1);
-const pageSize = 9;
-
-const totalPages = computed(() => Math.ceil(totalCount.value / pageSize));
-
-const displayPages = computed(() => {
-  const pages: number[] = [];
-  const maxDisplay = 5;
-  let start = Math.max(1, currentPage.value - Math.floor(maxDisplay / 2));
-  const end = Math.min(totalPages.value, start + maxDisplay - 1);
-
-  if (end - start + 1 < maxDisplay) {
-    start = Math.max(1, end - maxDisplay + 1);
-  }
-
-  for (let i = start; i <= end; i++) {
-    pages.push(i);
-  }
-  return pages;
-});
-
-// Category Icon Mapping
-const getCategoryIcon = (category: string) => {
-  const iconMap: Record<string, any> = {
-    组学通用: Box,
-    单细胞转录组: Activity,
-    蛋白组学: Layers,
-    其他: FileText,
-    Genomics: Dna,
-    Transcriptomics: Activity,
-    Proteomics: Layers,
-  };
-  return iconMap[category] || Box;
-};
-
-// Default Images by Category
-const getDefaultImage = (category?: string) => {
-  const imageMap: Record<string, string> = {
-    组学通用:
-      'https://images.unsplash.com/photo-1576086213369-97a306d36557?q=80&w=800&auto=format&fit=crop',
-    单细胞转录组:
-      'https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=800&auto=format&fit=crop',
-    蛋白组学:
-      'https://images.unsplash.com/photo-1532094349884-543bc11b234d?q=80&w=800&auto=format&fit=crop',
-    其他: 'https://images.unsplash.com/photo-1530026405186-ed1f139313f8?q=80&w=800&auto=format&fit=crop',
-  };
-  return (
-    imageMap[category || ''] ||
-    'https://images.unsplash.com/photo-1576086213369-97a306d36557?q=80&w=800&auto=format&fit=crop'
-  );
-};
-
-// Format Date
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-};
-
-// Fetch Tools from API
-const loadTools = async () => {
-  loading.value = true;
-  try {
-    const response = await fetchAnalysisToolList({
-      page: currentPage.value,
-      page_size: pageSize,
-      category: activeCategory.value || undefined,
-      search: searchQuery.value || undefined,
-    });
-
-    // requestClient 已通过 responseReturn:'data' 解包响应
-    // 所以 response 直接就是 { items: [...], total: number }
-    if (response && response.items) {
-      tools.value = response.items;
-      totalCount.value = response.total || 0;
-      // Tools loaded successfully
-    } else {
-      console.warn('Unexpected response format:', response);
-      tools.value = [];
-      totalCount.value = 0;
-    }
-  } catch (error) {
-    console.error('Failed to load tools:', error);
-    tools.value = [];
-    totalCount.value = 0;
-  } finally {
-    loading.value = false;
-  }
-};
-
-// Fetch Categories from API
-const loadCategories = async () => {
-  try {
-    const response = await fetchAnalysisToolCategories();
-    // requestClient 已通过 responseReturn:'data' 解包响应
-    // 所以 response 直接就是 string[] 分类数组
-    if (response && Array.isArray(response)) {
-      categoryList.value = response;
-      // Categories loaded successfully
-    } else {
-      console.warn('Unexpected categories format:', response);
-      categoryList.value = [];
-    }
-  } catch (error) {
-    console.error('Failed to load categories:', error);
-    categoryList.value = [];
-  }
-};
-
-// Set Category Filter
-const setCategory = (category: string) => {
-  activeCategory.value = category;
-  currentPage.value = 1;
-};
-
-// Handle Search
 const handleSearch = () => {
-  currentPage.value = 1;
-  loadTools();
-};
-
-// Clear Filters
-const clearFilters = () => {
-  searchQuery.value = '';
-  activeCategory.value = '';
-  currentPage.value = 1;
-  loadTools();
-};
-
-// Change Page
-const changePage = (page: number) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (searchQuery.value.trim()) {
+    router.push({ path: '/tools', query: { q: searchQuery.value } });
   }
 };
 
-// Watch for filter/pagination changes
-watch([activeCategory, currentPage], () => {
-  loadTools();
-});
+const goToTools = () => {
+  showAuthModal.value = true;
+};
 
-// Debounce search
-let searchTimeout: ReturnType<typeof setTimeout>;
-watch(searchQuery, () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    currentPage.value = 1;
-    loadTools();
-  }, 300);
-});
+const navItems = [
+  { name: '云工具', href: '/tools', icon: FlaskConical },
+  { name: '云流程', href: '/pipeline', icon: Layers },
+  { name: '我的数据', href: '/data', icon: Database },
+  { name: '我的任务', href: '/tasks', icon: RefreshCw },
+];
 
-// Initial Data Load
-onMounted(() => {
-  loadCategories();
-  loadTools();
-});
+const goToLogin = () => {
+  showAuthModal.value = true;
+};
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 font-sans text-gray-900">
-    <!-- Header -->
-    <header
-      class="sticky top-0 z-50 w-full border-b border-gray-100 bg-white/80 backdrop-blur-md"
-    >
-      <div class="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8">
-        <div class="flex h-16 items-center justify-between">
-          <!-- Logo & Nav -->
-          <div class="flex items-center gap-8">
-            <a href="/" class="group flex items-center gap-2">
-              <div
-                class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-rose-600 text-lg font-bold text-white shadow-sm transition-all group-hover:shadow-md"
-              >
-                B
-              </div>
-              <span
-                class="bg-gradient-to-r from-rose-600 to-rose-500 bg-clip-text text-xl font-bold text-transparent"
-              >
-                BioCloud
-              </span>
-            </a>
-
-            <nav
-              class="ml-8 hidden items-center gap-1 rounded-xl border border-gray-100 bg-gray-100/50 p-1 md:flex"
-            >
-              <a
-                href="/landing"
-                class="flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-bold text-rose-600 shadow-sm ring-1 ring-black/5 transition-all"
-              >
-                <Globe class="h-4 w-4" />
-                工具广场
-              </a>
-              <a
-                href="/dashboard"
-                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:bg-white/50 hover:text-gray-900"
-              >
-                <Bot class="h-4 w-4" />
-                项目管理
-              </a>
-            </nav>
+  <div class="min-h-screen bg-slate-50 font-sans text-slate-900">
+    <!-- 导航栏 (悬浮设计) -->
+    <header class="fixed inset-x-0 top-6 z-50 mx-auto max-w-6xl px-4">
+      <div
+        class="flex h-16 items-center justify-between rounded-2xl border border-white/40 bg-white/70 px-6 shadow-lg shadow-slate-200/20 backdrop-blur-xl transition-all hover:bg-white/80"
+      >
+        <!-- Logo -->
+        <div
+          class="flex w-[200px] cursor-pointer items-center gap-2"
+          @click="router.push('/')"
+        >
+          <div
+            class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-300"
+          >
+            <div class="font-bold">B</div>
           </div>
+          <span class="text-lg font-bold text-slate-800">BioCloud</span>
+        </div>
 
-          <!-- Right Actions -->
-          <div class="flex items-center gap-4">
-            <button
-              class="rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
-            >
-              <Moon class="h-5 w-5" />
-            </button>
-            <router-link
-              to="/auth/login"
-              class="hidden transform items-center justify-center rounded-full bg-rose-600 px-5 py-2 text-sm font-medium text-white shadow-md transition-all hover:-translate-y-0.5 hover:bg-rose-700 hover:shadow-lg sm:flex"
-            >
-              <LogIn class="mr-2 h-4 w-4" />
-              登录
-            </router-link>
-          </div>
+        <!-- 导航 (居中) -->
+        <nav
+          class="hidden items-center gap-1 rounded-full border border-white/50 bg-slate-100/50 p-1 md:flex"
+        >
+          <a
+            v-for="item in navItems"
+            :key="item.name"
+            :href="item.href"
+            class="flex items-center gap-1.5 rounded-full px-4 py-2 text-base font-bold text-slate-700 transition-all hover:bg-white hover:text-blue-600 hover:shadow-sm"
+          >
+            <component
+              :is="item.icon"
+              class="h-4 w-4 opacity-50 transition-opacity group-hover:opacity-100"
+            />
+            {{ item.name }}
+          </a>
+        </nav>
+
+        <!-- 右侧操作区 -->
+        <div class="flex w-[200px] items-center justify-end gap-3">
+          <button
+            @click="goToTools"
+            class="flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-sm font-medium text-white transition-all hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/20 active:scale-95"
+          >
+            <Sparkles class="h-4 w-4 text-blue-300" />
+            <span>开始使用</span>
+          </button>
         </div>
       </div>
     </header>
 
-    <!-- Hero Section (Full Width) -->
-    <div class="w-full border-b border-gray-200 bg-gray-50">
+    <!-- Hero 区域 -->
+    <section class="relative overflow-hidden bg-white pb-32 pt-40">
+      <!-- 网格背景装饰 -->
       <div
-        class="mx-auto max-w-screen-2xl space-y-4 px-4 py-12 text-center sm:px-6 lg:px-8"
+        class="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20"
+      ></div>
+      <div
+        class="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]"
+      ></div>
+
+      <!-- 渐变光晕 -->
+      <div
+        class="pointer-events-none absolute left-1/2 top-0 h-[500px] w-full max-w-[1000px] -translate-x-1/2 opacity-30"
       >
-        <h1
-          class="text-3xl font-extrabold tracking-tight text-gray-900 md:text-4xl"
-        >
-          BioCloud 工具广场
-        </h1>
-        <p class="text-lg text-gray-500">
-          发现优质生物信息分析工具，让科研更高效
-        </p>
-
-        <!-- Search Bar -->
-        <div class="group relative mx-auto mt-8 max-w-2xl">
-          <div
-            class="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-rose-400 to-rose-600 opacity-20 blur transition duration-500 group-hover:opacity-40"
-          ></div>
-          <div
-            class="relative flex items-center rounded-xl bg-white p-2 shadow-sm"
-          >
-            <Search class="ml-3 h-6 w-6 text-gray-400" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="搜索感兴趣的生信工具..."
-              class="h-12 w-full border-none bg-transparent pl-4 pr-10 text-lg text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-0"
-              @keyup.enter="handleSearch"
-            />
-            <button
-              v-if="searchQuery"
-              @click="clearFilters"
-              class="absolute right-3 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            >
-              <XCircle class="h-5 w-5" />
-            </button>
-          </div>
-        </div>
+        <div
+          class="animate-blob absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-indigo-500 mix-blend-multiply blur-[100px]"
+        ></div>
       </div>
-    </div>
 
-    <!-- Main Content -->
-    <main class="mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
-      <div class="flex flex-col items-start gap-8 lg:flex-row">
-        <!-- Sidebar Filters -->
-        <aside class="sticky top-24 w-full flex-shrink-0 space-y-8 lg:w-64">
-          <!-- Filter Group -->
-          <div>
-            <div class="mb-4 flex items-center gap-2 font-bold text-gray-900">
-              <Filter class="h-4 w-4 text-rose-500" />
-              <span>筛选条件</span>
-            </div>
-
-            <div class="space-y-1">
-              <button
-                class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-all duration-200"
-                :class="
-                  activeCategory === ''
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                "
-                @click="setCategory('')"
-              >
-                <Box
-                  class="h-4 w-4"
-                  :class="
-                    activeCategory === '' ? 'text-white' : 'text-gray-400'
-                  "
-                />
-                全部工具
-              </button>
-              <button
-                v-for="cat in categoryList"
-                :key="cat"
-                class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm transition-all duration-200"
-                :class="
-                  activeCategory === cat
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                "
-                @click="setCategory(cat)"
-              >
-                <component
-                  :is="getCategoryIcon(cat)"
-                  class="h-4 w-4"
-                  :class="
-                    activeCategory === cat ? 'text-white' : 'text-gray-400'
-                  "
-                />
-                {{ cat }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Sort Group -->
-          <div>
-            <div class="mb-4 flex items-center gap-2 font-bold text-gray-900">
-              <ArrowUpDown class="h-4 w-4 text-rose-500" />
-              <span>排序方式</span>
-            </div>
-            <div class="space-y-1">
-              <button
-                class="flex w-full items-center gap-3 rounded-lg bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-600"
-              >
-                <Clock class="h-4 w-4" />
-                最新发布
-              </button>
-              <button
-                class="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100"
-              >
-                <Flame class="h-4 w-4 text-gray-400" />
-                最热门
-              </button>
-            </div>
-          </div>
-
-          <!-- Ad Placeholder -->
+      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="text-center">
+          <!-- 标语 -->
           <div
-            class="flex h-48 flex-col items-center justify-center rounded-xl border border-dashed border-gray-300 bg-gray-100 text-xs text-gray-400"
+            class="animate-fade-in-up mb-8 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50/50 px-4 py-1.5 text-sm font-medium text-blue-600 backdrop-blur-sm"
           >
-            <span>广告位招租</span>
+            <Sparkles class="h-4 w-4" />
+            <span>让生信分析像点外卖一样简单</span>
           </div>
-        </aside>
 
-        <!-- Main Grid -->
-        <div class="w-full flex-1">
-          <!-- Loading State -->
+          <!-- 主标题 -->
+          <h1
+            class="animate-fade-in-up mb-6 text-3xl font-extrabold tracking-tight text-slate-900 md:text-5xl"
+            style="animation-delay: 0.1s"
+          >
+            释放多组学数据的
+            <span class="relative inline-block">
+              <span
+                class="relative z-10 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"
+                >无限潜能</span
+              >
+              <span
+                class="absolute -bottom-2 left-0 h-3 w-full -rotate-1 bg-blue-200/50 blur-sm"
+              ></span>
+            </span>
+          </h1>
+
+          <!-- 副标题 -->
+          <p
+            class="animate-fade-in-up mx-auto mb-10 max-w-2xl text-base text-slate-600 md:text-lg"
+            style="animation-delay: 0.2s"
+          >
+            BioCloud 为科研人员打造的一站式分析云平台。<br />
+            无需编程基础，<span class="font-bold text-slate-900"
+              >可视化配置</span
+            >，即时获取高质量出版级图表。
+          </p>
+
+          <!-- 搜索框区域 -->
           <div
-            v-if="loading"
-            class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+            class="animate-fade-in-up mx-auto mb-12 max-w-3xl"
+            style="animation-delay: 0.3s"
           >
             <div
-              v-for="i in 6"
-              :key="i"
-              class="overflow-hidden rounded-xl border border-gray-100 bg-white"
+              class="relative flex items-center rounded-2xl bg-white p-1 shadow-xl shadow-blue-900/5 ring-1 ring-slate-200 transition-all hover:shadow-2xl hover:shadow-blue-900/10 hover:ring-blue-200"
             >
-              <div class="h-40 animate-pulse bg-gray-200"></div>
-              <div class="space-y-3 p-5">
-                <div class="h-5 w-3/4 animate-pulse rounded bg-gray-200"></div>
-                <div class="h-4 animate-pulse rounded bg-gray-100"></div>
-                <div class="h-4 w-2/3 animate-pulse rounded bg-gray-100"></div>
-              </div>
-            </div>
-          </div>
-
-          <div v-else-if="tools.length > 0">
-            <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
               <div
-                v-for="tool in tools"
-                :key="tool.id"
-                class="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-100 bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+                class="flex h-12 w-12 items-center justify-center text-slate-400"
               >
-                <!-- Cover Image -->
-                <div class="relative h-40 w-full overflow-hidden">
-                  <div
-                    class="absolute inset-0 animate-pulse bg-gray-200"
-                    v-if="!tool.image_url"
-                  ></div>
-                  <img
-                    :src="tool.image_url || getDefaultImage(tool.category)"
-                    alt="cover"
-                    class="h-full w-full transform object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <!-- Overlay Gradient -->
-                  <div
-                    class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
-                  ></div>
-                </div>
-
-                <!-- Content Container -->
-                <div class="flex flex-1 flex-col p-5">
-                  <!-- Header: Title & Badges -->
-                  <div class="mb-3 flex items-start justify-between">
-                    <h3
-                      class="line-clamp-1 flex-1 pr-2 text-lg font-bold text-gray-900 transition-colors group-hover:text-rose-600"
-                    >
-                      {{ tool.name }}
-                    </h3>
-                    <div class="flex flex-shrink-0 items-center gap-2">
-                      <span
-                        class="inline-flex items-center rounded bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-600"
-                      >
-                        <LockOpen class="mr-1 h-3 w-3" />
-                        免费
-                      </span>
-                      <span
-                        class="flex inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500"
-                      >
-                        <Heart class="h-3 w-3" /> {{ tool.likes }}
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Tags -->
-                  <div class="mb-3 flex flex-wrap gap-2">
-                    <span
-                      v-if="tool.category"
-                      class="rounded-md bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-600"
-                    >
-                      {{ tool.category }}
-                    </span>
-                    <span
-                      v-if="tool.type"
-                      class="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600"
-                    >
-                      {{ tool.type }}
-                    </span>
-                  </div>
-
-                  <!-- Description -->
-                  <p
-                    class="mb-4 line-clamp-2 flex-1 text-sm leading-relaxed text-gray-500"
-                  >
-                    {{ tool.description }}
-                  </p>
-
-                  <!-- Footer -->
-                  <div
-                    class="mt-auto flex items-center justify-between border-t border-gray-50 pt-4"
-                  >
-                    <div class="flex items-center gap-2">
-                      <Eye class="h-4 w-4 text-gray-400" />
-                      <span class="text-xs text-gray-500"
-                        >{{ tool.views }} 次浏览</span
-                      >
-                    </div>
-                    <span class="text-xs text-gray-400">{{
-                      formatDate(tool.created_time)
-                    }}</span>
-                  </div>
-                </div>
+                <Search class="h-5 w-5" />
               </div>
-            </div>
-
-            <!-- Pagination -->
-            <div class="mt-12 flex justify-center" v-if="totalPages > 1">
-              <nav class="flex items-center gap-2">
-                <button
-                  @click="changePage(currentPage - 1)"
-                  :disabled="currentPage === 1"
-                  class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <ChevronLeft class="h-5 w-5" />
-                </button>
-
-                <button
-                  v-for="page in displayPages"
-                  :key="page"
-                  @click="changePage(page)"
-                  class="flex h-10 w-10 items-center justify-center rounded-lg font-medium transition-all duration-200"
-                  :class="
-                    currentPage === page
-                      ? 'bg-rose-600 text-white shadow-md shadow-rose-200'
-                      : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
-                  "
-                >
-                  {{ page }}
-                </button>
-
-                <button
-                  @click="changePage(currentPage + 1)"
-                  :disabled="currentPage === totalPages"
-                  class="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition-colors hover:border-gray-300 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <ChevronRight class="h-5 w-5" />
-                </button>
-              </nav>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="试试搜索：ROE分析、单细胞聚类、火山图..."
+                class="flex-1 bg-transparent text-base text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                @keyup.enter="handleSearch"
+              />
+              <button
+                @click="handleSearch"
+                class="rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition-all hover:bg-blue-700 hover:shadow-blue-600/40 active:scale-95"
+              >
+                搜索
+              </button>
             </div>
           </div>
 
-          <!-- Empty State -->
+          <!-- 辅助链接 -->
           <div
-            v-else
-            class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white py-20"
+            class="flex items-center justify-center gap-8 text-sm font-medium text-slate-500"
           >
-            <div
-              class="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gray-50"
-            >
-              <Search class="h-10 w-10 text-gray-300" />
-            </div>
-            <h3 class="mb-2 text-lg font-bold text-gray-900">未找到相关工具</h3>
-            <p class="max-w-sm text-center text-gray-500">
-              我们找不到与 "{{ searchQuery }}"
-              相关的任何工具。请尝试使用不同的关键词或清除筛选条件。
-            </p>
-            <button
-              @click="clearFilters"
-              class="mt-6 rounded-lg border border-gray-300 bg-white px-6 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              清除筛选
-            </button>
+            <span class="flex items-center gap-2">
+              <CheckCircle class="h-4 w-4 text-emerald-500" />
+              免费开始
+            </span>
+            <span class="flex items-center gap-2">
+              <CheckCircle class="h-4 w-4 text-emerald-500" />
+              无需代码
+            </span>
+            <span class="flex items-center gap-2">
+              <CheckCircle class="h-4 w-4 text-emerald-500" />
+              云端存储
+            </span>
           </div>
         </div>
       </div>
-    </main>
+    </section>
 
-    <!-- Footer -->
-    <footer
-      class="mt-12 border-t border-gray-100 bg-white py-12 text-sm text-gray-600"
-    >
+    <!-- 热门工具 (向上重叠) -->
+    <section class="relative z-10 -mt-20 pb-20">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="mb-8 grid grid-cols-1 gap-8 md:grid-cols-4">
-          <div class="col-span-1 md:col-span-2">
+        <!-- 工具网格 -->
+        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div
+            v-for="tool in popularTools"
+            :key="tool.id"
+            class="group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg transition-all hover:-translate-y-1 hover:shadow-xl"
+          >
+            <!-- 预览图 -->
+            <div class="relative h-40 overflow-hidden">
+              <img
+                :src="tool.image"
+                :alt="tool.name"
+                class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
+              ></div>
+            </div>
+            <!-- 内容 -->
+            <div class="p-5">
+              <div class="mb-2 flex items-center justify-between">
+                <h3 class="font-bold text-slate-900 group-hover:text-blue-600">
+                  {{ tool.name }}
+                </h3>
+                <span
+                  class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500"
+                >
+                  {{ tool.uses }} 次
+                </span>
+              </div>
+              <p class="mb-3 text-sm text-slate-500">{{ tool.description }}</p>
+              <div class="flex items-center justify-between">
+                <span
+                  class="inline-block rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-600"
+                >
+                  {{ tool.category }}
+                </span>
+                <ChevronRight
+                  class="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-1"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 查看全部链接 -->
+        <div class="mt-8 text-center">
+          <button
+            @click="goToTools"
+            class="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-blue-600"
+          >
+            查看目前已有 {{ stats[0]?.value }} 款工具
+            <ChevronRight class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 数据亮点 -->
+    <section class="border-y border-slate-200 bg-white py-12">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-2 gap-8 md:grid-cols-4">
+          <div v-for="stat in stats" :key="stat.label" class="text-center">
+            <div
+              class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50"
+            >
+              <component :is="stat.icon" class="h-6 w-6 text-blue-600" />
+            </div>
+            <div class="text-3xl font-bold text-slate-900">
+              {{ stat.value }}
+            </div>
+            <div class="text-sm text-slate-500">{{ stat.label }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 痛点区域 -->
+    <section class="bg-slate-50 py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="text-center">
+          <h2 class="mb-4 text-3xl font-bold text-slate-900">
+            你是否遇到这些问题？
+          </h2>
+          <p class="mb-12 text-slate-500">传统生信分析的常见痛点</p>
+        </div>
+
+        <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div
+            v-for="pain in painPoints"
+            :key="pain.text"
+            class="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-6 transition-all hover:border-red-200 hover:shadow-md"
+          >
+            <span class="text-2xl">{{ pain.icon }}</span>
+            <p class="text-slate-600">{{ pain.text }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 解决方案 -->
+    <section class="bg-slate-900 py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="text-center">
+          <h2 class="mb-4 text-3xl font-bold text-white">我们如何帮你解决</h2>
+          <p class="mb-12 text-slate-400">四大核心功能，覆盖完整分析流程</p>
+        </div>
+
+        <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+          <div
+            v-for="solution in solutions"
+            :key="solution.title"
+            class="group cursor-pointer rounded-2xl border border-slate-700 bg-slate-800/50 p-8 transition-all hover:border-slate-600 hover:bg-slate-800"
+          >
+            <div
+              :class="`mb-6 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br ${solution.color}`"
+            >
+              <component :is="solution.icon" class="h-7 w-7 text-white" />
+            </div>
+            <h3 class="mb-3 text-xl font-bold text-white">
+              {{ solution.title }}
+            </h3>
+            <p class="text-slate-400">{{ solution.description }}</p>
+            <div
+              class="mt-4 flex items-center gap-1 text-sm text-blue-400 opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              了解更多
+              <ChevronRight class="h-4 w-4" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 组学分类入口 -->
+    <section class="py-20">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="mb-8 text-center">
+          <h2 class="text-2xl font-bold text-slate-900">探索更多领域</h2>
+        </div>
+        <div class="flex flex-wrap justify-center gap-3">
+          <button
+            v-for="cat in omicsCategories"
+            :key="cat.name"
+            :class="`cursor-pointer rounded-full px-6 py-3 text-base font-medium transition-all hover:shadow-md ${cat.color}`"
+          >
+            {{ cat.name }} ({{ cat.count }})
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA 区域 -->
+    <section class="bg-white py-12 sm:py-24">
+      <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+        <div
+          class="relative isolate overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-slate-50 to-blue-50 px-6 py-16 text-center shadow-2xl shadow-blue-900/5 ring-1 ring-slate-200 sm:px-16"
+        >
+          <h2
+            class="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-slate-900 md:text-4xl"
+          >
+            准备好挖掘数据价值了吗？<br />
+            <span class="text-blue-600">BioCloud</span> 助您一臂之力。
+          </h2>
+          <p class="mx-auto mt-6 max-w-xl text-lg leading-8 text-slate-600">
+            无需繁琐的环境配置，无需昂贵的硬件投入。<br />
+            注册即送 100 积分，免费体验所有基础分析流程。
+          </p>
+          <div class="mt-10 flex items-center justify-center gap-x-6">
+            <button
+              @click="goToTools"
+              class="rounded-xl bg-blue-600 px-8 py-3.5 text-base font-semibold text-white shadow-lg shadow-blue-600/30 transition-all hover:-translate-y-0.5 hover:bg-blue-700 hover:shadow-blue-600/40 active:scale-95"
+            >
+              免费开始使用
+            </button>
+            <button
+              @click="goToLogin"
+              class="text-base font-semibold leading-6 text-slate-900 transition-colors hover:text-blue-600"
+            >
+              已有账号？登录 <span aria-hidden="true">→</span>
+            </button>
+          </div>
+
+          <!-- 装饰元素 -->
+          <svg
+            viewBox="0 0 1024 1024"
+            class="absolute left-1/2 top-1/2 -z-10 h-[64rem] w-[64rem] -translate-x-1/2 -translate-y-1/2 [mask-image:radial-gradient(closest-side,white,transparent)]"
+            aria-hidden="true"
+          >
+            <circle
+              cx="512"
+              cy="512"
+              r="512"
+              fill="url(#gradient)"
+              fill-opacity="0.25"
+            />
+            <defs>
+              <radialGradient id="gradient">
+                <stop stop-color="#3B82F6" />
+                <stop offset="1" stop-color="#E935C1" />
+              </radialGradient>
+            </defs>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="border-t border-slate-200 bg-white py-12">
+      <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div class="grid gap-8 md:grid-cols-4">
+          <!-- Logo & 简介 -->
+          <div class="md:col-span-2">
             <div class="mb-4 flex items-center gap-2">
               <div
-                class="flex h-6 w-6 items-center justify-center rounded bg-rose-600 text-xs font-bold text-white"
+                class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-sm font-bold text-white"
               >
                 B
               </div>
-              <span class="text-lg font-bold text-gray-900">BioCloud</span>
+              <span class="text-lg font-bold text-slate-900">BioCloud</span>
             </div>
-            <p class="max-w-xs text-gray-500">
-              专业的生物信息学数据分析云平台，致力于降低生信分析门槛，提供高效、准确、易用的分析工具。
+            <p class="max-w-sm text-sm text-slate-500">
+              专业的多组学生物信息分析云平台，致力于降低生信分析门槛，
+              为科研人员提供高效、准确、易用的分析工具。
             </p>
           </div>
+
+          <!-- 产品 -->
           <div>
-            <h4 class="mb-4 font-bold text-gray-900">产品服务</h4>
-            <ul class="space-y-2">
-              <li><a href="#" class="hover:text-rose-600">工具广场</a></li>
-              <li><a href="#" class="hover:text-rose-600">API 文档</a></li>
-              <li><a href="#" class="hover:text-rose-600">定制开发</a></li>
+            <h4 class="mb-4 font-semibold text-slate-900">产品服务</h4>
+            <ul class="space-y-2 text-sm text-slate-500">
+              <li>
+                <a href="/tools" class="transition-colors hover:text-blue-600"
+                  >云工具</a
+                >
+              </li>
+              <li>
+                <a
+                  href="/pipeline"
+                  class="transition-colors hover:text-blue-600"
+                  >云流程</a
+                >
+              </li>
+              <li>
+                <a href="#" class="transition-colors hover:text-blue-600"
+                  >API 文档</a
+                >
+              </li>
+              <li>
+                <a href="#" class="transition-colors hover:text-blue-600"
+                  >定制开发</a
+                >
+              </li>
             </ul>
           </div>
+
+          <!-- 支持 -->
           <div>
-            <h4 class="mb-4 font-bold text-gray-900">联系我们</h4>
-            <ul class="space-y-2">
-              <li><a href="#" class="hover:text-rose-600">关于我们</a></li>
-              <li><a href="#" class="hover:text-rose-600">技术支持</a></li>
-              <li><a href="#" class="hover:text-rose-600">反馈建议</a></li>
+            <h4 class="mb-4 font-semibold text-slate-900">帮助支持</h4>
+            <ul class="space-y-2 text-sm text-slate-500">
+              <li>
+                <a href="#" class="transition-colors hover:text-blue-600"
+                  >使用教程</a
+                >
+              </li>
+              <li>
+                <a href="#" class="transition-colors hover:text-blue-600"
+                  >常见问题</a
+                >
+              </li>
+              <li>
+                <a href="#" class="transition-colors hover:text-blue-600"
+                  >技术支持</a
+                >
+              </li>
+              <li>
+                <a href="#" class="transition-colors hover:text-blue-600"
+                  >联系我们</a
+                >
+              </li>
             </ul>
           </div>
         </div>
+
+        <!-- 底部版权 -->
         <div
-          class="flex flex-col items-center justify-between gap-4 border-t border-gray-100 pt-8 md:flex-row"
+          class="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-100 pt-8 md:flex-row"
         >
-          <p>&copy; 2026 BioCloud Team. All rights reserved.</p>
-          <div class="flex gap-6">
-            <a href="#" class="hover:text-gray-900">隐私政策</a>
-            <a href="#" class="hover:text-gray-900">服务条款</a>
+          <p class="text-sm text-slate-500">
+            &copy; 2026 BioCloud Team. All rights reserved.
+          </p>
+          <div class="flex gap-6 text-sm text-slate-500">
+            <a href="#" class="transition-colors hover:text-slate-900"
+              >隐私政策</a
+            >
+            <a href="#" class="transition-colors hover:text-slate-900"
+              >服务条款</a
+            >
           </div>
         </div>
       </div>
     </footer>
+
+    <!-- 登录/注册弹窗 -->
+    <AuthModal :is-open="showAuthModal" @close="showAuthModal = false" />
   </div>
 </template>
 
 <style scoped>
-/* Custom Scrollbar for Sidebar */
-aside::-webkit-scrollbar {
-  width: 4px;
+/* Custom Animations */
+@keyframes blob {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(30px, -50px) scale(1.1);
+  }
+
+  66% {
+    transform: translate(-20px, 20px) scale(0.9);
+  }
+
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
 }
 
-aside::-webkit-scrollbar-track {
-  background: transparent;
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-aside::-webkit-scrollbar-thumb {
-  background-color: #f1f5f9;
-  border-radius: 20px;
+html {
+  scroll-behavior: smooth;
 }
 
-aside:hover::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
+.animate-blob {
+  animation: blob 7s infinite;
 }
 
-/* Glassmorphism utilities */
-.backdrop-blur-md {
-  backdrop-filter: blur(12px);
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out forwards;
 }
+
+/* 平滑滚动 */
 </style>
