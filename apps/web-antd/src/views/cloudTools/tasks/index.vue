@@ -476,8 +476,20 @@ onUnmounted(() => {
 }
 
 .task-name {
+  display: inline-flex;
+  max-width: 150px;
   font-weight: 500;
   color: #374151;
+}
+
+.task-name :deep(.ant-typography-edit-content) {
+  max-width: 150px;
+}
+
+.task-name :deep(.ant-typography) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* 日志弹窗样式 */
