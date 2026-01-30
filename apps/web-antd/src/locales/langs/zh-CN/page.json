@@ -99,5 +99,10 @@
       "service": "服务",
       "system": "系统"
     }
+  },
+  "tools": {
+    "title": "云工具广场",
+    "plaza": "工具列表",
+    "detail": "工具详情"
   }
 }
