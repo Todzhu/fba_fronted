@@ -13,6 +13,11 @@ export default defineConfig(async () => {
             target: 'http://localhost:8000',
             ws: true,
           },
+          '/static': {
+            changeOrigin: true,
+            // 静态资源代理到后端
+            target: 'http://localhost:8000',
+          },
         },
       },
     },
