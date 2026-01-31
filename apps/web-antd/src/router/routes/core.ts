@@ -91,6 +91,51 @@ const coreRoutes: RouteRecordRaw[] = [
       },
     ],
   },
+  {
+    component: BasicLayout,
+    meta: {
+      title: 'Analysis',
+    },
+    name: 'AnalysisCore',
+    path: '/analysis',
+    children: [
+      {
+        name: 'AnalysisTools',
+        path: 'tools',
+        component: () => import('#/views/cloudTools/index.vue'),
+        meta: {
+          title: '分析工具',
+        },
+      },
+      {
+        name: 'AnalysisToolDetail',
+        path: 'tool/:id',
+        component: () => import('#/views/cloudTools/detail.vue'),
+        meta: {
+          title: '工具详情',
+          hideInMenu: true,
+        },
+      },
+      {
+        name: 'ScPipeline',
+        path: 'sc-pipeline',
+        component: () => import('#/views/scPipeline/index.vue'),
+        meta: {
+          icon: 'mdi:dna',
+          title: '单细胞分析',
+        },
+      },
+      {
+        name: 'ScPipelineDetail',
+        path: 'sc-pipeline/:id',
+        component: () => import('#/views/scPipeline/detail.vue'),
+        meta: {
+          title: '分析详情',
+          hideInMenu: true,
+        },
+      },
+    ],
+  },
 ];
 
 export { coreRoutes, fallbackNotFoundRoute };

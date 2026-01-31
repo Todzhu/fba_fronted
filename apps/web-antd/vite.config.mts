@@ -5,18 +5,12 @@ export default defineConfig(async () => {
     application: {},
     vite: {
       server: {
+        host: '0.0.0.0',
         proxy: {
-          // 后端 API 代理
-          '/api/v1': {
-            changeOrigin: true,
-            target: 'http://localhost:8000',
-            ws: true,
-          },
-          // Mock 服务代理（保留用于其他 mock 数据）
           '/api': {
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api/, ''),
-            target: 'http://localhost:5320/api',
+            // 真实后端地址
+            target: 'http://localhost:8000',
             ws: true,
           },
         },
@@ -24,3 +18,4 @@ export default defineConfig(async () => {
     },
   };
 });
+

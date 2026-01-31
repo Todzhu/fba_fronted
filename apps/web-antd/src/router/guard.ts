@@ -63,6 +63,7 @@ function setupAccessGuard(router: Router) {
     }
 
     // 基本路由，这些路由不需要进入权限拦截
+    // 但是已登录用户仍需确保菜单已生成
     if (coreRouteNames.includes(to.name as string)) {
       if (to.path === LOGIN_PATH && accessStore.accessToken) {
         return decodeURIComponent(
@@ -71,7 +72,10 @@ function setupAccessGuard(router: Router) {
             preferences.app.defaultHomePath,
         );
       }
-      return true;
+      // 如果已登录但菜单未生成，继续执行后续逻辑生成菜单
+      if (!accessStore.accessToken || accessStore.isAccessChecked) {
+        return true;
+      }
     }
 
     // accessToken 检查
