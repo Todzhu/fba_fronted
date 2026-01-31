@@ -28,14 +28,11 @@ const progressPercent = computed(() => {
 });
 
 // 监听弹窗打开，清空文件列表
-watch(
-  () => props.open,
-  (newVal) => {
-    if (newVal) {
-      fileList.value = [];
-    }
-  },
-);
+watch(() => props.open, (newVal) => {
+  if (newVal) {
+    fileList.value = [];
+  }
+});
 
 const handleChange = (info: UploadChangeParam) => {
   let resFileList = [...info.fileList];
