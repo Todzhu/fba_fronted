@@ -2,15 +2,64 @@ import type { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
   {
-    component: () => import('#/views/landing/LandingPage.vue'),
-    meta: {
-      hideInMenu: true,
-      ignoreAccess: true,
-      title: 'BioCloud - 多组学生信分析云平台',
-    },
-    name: 'LandingPage',
-    path: '/index',
-    alias: ['/landing', '/home'],
+    path: '/',
+    component: () => import('#/layouts/ClientLayout.vue'),
+    redirect: '/index',
+    children: [
+      {
+        path: 'index',
+        name: 'LandingPage',
+        component: () => import('#/views/biocloud/landing/LandingPage.vue'),
+        alias: ['/', '/home'],
+        meta: {
+          title: 'BioCloud - 多组学生信分析云平台',
+          ignoreAccess: true,
+        },
+      },
+      {
+        path: 'tools',
+        name: 'CloudTools',
+        component: () => import('#/views/biocloud/cloudTools/CloudTools.vue'),
+        meta: {
+          title: '云工具广场 - BioCloud',
+          ignoreAccess: true, // Allow browsing without login
+        },
+      },
+      // Placeholder routes for future implementation
+      {
+        path: 'tool/:id',
+        name: 'ToolUsage',
+        component: () =>
+          import('#/views/biocloud/cloudTools/ToolUsagePage.vue'),
+        meta: {
+          title: '工具使用 - BioCloud',
+          ignoreAccess: true,
+        },
+      },
+      {
+        path: 'data',
+        name: 'MyData',
+        component: () => import('#/views/biocloud/data/MyData.vue'),
+        meta: {
+          title: '我的数据 - BioCloud',
+          ignoreAccess: true,
+        },
+      },
+      /*
+      {
+         path: 'tasks',
+         name: 'MyTasks',
+         component: () => import('#/views/tasks/MyTasks.vue'),
+         meta: { title: '我的任务' }
+      },
+      {
+         path: 'pipeline',
+         name: 'CloudFlow',
+         component: () => import('#/views/pipeline/CloudFlow.vue'),
+         meta: { title: '云流程' }
+      }
+      */
+    ],
   },
 ];
 

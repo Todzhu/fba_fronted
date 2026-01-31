@@ -18,7 +18,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ToolsIndex',
         path: '', // defaults to /tools
-        component: () => import('#/views/tools/index.vue'),
+        component: () => import('#/views/biocloud/cloudTools/index.vue'),
         meta: {
           title: $t('page.tools.plaza'), // Cloud Tools Plaza
           icon: 'lucide:grid',
@@ -27,7 +27,7 @@ const routes: RouteRecordRaw[] = [
       {
         name: 'ToolDetail',
         path: ':id',
-        component: () => import('#/views/tools/detail.vue'), // Placeholder for now
+        component: () => import('#/views/biocloud/cloudTools/detail.vue'), // Placeholder for now
         meta: {
           hideInMenu: true,
           title: $t('page.tools.detail'),
