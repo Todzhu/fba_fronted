@@ -548,7 +548,7 @@ onUnmounted(() => {
   font-size: 13px;
   line-height: 1.6;
   color: #dc2626;
-  word-break: break-word;
+  overflow-wrap: break-word;
   white-space: pre-wrap;
   background: #fef2f2;
   border: 1px solid #fecaca;

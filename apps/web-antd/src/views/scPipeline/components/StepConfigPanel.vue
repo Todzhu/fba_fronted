@@ -29,7 +29,7 @@ const emit = defineEmits<{
   (e: 'update:params', params: Record<string, unknown>): void;
   (e: 'update:samples', samples: SampleInfo[]): void;
   (e: 'run'): void;
-  (e: 'show-history'): void;
+  (e: 'showHistory'): void;
 }>();
 
 // 是否为数据读取步骤
@@ -134,7 +134,7 @@ const statusConfig = computed(() => {
           v-if="historyCount && historyCount > 0"
           type="link"
           size="small"
-          @click="$emit('show-history')"
+          @click="$emit('showHistory')"
         >
           <Icon icon="mdi:history" />
           历史 ({{ historyCount }})

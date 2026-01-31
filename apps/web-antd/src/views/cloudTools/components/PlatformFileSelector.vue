@@ -200,12 +200,10 @@ const handleSelectionChange = (selection: FileItem[]) => {
   // 单选逻辑：始终只保留最后一个选中的文件（如果是多选的话）
   // 注意：FileTable 是全选/多选逻辑，这里简单处理：取最后一个非文件夹的项
   const fileSelection = selection.filter((f) => f.type === 'file');
-  if (fileSelection.length > 1) {
-    // 这里其实无法控制 Table 的选中状态显示（因为它内部维护了 key），但我们可以只认最后一个
-    selectedFiles.value = [fileSelection[fileSelection.length - 1]];
-  } else {
-    selectedFiles.value = fileSelection;
-  }
+  selectedFiles.value =
+    fileSelection.length > 1
+      ? [fileSelection[fileSelection.length - 1]]
+      : fileSelection;
 };
 
 const handleOk = () => {

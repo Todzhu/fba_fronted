@@ -98,7 +98,7 @@ function transformMessage(msg: any): NotificationItem {
 async function loadMessages() {
   try {
     const res = await getMessageList({ page: 1, size: 20 });
-    notifications.value = res.items.map(transformMessage);
+    notifications.value = res.items.map((msg) => transformMessage(msg));
   } catch {
     // 加载失败时保持空列表
   }
@@ -110,9 +110,9 @@ async function loadAllMessages(page = 1) {
   try {
     const res = await getMessageList({ page, size: 50 });
     if (page === 1) {
-      allMessages.value = res.items.map(transformMessage);
+      allMessages.value = res.items.map((msg) => transformMessage(msg));
     } else {
-      allMessages.value.push(...res.items.map(transformMessage));
+      allMessages.value.push(...res.items.map((msg) => transformMessage(msg)));
     }
     allMessagesTotal.value = res.total;
     allMessagesPage.value = page;

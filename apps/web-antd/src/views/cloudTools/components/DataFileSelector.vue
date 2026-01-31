@@ -56,7 +56,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: Record<string, null | number>): void;
   (e: 'nextStep'): void;
-  (e: 'headers-change', headers: Record<string, string[]>): void;
+  (e: 'headersChange', headers: Record<string, string[]>): void;
 }>();
 
 // 文件配置列表 - 优先使用 example_data 生成 Tab，否则使用 input_schema.files
@@ -121,13 +121,9 @@ const allBinaryMode = computed(() => {
     const nameFileName = e.name || '';
     // 两者都检查
     const isBinary = isBinaryFile(urlFileName) || isBinaryFile(nameFileName);
-    console.log(
-      `[allBinaryMode] key=${e.key}, url=${e.url}, name=${e.name}, isBinary=${isBinary}`,
-    );
     return isBinary;
   });
 
-  console.log(`[allBinaryMode] result=${result}`);
   return result;
 });
 
@@ -245,7 +241,6 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.fileType = 'binary';
       fileData.fileUrl = example.url;
       updateFileId(key, Date.now());
-      console.log(`Loaded binary example for ${key}: ${displayName}`);
     } else {
       // 表格文件：解析 CSV/TSV
       const response = await baseRequestClient.get(example.url);
@@ -258,7 +253,6 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.fileType = 'tabular';
       fileData.fileUrl = undefined;
       updateFileId(key, Date.now());
-      console.log(`Loaded example for ${key}:`, data.length, 'rows');
     }
   } catch (error) {
     console.error(`Error loading example for ${key}:`, error);
@@ -396,7 +390,7 @@ const updateFileId = (key: string, fileId: null | number) => {
       }
     }
   }
-  emit('headers-change', allHeaders);
+  emit('headersChange', allHeaders);
 };
 
 // 表格数据变化
@@ -428,13 +422,9 @@ const getFileContents = (): Record<string, string> => {
     const spreadsheetInstance = spreadsheetRefs.value[config.key];
     let data: string[][] = [];
 
-    if (spreadsheetInstance) {
-      // 从表格实例获取当前数据
-      data = spreadsheetInstance.getData() || [];
-    } else {
-      // 回退到缓存数据
-      data = fileDataMap.value[config.key]?.data || [];
-    }
+    data = spreadsheetInstance
+      ? spreadsheetInstance.getData() || []
+      : fileDataMap.value[config.key]?.data || [];
 
     if (data.length > 0) {
       // 将二维数组转换为 tab 分隔的 CSV
