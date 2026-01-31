@@ -396,7 +396,6 @@ const allRequiredInputsFilled = computed(() => {
 
 async function submitAnalysis() {
   if (!allRequiredInputsFilled.value) {
-    // eslint-disable-next-line no-console
     console.warn('请先上传所有必填数据');
     return;
   }
