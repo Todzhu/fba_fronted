@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { FileItem as UserFile } from '#/api/my-data';
+
 // 我的数据页面 - 文件管理
 import { computed, onMounted, ref } from 'vue';
 
@@ -19,9 +21,18 @@ import {
   Upload,
 } from 'lucide-vue-next';
 
+import {
+  batchDeleteMyDataFiles,
+  createMyDataFolder,
+  deleteMyDataFile,
+  getMyDataDownloadUrl,
+  getMyDataFiles,
+  uploadMyDataFile,
+} from '#/api/my-data';
+
 // ========== Types ==========
 interface FileItem {
-  id: string;
+  id: number;
   name: string;
   size: string;
   updateTime: string;
@@ -34,99 +45,123 @@ interface FileItem {
     | 'image'
     | 'other'
     | 'pdf';
-  parentId: null | string;
+  parentId: null | number;
+  rawSize?: number; // 原始字节大小
 }
 
 // ========== State ==========
 const loading = ref(false);
+const loadingText = ref(''); // 加载提示文字
 const searchQuery = ref('');
 const viewMode = ref<'grid' | 'list'>('list');
-const selectedFiles = ref<string[]>([]);
-const currentFolderId = ref<null | string>(null);
-const breadcrumbs = ref<{ id: null | string; name: string }[]>([
+const selectedFiles = ref<number[]>([]);
+const currentFolderId = ref<null | number>(null);
+const breadcrumbs = ref<{ id: null | number; name: string }[]>([
   { id: null, name: '我的数据' },
 ]);
 
-// ========== Mock Data ==========
-const allFiles = ref<FileItem[]>([
-  {
-    id: '1',
-    name: '项目文件',
-    size: '-',
-    updateTime: '2026-01-30 14:30',
-    type: 'folder',
-    parentId: null,
-  },
-  {
-    id: '2',
-    name: '分析结果',
-    size: '-',
-    updateTime: '2026-01-29 10:15',
-    type: 'folder',
-    parentId: null,
-  },
-  {
-    id: '3',
-    name: 'RNA-seq_data.csv',
-    size: '2.5 MB',
-    updateTime: '2026-01-28 16:45',
-    type: 'file',
-    fileType: 'excel',
-    parentId: null,
-  },
-  {
-    id: '4',
-    name: 'sample_info.xlsx',
-    size: '156 KB',
-    updateTime: '2026-01-27 09:30',
-    type: 'file',
-    fileType: 'excel',
-    parentId: null,
-  },
-  {
-    id: '5',
-    name: 'analysis_report.pdf',
-    size: '4.2 MB',
-    updateTime: '2026-01-26 11:20',
-    type: 'file',
-    fileType: 'pdf',
-    parentId: null,
-  },
-  {
-    id: '6',
-    name: 'heatmap_result.png',
-    size: '890 KB',
-    updateTime: '2026-01-25 15:00',
-    type: 'file',
-    fileType: 'image',
-    parentId: null,
-  },
-  {
-    id: '7',
-    name: 'gene_expression.csv',
-    size: '1.8 MB',
-    updateTime: '2026-01-24 08:45',
-    type: 'file',
-    fileType: 'excel',
-    parentId: null,
-  },
-  {
-    id: '8',
-    name: 'README.md',
-    size: '12 KB',
-    updateTime: '2026-01-23 17:30',
-    type: 'file',
-    fileType: 'document',
-    parentId: null,
-  },
-]);
+// 文件列表
+const allFiles = ref<FileItem[]>([]);
+
+// ========== Helpers ==========
+// 格式化文件大小
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '-';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
+};
+
+// 格式化时间
+const formatDateTime = (dateStr: null | string): string => {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+// 获取文件类型
+const getFileType = (
+  mimeType: null | string,
+  name: string,
+): FileItem['fileType'] => {
+  if (!mimeType) {
+    // 根据文件扩展名判断
+    const ext = name.split('.').pop()?.toLowerCase();
+    if (['csv', 'tsv', 'xls', 'xlsx'].includes(ext || '')) return 'excel';
+    if (['bmp', 'gif', 'jpeg', 'jpg', 'png', 'svg', 'webp'].includes(ext || ''))
+      return 'image';
+    if (['pdf'].includes(ext || '')) return 'pdf';
+    if (['doc', 'docx', 'md', 'rtf', 'txt'].includes(ext || ''))
+      return 'document';
+    if (['7z', 'gz', 'rar', 'tar', 'zip'].includes(ext || '')) return 'archive';
+    if (
+      ['c', 'cpp', 'java', 'js', 'py', 'r', 'R', 'sh', 'ts'].includes(ext || '')
+    )
+      return 'code';
+    return 'other';
+  }
+
+  if (
+    mimeType.includes('spreadsheet') ||
+    mimeType.includes('excel') ||
+    mimeType === 'text/csv'
+  ) {
+    return 'excel';
+  }
+  if (mimeType.startsWith('image/')) return 'image';
+  if (mimeType === 'application/pdf') return 'pdf';
+  if (mimeType.startsWith('text/') || mimeType.includes('document'))
+    return 'document';
+  if (mimeType.includes('zip') || mimeType.includes('archive'))
+    return 'archive';
+  return 'other';
+};
+
+// 转换后端数据为前端格式
+const transformFile = (file: UserFile): FileItem => ({
+  id: file.id,
+  name: file.name,
+  size: file.type === 'folder' ? '-' : formatFileSize(file.size),
+  updateTime: formatDateTime(file.updated_time || file.created_time),
+  type: file.type as 'file' | 'folder',
+  fileType:
+    file.type === 'folder' ? undefined : getFileType(file.mime_type, file.name),
+  parentId: file.parent_id,
+  rawSize: file.size,
+});
+
+// ========== API Methods ==========
+const fetchFiles = async () => {
+  loading.value = true;
+  loadingText.value = '正在加载文件列表...';
+  try {
+    const res = await getMyDataFiles({
+      parent_id: currentFolderId.value ?? undefined,
+      keyword: searchQuery.value.trim() || undefined,
+    });
+    allFiles.value = res.items.map((item) => transformFile(item));
+  } catch (error) {
+    console.error('获取文件列表失败:', error);
+    allFiles.value = [];
+  } finally {
+    loading.value = false;
+    loadingText.value = '';
+  }
+};
 
 // ========== Computed ==========
+// API 已在服务端过滤 parent_id，这里只需本地搜索过滤和排序
 const filteredFiles = computed(() => {
-  let files = allFiles.value.filter(
-    (f) => f.parentId === currentFolderId.value,
-  );
+  let files = [...allFiles.value];
 
+  // 如果有搜索词，本地过滤
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase();
     files = files.filter((f) => f.name.toLowerCase().includes(query));
@@ -185,7 +220,7 @@ const getIconColor = (file: FileItem) => {
   }
 };
 
-const toggleSelect = (fileId: string) => {
+const toggleSelect = (fileId: number) => {
   const index = selectedFiles.value.indexOf(fileId);
   if (index === -1) {
     selectedFiles.value.push(fileId);
@@ -206,15 +241,17 @@ const enterFolder = (folder: FileItem) => {
   currentFolderId.value = folder.id;
   breadcrumbs.value.push({ id: folder.id, name: folder.name });
   selectedFiles.value = [];
+  fetchFiles();
 };
 
 const navigateTo = (
-  item: { id: null | string; name: string },
+  item: { id: null | number; name: string },
   index: number,
 ) => {
   currentFolderId.value = item.id;
   breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
   selectedFiles.value = [];
+  fetchFiles();
 };
 
 const goBack = () => {
@@ -224,31 +261,124 @@ const goBack = () => {
   }
 };
 
+// 上传文件
+const fileInputRef = ref<HTMLInputElement | null>(null);
 const handleUpload = () => {
-  // TODO: 实现上传逻辑
+  fileInputRef.value?.click();
 };
+
+const onFileSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const files = input.files;
+  if (!files || files.length === 0) return;
+
+  loading.value = true;
+  loadingText.value = '正在上传文件...';
+  try {
+    for (const file of files) {
+      await uploadMyDataFile(file, currentFolderId.value);
+    }
+    await fetchFiles();
+  } catch (error) {
+    console.error('上传失败:', error);
+  } finally {
+    loading.value = false;
+    loadingText.value = '';
+    input.value = ''; // 重置 input
+  }
+};
+
+// 新建文件夹
+const showNewFolderModal = ref(false);
+const newFolderName = ref('');
 
 const handleNewFolder = () => {
-  // TODO: 实现新建文件夹逻辑
+  newFolderName.value = '';
+  showNewFolderModal.value = true;
 };
 
-const handleDownload = (_file: FileItem) => {
-  // TODO: 实现下载逻辑
+const confirmNewFolder = async () => {
+  if (!newFolderName.value.trim()) return;
+
+  loading.value = true;
+  loadingText.value = '正在创建文件夹...';
+  try {
+    await createMyDataFolder({
+      name: newFolderName.value.trim(),
+      parent_id: currentFolderId.value,
+    });
+    showNewFolderModal.value = false;
+    await fetchFiles();
+  } catch (error) {
+    console.error('创建文件夹失败:', error);
+  } finally {
+    loading.value = false;
+    loadingText.value = '';
+  }
 };
 
-const handleDelete = (_file: FileItem) => {
-  // TODO: 实现删除逻辑
+// 下载文件
+const handleDownload = (file: FileItem) => {
+  if (file.type === 'folder') return;
+  const url = getMyDataDownloadUrl(file.id);
+  window.open(url, '_blank');
 };
 
+// 删除确认弹窗
+const showDeleteModal = ref(false);
+const deleteTarget = ref<null | { file?: FileItem; type: 'batch' | 'single' }>(
+  null,
+);
+
+// 删除文件
+const handleDelete = (file: FileItem) => {
+  deleteTarget.value = { type: 'single', file };
+  showDeleteModal.value = true;
+};
+
+// 批量删除
 const handleBatchDelete = () => {
-  // TODO: 实现批量删除逻辑
+  if (selectedFiles.value.length === 0) return;
+  deleteTarget.value = { type: 'batch' };
+  showDeleteModal.value = true;
 };
+
+// 确认删除
+const confirmDelete = async () => {
+  if (!deleteTarget.value) return;
+
+  loading.value = true;
+  loadingText.value = '正在删除...';
+  showDeleteModal.value = false;
+
+  try {
+    if (deleteTarget.value.type === 'single' && deleteTarget.value.file) {
+      await deleteMyDataFile(deleteTarget.value.file.id);
+    } else if (deleteTarget.value.type === 'batch') {
+      await batchDeleteMyDataFiles(selectedFiles.value);
+      selectedFiles.value = [];
+    }
+    await fetchFiles();
+  } catch (error) {
+    console.error('删除失败:', error);
+  } finally {
+    loading.value = false;
+    loadingText.value = '';
+    deleteTarget.value = null;
+  }
+};
+
+// 获取删除提示文字
+const deleteModalMessage = computed(() => {
+  if (!deleteTarget.value) return '';
+  if (deleteTarget.value.type === 'single' && deleteTarget.value.file) {
+    return `确定要删除"${deleteTarget.value.file.name}"吗？`;
+  }
+  return `确定要删除选中的 ${selectedFiles.value.length} 个项目吗？`;
+});
 
 onMounted(() => {
-  loading.value = true;
-  setTimeout(() => {
-    loading.value = false;
-  }, 500);
+  fetchFiles();
 });
 </script>
 
@@ -378,10 +508,16 @@ onMounted(() => {
     <!-- File List / Grid -->
     <div class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
       <!-- Loading State -->
-      <div v-if="loading" class="flex items-center justify-center py-20">
+      <div
+        v-if="loading"
+        class="flex flex-col items-center justify-center py-20"
+      >
         <div
           class="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"
         ></div>
+        <p v-if="loadingText" class="mt-4 text-sm text-slate-500">
+          {{ loadingText }}
+        </p>
       </div>
 
       <!-- Empty State -->
@@ -539,6 +675,87 @@ onMounted(() => {
               <Trash2 class="h-4 w-4" />
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 隐藏的文件上传 input -->
+    <input
+      ref="fileInputRef"
+      type="file"
+      multiple
+      class="hidden"
+      @change="onFileSelected"
+    />
+
+    <!-- 新建文件夹弹窗 -->
+    <div
+      v-if="showNewFolderModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      @click.self="showNewFolderModal = false"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h3 class="mb-4 text-lg font-semibold text-slate-900">新建文件夹</h3>
+        <input
+          v-model="newFolderName"
+          type="text"
+          placeholder="请输入文件夹名称"
+          class="mb-4 w-full rounded-lg border border-slate-200 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+          @keyup.enter="confirmNewFolder"
+        />
+        <div class="flex justify-end gap-3">
+          <button
+            @click="showNewFolderModal = false"
+            class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmNewFolder"
+            :disabled="!newFolderName.trim()"
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            创建
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除确认弹窗 -->
+    <div
+      v-if="showDeleteModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      @click.self="showDeleteModal = false"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div class="mb-4 flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-full bg-red-100"
+          >
+            <Trash2 class="h-5 w-5 text-red-600" />
+          </div>
+          <h3 class="text-lg font-semibold text-slate-900">确认删除</h3>
+        </div>
+        <p class="mb-6 text-slate-600">{{ deleteModalMessage }}</p>
+        <p class="mb-6 text-sm text-slate-500">
+          此操作无法撤销，文件将被永久删除。
+        </p>
+        <div class="flex justify-end gap-3">
+          <button
+            @click="
+              showDeleteModal = false;
+              deleteTarget = null;
+            "
+            class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmDelete"
+            class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            确认删除
+          </button>
         </div>
       </div>
     </div>

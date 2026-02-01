@@ -387,7 +387,16 @@ watch(
   { deep: true },
 );
 
-const goBack = () => router.push('/analysis/tools');
+// 返回上一页：优先使用浏览器历史，否则根据 referrer 判断
+const goBack = () => {
+  // 如果有浏览历史，直接返回上一页
+  if (window.history.length > 1) {
+    router.back();
+  } else {
+    // 否则跳转到云工具广场
+    router.push('/tools');
+  }
+};
 
 const showGuide = ref(true);
 const openGuide = () => {
@@ -916,15 +925,16 @@ onMounted(async () => {
   flex: 1; /* Take remaining height */
   gap: 16px;
   min-height: 0; /* Important for nested scrolling */
-  padding: 0 16px 16px; /* Add bottom padding here */
+  padding: 0 160px 16px; /* Match CloudTools page padding */
 }
 
-/* Control Panel (now Right) */
+/* Control Panel (now Left) */
 .control-panel {
   display: flex;
-  flex: 0 0 550px; /* Fixed width 600px */
+  flex: 0 0 580px; /* Fixed width */
   flex-direction: column;
-  max-width: 550px;
+  order: -1; /* 排在左侧 */
+  max-width: 580px;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;

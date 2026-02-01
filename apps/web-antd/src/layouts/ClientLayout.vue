@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
@@ -37,8 +38,16 @@ const showAuthModal = ref(false);
 
 // Login Check - 使用 accessStore.accessToken 判断登录状态
 const isLoggedIn = computed(() => !!accessStore.accessToken);
-const userInfo = computed(
-  () => userStore.userInfo || { realName: 'User', avatar: '' },
+
+// 兼容 realName 和 nickname 字段
+const displayName = computed(() => {
+  const info = userStore.userInfo as null | Record<string, any>;
+  return info?.realName || info?.nickname || 'User';
+});
+
+// 获取用户头像 URL（与 basic.vue 保持一致，使用默认头像作为后备）
+const userAvatar = computed(
+  () => userStore.userInfo?.avatar ?? preferences.app.defaultAvatar,
 );
 
 const handleLogin = () => {
@@ -103,14 +112,30 @@ const toggleUserMenu = () => {
                 @click="toggleUserMenu"
                 class="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 transition-all hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
               >
+                <!-- 用户头像：优先显示真实头像，否则显示首字母 -->
                 <div
-                  class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-sm font-bold text-white shadow-sm"
+                  class="relative h-8 w-8 flex-shrink-0 overflow-hidden rounded-full"
                 >
-                  {{ userInfo.realName?.charAt(0).toUpperCase() || 'U' }}
+                  <img
+                    v-if="userAvatar"
+                    :src="userAvatar"
+                    :alt="displayName"
+                    class="h-full w-full object-cover"
+                    @error="
+                      (e: Event) =>
+                        ((e.target as HTMLImageElement).style.display = 'none')
+                    "
+                  />
+                  <div
+                    v-if="!userAvatar"
+                    class="flex h-full w-full items-center justify-center bg-gradient-to-tr from-blue-500 to-indigo-500 text-sm font-bold text-white"
+                  >
+                    {{ displayName.charAt(0).toUpperCase() }}
+                  </div>
                 </div>
                 <span
                   class="max-w-[100px] truncate text-sm font-medium text-slate-700"
-                  >{{ userInfo.realName || 'User' }}</span
+                  >{{ displayName }}</span
                 >
                 <ChevronDown class="h-4 w-4 text-slate-400" />
               </button>
@@ -118,13 +143,34 @@ const toggleUserMenu = () => {
               <!-- Dropdown -->
               <div
                 v-if="isUserMenuOpen"
-                class="animate-in fade-in zoom-in-95 absolute right-0 mt-2 w-48 origin-top-right rounded-xl border border-slate-100 bg-white p-1 shadow-xl shadow-slate-200/50 ring-1 ring-black ring-opacity-5 duration-200 focus:outline-none"
+                class="animate-in fade-in zoom-in-95 absolute right-0 mt-2 w-56 origin-top-right rounded-xl border border-slate-100 bg-white p-1 shadow-xl shadow-slate-200/50 ring-1 ring-black ring-opacity-5 duration-200 focus:outline-none"
               >
-                <div class="mb-1 border-b border-slate-100 px-3 py-2">
-                  <p class="text-xs font-medium text-slate-500">Signed in as</p>
-                  <p class="truncate text-sm font-bold text-slate-800">
-                    {{ userInfo.realName }}
-                  </p>
+                <!-- 用户信息头部 -->
+                <div
+                  class="mb-1 flex items-center gap-3 border-b border-slate-100 px-3 py-3"
+                >
+                  <div
+                    class="relative h-10 w-10 flex-shrink-0 overflow-hidden rounded-full"
+                  >
+                    <img
+                      v-if="userAvatar"
+                      :src="userAvatar"
+                      :alt="displayName"
+                      class="h-full w-full object-cover"
+                    />
+                    <div
+                      v-else
+                      class="flex h-full w-full items-center justify-center bg-gradient-to-tr from-blue-500 to-indigo-500 text-base font-bold text-white"
+                    >
+                      {{ displayName.charAt(0).toUpperCase() }}
+                    </div>
+                  </div>
+                  <div class="flex-1 overflow-hidden">
+                    <p class="truncate text-sm font-semibold text-slate-800">
+                      {{ displayName }}
+                    </p>
+                    <p class="text-xs text-slate-500">已登录</p>
+                  </div>
                 </div>
                 <button
                   @click="

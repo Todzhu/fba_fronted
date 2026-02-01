@@ -29,8 +29,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'tool/:id',
         name: 'ToolUsage',
-        component: () =>
-          import('#/views/biocloud/cloudTools/ToolUsagePage.vue'),
+        component: () => import('#/views/cloudTools/detail.vue'),
         meta: {
           title: '工具使用 - BioCloud',
           ignoreAccess: true,
