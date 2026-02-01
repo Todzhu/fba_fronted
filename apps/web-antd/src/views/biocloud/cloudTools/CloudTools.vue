@@ -125,8 +125,8 @@ const handleToolClick = (tool: AnalysisTool) => {
     <div
       class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
     >
-      <div class="mx-auto px-4 sm:px-16 lg:px-40">
-        <h1 class="mb-2 text-3xl font-bold text-slate-900">云工具广场</h1>
+      <div class="mx-auto max-w-7xl">
+        <h1 class="mb-2 text-3xl font-bold text-slate-900">云工具</h1>
         <p class="max-w-2xl text-slate-500">
           探索超过 {{ total }}+
           款专业生物信息分析工具，从基础绘图到高级多组学挖掘，一键即用。
@@ -179,7 +179,7 @@ const handleToolClick = (tool: AnalysisTool) => {
     </div>
 
     <!-- Tools Grid -->
-    <div class="mx-auto mt-8 px-4 sm:px-16 lg:px-40">
+    <div class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center py-20">
         <Loader2 class="h-8 w-8 animate-spin text-blue-600" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { preferences } from '@vben/preferences';
@@ -9,13 +9,18 @@ import {
   ChevronDown,
   ClipboardList,
   Database,
+  Eye,
+  EyeOff,
   GitBranch,
   Home,
+  Key,
   LogOut,
   Sparkles,
+  User,
   Wrench,
 } from 'lucide-vue-next';
 
+import { updateSysUserPasswordApi } from '#/api/core/user';
 import { useAuthStore } from '#/store/auth';
 import AuthModal from '#/views/biocloud/landing/components/AuthModal.vue';
 
@@ -59,8 +64,97 @@ const handleLogout = () => {
 };
 
 const isUserMenuOpen = ref(false);
+const userMenuRef = ref<HTMLElement | null>(null);
+
 const toggleUserMenu = () => {
   isUserMenuOpen.value = !isUserMenuOpen.value;
+};
+
+// 点击外部关闭下拉菜单
+const handleClickOutside = (event: MouseEvent) => {
+  if (userMenuRef.value && !userMenuRef.value.contains(event.target as Node)) {
+    isUserMenuOpen.value = false;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside);
+});
+
+// ========== 密码修改弹窗 ==========
+const showPasswordModal = ref(false);
+const passwordForm = ref({
+  old_password: '',
+  new_password: '',
+  confirm_password: '',
+});
+const passwordError = ref('');
+const passwordSuccess = ref(false);
+const passwordLoading = ref(false);
+const showOldPassword = ref(false);
+const showNewPassword = ref(false);
+
+const openPasswordModal = () => {
+  isUserMenuOpen.value = false;
+  showPasswordModal.value = true;
+  passwordForm.value = {
+    old_password: '',
+    new_password: '',
+    confirm_password: '',
+  };
+  passwordError.value = '';
+};
+
+const closePasswordModal = () => {
+  showPasswordModal.value = false;
+  passwordForm.value = {
+    old_password: '',
+    new_password: '',
+    confirm_password: '',
+  };
+  passwordError.value = '';
+};
+
+const handleChangePassword = async () => {
+  passwordError.value = '';
+
+  if (
+    !passwordForm.value.old_password ||
+    !passwordForm.value.new_password ||
+    !passwordForm.value.confirm_password
+  ) {
+    passwordError.value = '请填写所有字段';
+    return;
+  }
+
+  if (passwordForm.value.new_password !== passwordForm.value.confirm_password) {
+    passwordError.value = '两次密码输入不一致';
+    return;
+  }
+
+  if (passwordForm.value.new_password.length < 6) {
+    passwordError.value = '新密码至少需要6个字符';
+    return;
+  }
+
+  passwordLoading.value = true;
+  try {
+    await updateSysUserPasswordApi(passwordForm.value);
+    passwordSuccess.value = true;
+    setTimeout(() => {
+      closePasswordModal();
+      passwordSuccess.value = false;
+    }, 1500);
+  } catch (error: any) {
+    passwordError.value =
+      error?.response?.data?.msg || '密码修改失败，请检查旧密码是否正确';
+  } finally {
+    passwordLoading.value = false;
+  }
 };
 </script>
 
@@ -107,7 +201,7 @@ const toggleUserMenu = () => {
           <!-- Right Actions -->
           <div class="flex items-center gap-4">
             <!-- User Menu (Logged In) -->
-            <div v-if="isLoggedIn" class="relative">
+            <div v-if="isLoggedIn" ref="userMenuRef" class="relative">
               <button
                 @click="toggleUserMenu"
                 class="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-3 transition-all hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-100"
@@ -173,22 +267,10 @@ const toggleUserMenu = () => {
                   </div>
                 </div>
                 <button
-                  @click="
-                    router.push('/tasks');
-                    isUserMenuOpen = false;
-                  "
+                  @click="openPasswordModal"
                   class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-blue-600"
                 >
-                  <RefreshCw class="h-4 w-4" /> 我的任务
-                </button>
-                <button
-                  @click="
-                    router.push('/data');
-                    isUserMenuOpen = false;
-                  "
-                  class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-blue-600"
-                >
-                  <Database class="h-4 w-4" /> 我的数据
+                  <User class="h-4 w-4" /> 个人中心
                 </button>
                 <div class="my-1 border-t border-slate-100"></div>
                 <button
@@ -359,6 +441,116 @@ const toggleUserMenu = () => {
 
     <!-- Global Auth Modal -->
     <AuthModal :is-open="showAuthModal" @close="showAuthModal = false" />
+
+    <!-- Password Change Modal -->
+    <div
+      v-if="showPasswordModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      @click.self="closePasswordModal"
+    >
+      <div class="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div class="mb-6 flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100"
+          >
+            <Key class="h-5 w-5 text-blue-600" />
+          </div>
+          <h3 class="text-lg font-semibold text-slate-900">修改密码</h3>
+        </div>
+
+        <!-- Success Message -->
+        <div
+          v-if="passwordSuccess"
+          class="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600"
+        >
+          密码修改成功！
+        </div>
+
+        <!-- Error Message -->
+        <div
+          v-if="passwordError"
+          class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600"
+        >
+          {{ passwordError }}
+        </div>
+
+        <!-- Old Password -->
+        <div class="mb-4">
+          <label class="mb-1 block text-sm font-medium text-slate-700">
+            当前密码
+          </label>
+          <div class="relative">
+            <input
+              v-model="passwordForm.old_password"
+              :type="showOldPassword ? 'text' : 'password'"
+              class="w-full rounded-lg border border-slate-300 px-4 py-2.5 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              placeholder="请输入当前密码"
+            />
+            <button
+              type="button"
+              @click="showOldPassword = !showOldPassword"
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+            >
+              <Eye v-if="!showOldPassword" class="h-5 w-5" />
+              <EyeOff v-else class="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <!-- New Password -->
+        <div class="mb-4">
+          <label class="mb-1 block text-sm font-medium text-slate-700">
+            新密码
+          </label>
+          <div class="relative">
+            <input
+              v-model="passwordForm.new_password"
+              :type="showNewPassword ? 'text' : 'password'"
+              class="w-full rounded-lg border border-slate-300 px-4 py-2.5 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              placeholder="请输入新密码（至少6位）"
+            />
+            <button
+              type="button"
+              @click="showNewPassword = !showNewPassword"
+              class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+            >
+              <Eye v-if="!showNewPassword" class="h-5 w-5" />
+              <EyeOff v-else class="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Confirm Password -->
+        <div class="mb-6">
+          <label class="mb-1 block text-sm font-medium text-slate-700">
+            确认新密码
+          </label>
+          <input
+            v-model="passwordForm.confirm_password"
+            type="password"
+            class="w-full rounded-lg border border-slate-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+            placeholder="请再次输入新密码"
+          />
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex justify-end gap-3">
+          <button
+            @click="closePasswordModal"
+            class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            取消
+          </button>
+          <button
+            @click="handleChangePassword"
+            :disabled="passwordLoading"
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {{ passwordLoading ? '提交中...' : '确认修改' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 

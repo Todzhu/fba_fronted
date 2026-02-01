@@ -21,7 +21,7 @@ const routes: RouteRecordRaw[] = [
         name: 'CloudTools',
         component: () => import('#/views/biocloud/cloudTools/CloudTools.vue'),
         meta: {
-          title: '云工具广场 - BioCloud',
+          title: '云工具 - BioCloud',
           ignoreAccess: true, // Allow browsing without login
         },
       },
@@ -44,13 +44,13 @@ const routes: RouteRecordRaw[] = [
           ignoreAccess: true,
         },
       },
-      /*
       {
-         path: 'tasks',
-         name: 'MyTasks',
-         component: () => import('#/views/tasks/MyTasks.vue'),
-         meta: { title: '我的任务' }
+        path: 'tasks',
+        name: 'MyTasks',
+        component: () => import('#/views/biocloud/task/MyTasks.vue'),
+        meta: { title: '我的任务 - BioCloud', ignoreAccess: true },
       },
+      /*
       {
          path: 'pipeline',
          name: 'CloudFlow',

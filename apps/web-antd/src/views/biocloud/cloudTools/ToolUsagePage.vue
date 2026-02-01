@@ -879,12 +879,12 @@ function renderMarkdown(md: string): string {
     <div class="text-center">
       <XCircle class="mx-auto mb-4 h-16 w-16 text-slate-300" />
       <h1 class="text-xl font-bold text-slate-700">工具不存在</h1>
-      <p class="mt-2 text-slate-500">请从云工具广场选择一个工具</p>
+      <p class="mt-2 text-slate-500">请从云工具选择一个工具</p>
       <router-link
         to="/tools"
         class="mt-4 inline-block rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
       >
-        返回云工具广场
+        返回云工具
       </router-link>
     </div>
   </div>
