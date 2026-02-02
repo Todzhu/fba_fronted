@@ -3,24 +3,49 @@
  */
 
 // ========== 步骤类型枚举 ==========
-export type StepType = 'data_load' | 'qc_filter' | 'dim_reduce' | 'annotation';
+export type StepType =
+  | 'data_load'      // ① 数据导入
+  | 'qc_filter'      // ② 质控过滤
+  | 'normalize'      // ③ 标准化
+  | 'merge'          // ④ 多样本合并
+  | 'batch_correct'  // ⑤ 批次校正
+  | 'dim_reduce'     // ⑥ 降维/聚类
+  | 'annotation'     // ⑦ 细胞注释
+  | 'diff_expr'      // ⑧ 差异分析
+  | 'enrichment'     // ⑨ 富集分析
+  | 'advanced';      // ⑩ 高级分析
 
 export const STEP_ORDER: StepType[] = [
   'data_load',
   'qc_filter',
+  'normalize',
+  'merge',
+  'batch_correct',
   'dim_reduce',
   'annotation',
+  'diff_expr',
+  'enrichment',
+  'advanced',
 ];
 
 export const STEP_LABELS: Record<StepType, string> = {
-  data_load: '数据读取',
+  data_load: '数据导入',
   qc_filter: '质控过滤',
-  dim_reduce: '降维聚类',
+  normalize: '标准化',
+  merge: '多样本合并',
+  batch_correct: '批次校正',
+  dim_reduce: '降维/聚类',
   annotation: '细胞注释',
+  diff_expr: '差异分析',
+  enrichment: '富集分析',
+  advanced: '高级分析',
 };
 
+// 可跳过的步骤（单样本分析时跳过）
+export const SKIPPABLE_STEPS: StepType[] = ['merge', 'batch_correct', 'advanced'];
+
 // ========== 步骤状态 ==========
-export type StepStatus = 'pending' | 'running' | 'completed' | 'error';
+export type StepStatus = 'pending' | 'running' | 'completed' | 'error' | 'skipped';
 
 // ========== 结果类型 ==========
 export interface StepResult {
@@ -54,6 +79,8 @@ export interface StepState {
 }
 
 // ========== 流程状态 ==========
+export type PipelineStatus = 'created' | 'running' | 'paused' | 'completed';
+
 export interface PipelineState {
   id: string;
   name: string;
@@ -61,6 +88,8 @@ export interface PipelineState {
   dataPath?: string;
   species?: string;
   currentStep: number;
+  status?: PipelineStatus;
+  isMultiSample?: boolean;
   steps: StepState[];
   createdAt: Date;
   updatedAt: Date;

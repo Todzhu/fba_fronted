@@ -27,7 +27,7 @@ import {
   Typography,
 } from 'ant-design-vue';
 
-import { createPipeline, deletePipeline, listPipelines, updatePipeline } from './mock/mockApi';
+import { createPipelineApi, deletePipelineApi, listPipelinesApi, updatePipelineApi } from './api';
 import { getMyDataTree } from './mock/myDataMock';
 import type { FileNode } from './mock/myDataMock';
 import { STEP_LABELS } from './types/pipeline';
@@ -108,15 +108,16 @@ const handleCreateConfirm = async () => {
     await createFormRef.value?.validate();
     createLoading.value = true;
 
-    const { pipeline } = await createPipeline(createForm.name, {
-      dataPath: createForm.dataPath,
+    const res = await createPipelineApi({
+      name: createForm.name,
+      data_path: createForm.dataPath,
       species: createForm.species,
       description: createForm.description,
     });
 
     message.success('项目创建成功');
     createModalVisible.value = false;
-    router.push(`/analysis/sc-pipeline/${pipeline.id}`);
+    router.push(`/analysis/sc-pipeline/${res.id}`);
   } catch (error: any) {
     if (error?.errorFields) {
       // 表单验证失败，不做处理
@@ -169,8 +170,9 @@ const handleEditConfirm = async () => {
     await editFormRef.value?.validate();
     editLoading.value = true;
 
-    await updatePipeline(editingPipeline.value.id, editForm.name, {
-      dataPath: editForm.dataPath,
+    await updatePipelineApi(editingPipeline.value.id, {
+      name: editForm.name,
+      data_path: editForm.dataPath,
       species: editForm.species,
       description: editForm.description,
     });
@@ -198,7 +200,25 @@ const handleEditCancel = () => {
 const fetchPipelines = async () => {
   loading.value = true;
   try {
-    pipelines.value = await listPipelines();
+    const list = await listPipelinesApi();
+    // 转换后端数据格式
+    pipelines.value = list.map((p: any) => ({
+      id: String(p.id),
+      name: p.name,
+      description: p.description,
+      dataPath: p.data_path,
+      species: p.species,
+      currentStep: p.current_step,
+      steps: (p.steps || []).map((s: any) => ({
+        stepType: s.step_type,
+        status: s.status,
+        params: s.params || {},
+        result: s.result_data,
+        history: [],
+      })),
+      createdAt: new Date(p.created_at),
+      updatedAt: new Date(p.updated_at),
+    }));
   } catch (error) {
     message.error('加载失败');
   } finally {
@@ -218,7 +238,7 @@ const handleDelete = (pipeline: PipelineState) => {
     content: `确定要删除「${pipeline.name}」吗？此操作不可恢复。`,
     okType: 'danger',
     async onOk() {
-      await deletePipeline(pipeline.id);
+      await deletePipelineApi(pipeline.id);
       message.success('已删除');
       fetchPipelines();
     },
