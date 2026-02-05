@@ -2,10 +2,11 @@
 import type { FileItem as UserFile } from '#/api/my-data';
 
 // 我的数据页面 - 文件管理
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import {
   ArrowLeft,
+  ChevronLeft,
   ChevronRight,
   Download,
   File,
@@ -59,6 +60,11 @@ const currentFolderId = ref<null | number>(null);
 const breadcrumbs = ref<{ id: null | number; name: string }[]>([
   { id: null, name: '我的数据' },
 ]);
+
+// 分页状态
+const currentPage = ref(1);
+const pageSize = 10;
+const total = ref(0);
 
 // 文件列表
 const allFiles = ref<FileItem[]>([]);
@@ -145,11 +151,15 @@ const fetchFiles = async () => {
     const res = await getMyDataFiles({
       parent_id: currentFolderId.value ?? undefined,
       keyword: searchQuery.value.trim() || undefined,
+      page: currentPage.value,
+      page_size: pageSize,
     });
     allFiles.value = res.items.map((item) => transformFile(item));
+    total.value = res.total;
   } catch (error) {
     console.error('获取文件列表失败:', error);
     allFiles.value = [];
+    total.value = 0;
   } finally {
     loading.value = false;
     loadingText.value = '';
@@ -176,6 +186,8 @@ const filteredFiles = computed(() => {
 });
 
 const hasSelection = computed(() => selectedFiles.value.length > 0);
+
+const totalPages = computed(() => Math.ceil(total.value / pageSize));
 
 // ========== Methods ==========
 const getFileIcon = (file: FileItem) => {
@@ -241,6 +253,7 @@ const enterFolder = (folder: FileItem) => {
   currentFolderId.value = folder.id;
   breadcrumbs.value.push({ id: folder.id, name: folder.name });
   selectedFiles.value = [];
+  currentPage.value = 1; // 进入文件夹重置页码
   fetchFiles();
 };
 
@@ -251,6 +264,7 @@ const navigateTo = (
   currentFolderId.value = item.id;
   breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
   selectedFiles.value = [];
+  currentPage.value = 1; // 导航重置页码
   fetchFiles();
 };
 
@@ -375,6 +389,12 @@ const deleteModalMessage = computed(() => {
     return `确定要删除"${deleteTarget.value.file.name}"吗？`;
   }
   return `确定要删除选中的 ${selectedFiles.value.length} 个项目吗？`;
+});
+
+// 监听分页变化
+
+watch(currentPage, () => {
+  fetchFiles();
 });
 
 onMounted(() => {
@@ -676,6 +696,31 @@ onMounted(() => {
             </button>
           </div>
         </div>
+      </div>
+
+      <!-- Pagination -->
+      <div v-if="totalPages > 1" class="mt-6 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <button
+            @click="currentPage = Math.max(1, currentPage - 1)"
+            :disabled="currentPage === 1"
+            class="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <ChevronLeft class="h-4 w-4" />
+            上一页
+          </button>
+          <button
+            @click="currentPage = Math.min(totalPages, currentPage + 1)"
+            :disabled="currentPage === totalPages"
+            class="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            下一页
+            <ChevronRight class="h-4 w-4" />
+          </button>
+        </div>
+        <span class="text-sm text-slate-500">
+          第 {{ currentPage }} / {{ totalPages }} 页，共 {{ total }} 个文件
+        </span>
       </div>
     </div>
 

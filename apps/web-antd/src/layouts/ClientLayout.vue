@@ -23,6 +23,7 @@ import {
 import { updateSysUserPasswordApi } from '#/api/core/user';
 import { useAuthStore } from '#/store/auth';
 import AuthModal from '#/views/biocloud/landing/components/AuthModal.vue';
+import SocialSidebar from '#/components/SocialSidebar.vue';
 
 const router = useRouter();
 const accessStore = useAccessStore();
@@ -300,6 +301,9 @@ const handleChangePassword = async () => {
     <main class="flex-grow pt-16">
       <router-view />
     </main>
+
+    <!-- 社交媒体侧边栏 -->
+    <SocialSidebar />
 
     <!-- Footer (深色设计) -->
     <footer class="bg-slate-900 py-16 text-slate-300">

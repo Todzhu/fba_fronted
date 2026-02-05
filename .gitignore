@@ -69,3 +69,5 @@ vben-admin.code-workspace
 .agent
 
 .shared
+
+.pnpm-store

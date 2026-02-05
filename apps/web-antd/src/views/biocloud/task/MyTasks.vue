@@ -38,7 +38,7 @@ const selectedTasks = ref<number[]>([]);
 const tasks = ref<TaskItem[]>([]);
 const total = ref(0);
 const currentPage = ref(1);
-const pageSize = 20;
+const pageSize = 10;
 
 // ========== 状态配置 ==========
 const statusOptions = [
