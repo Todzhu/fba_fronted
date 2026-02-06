@@ -21,9 +21,9 @@ import {
 } from 'lucide-vue-next';
 
 import { updateSysUserPasswordApi } from '#/api/core/user';
+import SocialSidebar from '#/components/SocialSidebar.vue';
 import { useAuthStore } from '#/store/auth';
 import AuthModal from '#/views/biocloud/landing/components/AuthModal.vue';
-import SocialSidebar from '#/components/SocialSidebar.vue';
 
 const router = useRouter();
 const accessStore = useAccessStore();

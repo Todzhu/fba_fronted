@@ -9,18 +9,18 @@ import { useRoute } from 'vue-router';
 
 import { X } from 'lucide-vue-next';
 
-// 微信公众号二维码
-import wechatQR from '#/assets/images/wechat.jpg';
-// 公众号logo图标
-import gzhLogo from '#/assets/images/gzh_logo.png';
 // Bilibili logo图标
 import bilibiliLogo from '#/assets/images/bilibili-logo.png';
+// 公众号logo图标
+import gzhLogo from '#/assets/images/gzh_logo.png';
+// 微信公众号二维码
+import wechatQR from '#/assets/images/wechat.jpg';
 
 // 社交平台配置
 interface SocialItem {
   name: string;
   icon: string;
-  type: 'qrcode' | 'link';
+  type: 'link' | 'qrcode';
   url?: string;
   qrTitle?: string;
   qrSubtitle?: string;
@@ -66,10 +66,14 @@ const allSocialItems: SocialItem[] = [
 
 // 路由判断
 const route = useRoute();
-const isHomePage = computed(() => route.path === '/index' || route.path === '/');
+const isHomePage = computed(
+  () => route.path === '/index' || route.path === '/',
+);
 
 // 根据页面显示不同图标
-const displayItems = computed(() => (isHomePage.value ? allSocialItems : [wechatItem]));
+const displayItems = computed(() =>
+  isHomePage.value ? allSocialItems : [wechatItem],
+);
 
 // 弹窗状态
 const showQRModal = ref(false);
@@ -162,7 +166,9 @@ function closeModal() {
 
           <!-- 标题 -->
           <div class="mb-6 text-center">
-            <h3 class="text-xl font-semibold text-slate-900">欢迎添加我的微信</h3>
+            <h3 class="text-xl font-semibold text-slate-900">
+              欢迎添加我的微信
+            </h3>
             <p class="mt-1 text-base text-slate-500">了解更多信息</p>
           </div>
 

@@ -26,17 +26,17 @@ const BASE_URL = '/api/v1/sys/my-data';
  */
 export async function getMyDataFiles(params?: {
   keyword?: string;
-  parent_id?: number;
   page?: number;
   page_size?: number;
+  parent_id?: number;
 }) {
   // 过滤掉 undefined 值，防止发送无效参数
   const cleanParams = params
     ? Object.fromEntries(
-      Object.entries(params).filter(
-        ([_, v]) => v !== undefined && v !== null,
-      ),
-    )
+        Object.entries(params).filter(
+          ([_, v]) => v !== undefined && v !== null,
+        ),
+      )
     : undefined;
   return requestClient.get<FileListResponse>(`${BASE_URL}/files`, {
     params: cleanParams,
