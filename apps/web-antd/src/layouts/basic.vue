@@ -130,6 +130,9 @@ const [MessageModal, messageModalApi] = useVbenModal({
       loadAllMessages(1);
     }
   },
+  onConfirm() {
+    messageModalApi.close();
+  },
 });
 
 async function handleLogout() {
@@ -173,7 +176,8 @@ async function handleNoticeRead(item: NotificationItem) {
   // 关闭弹框并跳转到任务中心
   if (item.relatedId) {
     messageModalApi.close();
-    router.push({
+    // 使用 replace 替换当前路由，避免创建重复标签
+    router.replace({
       path: '/analysis/tasks',
       query: { highlight: String(item.relatedId) },
     });

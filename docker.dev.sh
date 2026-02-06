@@ -1,4 +1,5 @@
 docker run -it --rm \
+  --memory=64g \
   -v /home/ztt/fba/fronted:/fba_ui \
   -w /fba_ui \
   -p 5173:5173 \

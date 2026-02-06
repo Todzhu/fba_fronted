@@ -54,6 +54,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           icon: 'mdi:clipboard-list-outline',
           title: '任务中心',
+          fullPathKey: false,  // 忽略 query 参数，避免标签重复
         },
       },
     ],

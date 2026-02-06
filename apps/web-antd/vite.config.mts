@@ -6,10 +6,9 @@ export default defineConfig(async () => {
     vite: {
       server: {
         host: '0.0.0.0',
-        // Docker 容器中使用轮询模式监听文件变化（解决 Windows HMR 问题）
-        watch: {
-          usePolling: true,
-          interval: 1000,
+        hmr: {
+          host: '172.30.10.205',
+          port: 5173,
         },
         proxy: {
           '/api': {
