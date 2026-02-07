@@ -1,4 +1,4 @@
-import { requestClient } from '#/api/request';
+import { miniRequestClient, requestClient } from '#/api/request';
 
 export interface AnalysisTool {
   id: number;
@@ -80,14 +80,16 @@ export async function getAnalysisToolList(params?: AnalysisToolListParams) {
     ? `/api/v1/sys/analysis-tools?${queryString}`
     : '/api/v1/sys/analysis-tools';
 
-  return requestClient.get<AnalysisToolListResponse>(url);
+  // 使用 miniRequestClient，允许未登录用户浏览工具列表
+  return miniRequestClient.get<AnalysisToolListResponse>(url);
 }
 
 /**
  * 获取分析工具详情
  */
 export async function getAnalysisTool(id: number) {
-  return requestClient.get<AnalysisTool>(`/api/v1/sys/analysis-tools/${id}`);
+  // 使用 miniRequestClient，允许未登录用户浏览工具详情
+  return miniRequestClient.get<AnalysisTool>(`/api/v1/sys/analysis-tools/${id}`);
 }
 
 export interface AnalysisToolCategories {
@@ -99,7 +101,8 @@ export interface AnalysisToolCategories {
  * 获取分析工具分类列表
  */
 export async function getAnalysisToolCategories() {
-  return requestClient.get<AnalysisToolCategories>(
+  // 使用 miniRequestClient，允许未登录用户浏览工具分类
+  return miniRequestClient.get<AnalysisToolCategories>(
     '/api/v1/sys/analysis-tools/categories',
   );
 }

@@ -128,102 +128,119 @@ const goToFeature = (path: string) => router.push(path);
 
 <template>
   <div class="font-sans text-slate-900">
-    <!-- ========== Hero 区域 (白色背景) ========== -->
-    <section class="relative overflow-hidden bg-white pb-48 pt-24">
-      <!-- 背景装饰 -->
-      <div
-        class="absolute inset-0 bg-[linear-gradient(to_right,#80808008_1px,transparent_1px),linear-gradient(to_bottom,#80808008_1px,transparent_1px)] bg-[size:40px_40px]"
-      ></div>
+    <!-- ========== Hero 区域 (Matching Reference: Soft Gradient Background) ========== -->
+    <section class="relative overflow-hidden bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/80 pb-48 pt-24">
+      <!-- 极光背景装饰 -->
+      <div class="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-100/50 blur-[120px] pointer-events-none"></div>
+      <div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-100/50 blur-[120px] pointer-events-none"></div>
+
+      <!-- Subtle Dot Pattern (Optional, lighter than grid) -->
+      <div class="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:24px_24px] opacity-50 pointer-events-none"></div>
 
       <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex flex-col items-center gap-12 lg:flex-row lg:gap-16">
+        <div class="flex flex-col items-center gap-12 lg:flex-row lg:gap-20">
           <!-- 左侧：文字内容 -->
           <div class="flex-1 text-center lg:text-left">
             <!-- 标签 -->
             <div
-              class="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-1.5 text-sm font-medium text-blue-600"
+              class="mb-8 inline-flex items-center gap-2 rounded-lg bg-blue-100/50 px-3 py-1.5 text-sm font-semibold text-blue-600 backdrop-blur-sm"
             >
               <span class="relative flex h-2 w-2">
                 <span
                   class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"
                 ></span>
                 <span
-                  class="relative inline-flex h-2 w-2 rounded-full bg-blue-500"
+                  class="relative inline-flex h-2 w-2 rounded-full bg-blue-600"
                 ></span>
               </span>
               多组学生信分析云平台
             </div>
 
-            <!-- 主标题 -->
+            <!-- 主标题 (Solid Color, No Gradient Text) -->
             <h1
-              class="mb-6 text-4xl font-extrabold leading-tight tracking-tight text-slate-900 lg:text-5xl"
+              class="mb-6 text-4xl font-extrabold leading-[1.4] tracking-tight text-slate-900 lg:text-6xl"
             >
               释放多组学数据的<br />
-              <span
-                class="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"
-                >无限潜能</span
-              >
+              <span class="text-slate-900">无限潜能</span>
             </h1>
 
             <!-- 副标题 -->
-            <p class="mb-8 max-w-lg text-lg text-slate-500">
+            <p class="mb-10 max-w-lg text-lg text-slate-500 leading-relaxed mx-auto lg:mx-0">
               整合前沿生信技术与实际分析场景，提供定制化解决方案，让数据驱动决策，让创新创造价值。
             </p>
 
             <!-- CTA 按钮 -->
             <div
-              class="mb-10 flex flex-col justify-center gap-4 sm:flex-row lg:justify-start"
+              class="mb-12 flex flex-col justify-center gap-4 sm:flex-row lg:justify-start"
             >
               <button
                 @click="goToTools"
-                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:-translate-y-0.5 hover:bg-blue-700 active:scale-95"
+                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-8 py-3.5 text-base font-bold text-white shadow-lg shadow-blue-500/30 transition-all hover:-translate-y-0.5 hover:bg-blue-700 active:scale-95"
               >
                 探索工具
                 <ArrowRight class="h-5 w-5" />
               </button>
               <button
                 @click="goToTools"
-                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-base font-semibold text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-50"
+                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-blue-200 bg-white px-8 py-3.5 text-base font-bold text-blue-600 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50"
               >
                 开源项目
               </button>
             </div>
 
-            <!-- 统计数字 -->
-            <div
-              class="mb-6 flex flex-wrap justify-center gap-6 lg:justify-start"
-            >
+            <!-- 统计数字 (Distinct White Cards with Colored Numbers) - Compact Version -->
+            <div class="mb-6 grid grid-cols-3 gap-3 lg:max-w-md">
               <div
-                v-for="stat in stats"
+                v-for="(stat, index) in stats"
                 :key="stat.label"
-                class="border-l-2 border-slate-200 pl-4 text-center first:border-0 first:pl-0 lg:text-left"
+                class="flex flex-col items-center justify-center rounded-lg bg-white border border-slate-100 py-3 px-2 shadow-sm hover:shadow-md transition-shadow"
               >
-                <div class="text-2xl font-bold text-slate-900">
+                <div
+                  :class="[
+                    'text-xl font-extrabold sm:text-2xl',
+                    index === 0
+                      ? 'text-blue-600'
+                      : index === 1
+                        ? 'text-purple-600'
+                        : 'text-emerald-500',
+                  ]"
+                >
                   {{ stat.value }}
                 </div>
-                <div class="text-sm text-slate-500">{{ stat.label }}</div>
+                <div class="mt-0.5 text-[10px] font-bold text-slate-500 sm:text-xs">
+                  {{ stat.label }}
+                </div>
               </div>
             </div>
 
-            <!-- 技术标签 -->
+            <!-- 技术标签 (Multi-colored Pills) - Compact Version -->
             <div class="flex flex-wrap justify-center gap-2 lg:justify-start">
               <span
-                v-for="tag in techTags"
+                v-for="(tag, index) in techTags"
                 :key="tag"
-                class="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-600"
+                :class="[
+                  'rounded-full px-3 py-1 text-[10px] font-bold bg-opacity-80 transition-transform hover:scale-105 cursor-default',
+                  index === 0
+                    ? 'bg-blue-100 text-blue-700'
+                    : index === 1
+                      ? 'bg-purple-100 text-purple-700'
+                      : index === 2
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-slate-100 text-slate-700',
+                ]"
               >
                 {{ tag }}
               </span>
             </div>
           </div>
 
-          <!-- 右侧：产品截图 -->
-          <div class="w-full flex-shrink-0 lg:w-[480px]">
+          <!-- 右侧：产品截图 (42% Width) -->
+          <div class="w-full flex-shrink-0 lg:w-[580px]">
             <div
               class="relative overflow-hidden rounded-2xl border border-slate-200 shadow-2xl shadow-slate-300/50"
             >
               <img
-                src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&h=400&fit=crop"
+                src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=500&fit=crop"
                 alt="BioCloud Dashboard"
                 class="h-auto w-full"
               />

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" style="background-color: white;">
+  <defs>
+    <!-- Vertical Gradient: Bright Cyan (Top) to Dark Teal (Bottom) matching the new reference -->
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3CC0D1;stop-opacity:1" /> <!-- Bright Cyan/Teal Top -->
+      <stop offset="100%" style="stop-color:#0A5F85;stop-opacity:1" /> <!-- Darker Blue/Teal Bottom -->
+    </linearGradient>
+  </defs>
+  <style>
+    .title { 
+      font-family: "PingFang SC", "Microsoft YaHei", "Source Han Sans CN", "SimHei", sans-serif; 
+      font-weight: bold; 
+      font-size: 80px; 
+    }
+    .subtitle { 
+      /* Serif font to match the new reference style */
+      font-family: Didot, "Times New Roman", "Songti SC", SimSun, serif; 
+      font-weight: 400; 
+      font-size: 17px; 
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+  </style>
+  <!-- Main Title -->
+  <text x="20" y="85" class="title" fill="url(#cyanGrad)">生信</text>
+  <text x="180" y="85" class="title" fill="#2C3E50">大杂烩</text>
+  
+  <!-- Tagline -->
+  <text x="22" y="115" class="subtitle" fill="#666666" textLength="398" lengthAdjust="spacingAndGlyphs">BIOINFORMATICS &amp; DATA SCIENCE</text>
+</svg>

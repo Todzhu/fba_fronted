@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import { message } from 'ant-design-vue';
 import { ArrowRight, Github, Lock, User, X } from 'lucide-vue-next';
@@ -8,11 +9,14 @@ import { useAuthStore } from '#/store';
 
 interface Props {
   isOpen: boolean;
+  // 登录成功后跳转的目标路径，默认刷新当前页面
+  redirectPath?: string;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 const emit = defineEmits(['close']);
 
+const router = useRouter();
 const authStore = useAuthStore();
 const isLogin = ref(true); // true: Login, false: Register
 
@@ -58,8 +62,13 @@ const handleSubmit = async () => {
           // 使用 onSuccess 回调，阻止 authLogin 内部的默认 router.push
           // 关闭弹窗
           handleClose();
-          // 强制刷新跳转到分析页面
-          window.location.replace('/analytics');
+          // 跳转到目标页面（如果指定了 redirectPath），否则刷新当前页面
+          if (props.redirectPath) {
+            router.push(props.redirectPath);
+          } else {
+            // 刷新当前页面以更新登录状态
+            window.location.reload();
+          }
         },
       );
     } catch (error: any) {

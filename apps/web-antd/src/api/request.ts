@@ -101,6 +101,19 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       const responseData = error?.response?.data ?? {};
       const errorMessage =
         responseData?.error ?? responseData?.msg ?? error?.msg ?? '';
+      const status = error?.response?.status;
+
+      // 对于 401 错误或 token 相关错误，不显示错误消息
+      // 会由 authenticateResponseInterceptor 处理并弹出登录框
+      if (
+        status === 401 ||
+        errorMessage.includes('Token') ||
+        errorMessage.includes('token') ||
+        errorMessage.includes('登录')
+      ) {
+        return;
+      }
+
       // 如果没有错误信息，则会根据状态码进行提示
       message.error(errorMessage || msg);
     }),
@@ -133,6 +146,19 @@ function createMiniRequestClient(
       const responseData = error?.response?.data ?? {};
       const errorMessage =
         responseData?.error ?? responseData?.msg ?? error?.msg ?? '';
+      const status = error?.response?.status;
+
+      // 对于 401 错误或 token 相关错误，不显示错误消息
+      // refreshTokenApi 使用此客户端，token 相关错误应静默处理
+      if (
+        status === 401 ||
+        errorMessage.includes('Token') ||
+        errorMessage.includes('token') ||
+        errorMessage.includes('登录')
+      ) {
+        return;
+      }
+
       message.error(errorMessage || msg);
     }),
   );

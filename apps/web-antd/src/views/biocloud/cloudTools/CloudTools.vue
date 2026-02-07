@@ -125,7 +125,7 @@ const handleToolClick = (tool: AnalysisTool) => {
     <div
       class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
     >
-      <div class="mx-auto max-w-7xl">
+      <div class="mx-auto w-full max-w-[1400px]">
         <h1 class="mb-2 text-3xl font-bold text-slate-900">云工具</h1>
         <p class="max-w-2xl text-slate-500">
           探索超过 {{ total }}+
@@ -179,7 +179,7 @@ const handleToolClick = (tool: AnalysisTool) => {
     </div>
 
     <!-- Tools Grid -->
-    <div class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="mx-auto mt-8 w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
       <!-- Loading -->
       <div v-if="loading" class="flex items-center justify-center py-20">
         <Loader2 class="h-8 w-8 animate-spin text-blue-600" />
@@ -204,7 +204,7 @@ const handleToolClick = (tool: AnalysisTool) => {
               v-if="tool.icon && tool.icon.includes('/')"
               :src="getFullImageUrl(tool.icon)"
               :alt="tool.title"
-              class="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+              class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
             <!-- 否则显示渐变背景和首字母 -->
             <div

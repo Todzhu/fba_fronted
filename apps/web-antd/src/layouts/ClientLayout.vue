@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
@@ -25,22 +25,40 @@ import SocialSidebar from '#/components/SocialSidebar.vue';
 import { useAuthStore } from '#/store/auth';
 import AuthModal from '#/views/biocloud/landing/components/AuthModal.vue';
 
+import logoSvg from '../assets/images/logo.svg';
+
 const router = useRouter();
 const accessStore = useAccessStore();
 const userStore = useUserStore();
 const authStore = useAuthStore();
 
 // Navigation Items
+// requiresAuth: true 表示需要登录才能访问的页面
 const navItems = [
-  { name: '首页', href: '/index', icon: Home },
-  { name: '云工具', href: '/tools', icon: Wrench },
-  { name: '云流程', href: '/pipeline', icon: GitBranch },
-  { name: '我的数据', href: '/data', icon: Database },
-  { name: '我的任务', href: '/tasks', icon: ClipboardList },
+  { name: '首页', href: '/index', icon: Home, requiresAuth: false },
+  { name: '云工具', href: '/tools', icon: Wrench, requiresAuth: false },
+  { name: '云流程', href: '/pipeline', icon: GitBranch, requiresAuth: false },
+  { name: '我的数据', href: '/data', icon: Database, requiresAuth: true },
+  { name: '我的任务', href: '/tasks', icon: ClipboardList, requiresAuth: true },
 ];
+
+// 处理导航点击事件：如果需要登录且未登录，弹出登录框
+const handleNavClick = (
+  item: (typeof navItems)[0],
+  event: MouseEvent,
+): void => {
+  if (item.requiresAuth && !isLoggedIn.value) {
+    event.preventDefault();
+    // 记录用户想要访问的目标页面
+    authRedirectPath.value = item.href;
+    showAuthModal.value = true;
+  }
+};
 
 // Auth Modal State
 const showAuthModal = ref(false);
+// 登录成功后跳转的目标路径
+const authRedirectPath = ref('');
 
 // Login Check - 使用 accessStore.accessToken 判断登录状态
 const isLoggedIn = computed(() => !!accessStore.accessToken);
@@ -85,6 +103,18 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
 });
+
+// 路由变化时关闭用户菜单
+const route = useRoute();
+watch(
+  () => route.path,
+  () => {
+    isUserMenuOpen.value = false;
+  },
+);
+
+// 在工具详情页隐藏 footer（路径匹配 /tool/xxx）
+const hideFooter = computed(() => route.path.startsWith('/tool/'));
 
 // ========== 密码修改弹窗 ==========
 const showPasswordModal = ref(false);
@@ -172,14 +202,7 @@ const handleChangePassword = async () => {
             class="flex cursor-pointer items-center gap-2"
             @click="router.push('/')"
           >
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm shadow-blue-200 transition-transform hover:scale-105"
-            >
-              <span class="text-lg font-bold">B</span>
-            </div>
-            <span class="text-xl font-bold tracking-tight text-slate-800"
-              >BioCloud</span
-            >
+            <img :src="logoSvg" alt="Logo" class="h-8 w-auto" />
           </div>
 
           <!-- Desktop Navigation -->
@@ -190,6 +213,7 @@ const handleChangePassword = async () => {
               :to="item.href"
               class="group flex items-center gap-2 rounded-lg px-4 py-2 text-base font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-blue-600"
               active-class="!bg-blue-50 !text-blue-600 shadow-sm ring-1 ring-blue-100"
+              @click="(e: MouseEvent) => handleNavClick(item, e)"
             >
               <component
                 :is="item.icon"
@@ -305,17 +329,14 @@ const handleChangePassword = async () => {
     <!-- 社交媒体侧边栏 -->
     <SocialSidebar />
 
-    <!-- Footer (深色设计) -->
-    <footer class="bg-slate-900 py-16 text-slate-300">
+    <!-- Footer (深色设计) - 在工具详情页隐藏 -->
+    <footer v-if="!hideFooter" class="bg-slate-900 py-16 text-slate-300">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="mb-12 grid grid-cols-1 gap-12 md:grid-cols-3">
           <!-- 左侧：Logo + 描述 + 社交图标 -->
           <div>
             <div class="mb-4 flex items-center gap-2">
-              <div class="rounded-lg bg-blue-600 p-1.5 text-white">
-                <span class="text-sm font-bold">B</span>
-              </div>
-              <span class="text-xl font-bold text-white">BioCloud</span>
+              <img :src="logoSvg" alt="Logo" class="h-8 w-auto" />
             </div>
             <p class="mb-6 text-sm leading-relaxed text-slate-400">
               专注于多组学生信分析云平台开发，致力于让科技更加贴近生活
@@ -444,7 +465,11 @@ const handleChangePassword = async () => {
     </footer>
 
     <!-- Global Auth Modal -->
-    <AuthModal :is-open="showAuthModal" @close="showAuthModal = false" />
+    <AuthModal
+      :is-open="showAuthModal"
+      :redirect-path="authRedirectPath"
+      @close="showAuthModal = false"
+    />
 
     <!-- Password Change Modal -->
     <div
