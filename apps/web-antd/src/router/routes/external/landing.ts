@@ -50,14 +50,24 @@ const routes: RouteRecordRaw[] = [
         component: () => import('#/views/biocloud/task/MyTasks.vue'),
         meta: { title: '我的任务 - BioCloud', ignoreAccess: true },
       },
-      /*
       {
-         path: 'pipeline',
-         name: 'CloudFlow',
-         component: () => import('#/views/pipeline/CloudFlow.vue'),
-         meta: { title: '云流程' }
-      }
-      */
+        path: 'pipeline',
+        name: 'PipelineList',
+        component: () => import('#/views/biocloud/pipeline/PipelineList.vue'),
+        meta: {
+          title: '云流程 - BioCloud',
+          ignoreAccess: true,
+        },
+      },
+      {
+        path: 'pipeline/:id',
+        name: 'PipelineDetail',
+        component: () => import('#/views/biocloud/pipeline/PipelineDetail.vue'),
+        meta: {
+          title: '流程详情 - BioCloud',
+          ignoreAccess: true,
+        },
+      },
     ],
   },
 ];

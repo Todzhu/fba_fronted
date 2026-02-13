@@ -89,7 +89,9 @@ export async function getAnalysisToolList(params?: AnalysisToolListParams) {
  */
 export async function getAnalysisTool(id: number) {
   // 使用 miniRequestClient，允许未登录用户浏览工具详情
-  return miniRequestClient.get<AnalysisTool>(`/api/v1/sys/analysis-tools/${id}`);
+  return miniRequestClient.get<AnalysisTool>(
+    `/api/v1/sys/analysis-tools/${id}`,
+  );
 }
 
 export interface AnalysisToolCategories {

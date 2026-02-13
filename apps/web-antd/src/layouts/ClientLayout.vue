@@ -63,10 +63,10 @@ const authRedirectPath = ref('');
 // Login Check - 使用 accessStore.accessToken 判断登录状态
 const isLoggedIn = computed(() => !!accessStore.accessToken);
 
-// 兼容 realName 和 nickname 字段
+// 优先使用用户名（username），其次使用昵称（realName/nickname）
 const displayName = computed(() => {
   const info = userStore.userInfo as null | Record<string, any>;
-  return info?.realName || info?.nickname || 'User';
+  return info?.username || info?.realName || info?.nickname || 'User';
 });
 
 // 获取用户头像 URL（与 basic.vue 保持一致，使用默认头像作为后备）
@@ -211,8 +211,8 @@ const handleChangePassword = async () => {
               v-for="item in navItems"
               :key="item.name"
               :to="item.href"
-              class="group flex items-center gap-2 rounded-lg px-4 py-2 text-base font-semibold text-slate-600 transition-all hover:bg-slate-100 hover:text-blue-600"
-              active-class="!bg-blue-50 !text-blue-600 shadow-sm ring-1 ring-blue-100"
+              class="group flex items-center gap-2 rounded-lg px-4 py-2 text-base font-semibold text-slate-600 transition-all hover:bg-purple-50 hover:text-purple-600"
+              active-class="!bg-purple-50 !text-purple-600 shadow-sm ring-1 ring-purple-100"
               @click="(e: MouseEvent) => handleNavClick(item, e)"
             >
               <component
