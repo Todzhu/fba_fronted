@@ -42,6 +42,7 @@
     "@vben/utils": "workspace:*",
     "@vueuse/core": "catalog:",
     "ant-design-vue": "catalog:",
+    "antdv-next": "catalog:",
     "dayjs": "catalog:",
     "lucide-vue-next": "catalog:",
     "mitt": "^3.0.1",

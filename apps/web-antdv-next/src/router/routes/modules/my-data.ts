@@ -9,7 +9,7 @@ const routes: RouteRecordRaw[] = [
     },
     name: 'MyData',
     path: '/my-data',
-    component: () => import('#/views/myData/index.vue'),
+    component: () => import('#/views/biocloud/myData/index.vue'),
   },
 ];
 

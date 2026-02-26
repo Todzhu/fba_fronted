@@ -13,6 +13,16 @@ const routes: RouteRecordRaw[] = [
     },
     children: [
       {
+        name: 'SysCloudToolManage',
+        path: '/system/cloud-tool-manage',
+        component: () =>
+          import('#/views/system/cloudToolsManage/index.vue'),
+        meta: {
+          title: '工具管理',
+          icon: 'ant-design:tool-outlined',
+        },
+      },
+      {
         name: 'SysDept',
         path: '/system/dept',
         component: () => import('#/views/system/dept/index.vue'),

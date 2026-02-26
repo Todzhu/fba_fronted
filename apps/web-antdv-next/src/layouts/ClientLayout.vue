@@ -15,6 +15,7 @@ import {
   Home,
   Key,
   LogOut,
+  Shield,
   Sparkles,
   User,
   Wrench,
@@ -22,7 +23,6 @@ import {
 
 import { updateSysUserPasswordApi } from '#/api/core/user';
 import SocialSidebar from '#/components/SocialSidebar.vue';
-import { useAuthStore } from '#/store/auth';
 import AuthModal from '#/views/biocloud/landing/components/AuthModal.vue';
 
 import logoSvg from '../assets/images/logo.svg';
@@ -30,7 +30,6 @@ import logoSvg from '../assets/images/logo.svg';
 const router = useRouter();
 const accessStore = useAccessStore();
 const userStore = useUserStore();
-const authStore = useAuthStore();
 
 // Navigation Items
 // requiresAuth: true 表示需要登录才能访问的页面
@@ -74,12 +73,31 @@ const userAvatar = computed(
   () => userStore.userInfo?.avatar ?? preferences.app.defaultAvatar,
 );
 
+// 判断当前用户是否为管理员
+const isAdmin = computed(() => {
+  const info = userStore.userInfo as null | Record<string, any>;
+  return !!info?.is_superuser;
+});
+
+const openAdminDashboard = () => {
+  isUserMenuOpen.value = false;
+  window.open('/dashboard', '_blank');
+};
+
 const handleLogin = () => {
   showAuthModal.value = true;
 };
 
-const handleLogout = () => {
-  authStore.logout();
+const handleLogout = async () => {
+  try {
+    await import('#/api').then((m) => m.logoutApi());
+  } catch {
+    // ignore
+  }
+  const { resetAllStores } = await import('@vben/stores');
+  resetAllStores();
+  // 使用 location 跳转避免路由守卫拦截到管理端登录页
+  window.location.replace('/index');
 };
 
 const isUserMenuOpen = ref(false);
@@ -291,6 +309,13 @@ const handleChangePassword = async () => {
                     <p class="text-xs text-slate-500">已登录</p>
                   </div>
                 </div>
+                <button
+                  v-if="isAdmin"
+                  @click="openAdminDashboard"
+                  class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-indigo-600"
+                >
+                  <Shield class="h-4 w-4" /> 管理后台
+                </button>
                 <button
                   @click="openPasswordModal"
                   class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-blue-600"

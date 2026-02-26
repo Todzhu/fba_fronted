@@ -102,7 +102,7 @@ const coreRoutes: RouteRecordRaw[] = [
       {
         name: 'AnalysisTools',
         path: 'tools',
-        component: () => import('#/views/cloudTools/index.vue'),
+        component: () => import('#/views/biocloud/cloudTools/index.vue'),
         meta: {
           title: '分析工具',
         },
@@ -110,27 +110,9 @@ const coreRoutes: RouteRecordRaw[] = [
       {
         name: 'AnalysisToolDetail',
         path: 'tool/:id',
-        component: () => import('#/views/cloudTools/detail.vue'),
+        component: () => import('#/views/biocloud/cloudTools/detail.vue'),
         meta: {
           title: '工具详情',
-          hideInMenu: true,
-        },
-      },
-      {
-        name: 'ScPipeline',
-        path: 'sc-pipeline',
-        component: () => import('#/views/scPipeline/index.vue'),
-        meta: {
-          icon: 'mdi:dna',
-          title: '单细胞分析',
-        },
-      },
-      {
-        name: 'ScPipelineDetail',
-        path: 'sc-pipeline/:id',
-        component: () => import('#/views/scPipeline/detail.vue'),
-        meta: {
-          title: '分析详情',
           hideInMenu: true,
         },
       },

@@ -29,7 +29,7 @@ import {
   formSchema,
   querySchema,
   useColumns,
-} from '#/views/system/cloud-tool/data';
+} from '#/views/system/cloudToolsManage/data';
 
 import IconUploader from './components/IconUploader.vue';
 import ToolConfigDrawer from './components/ToolConfigDrawer.vue';

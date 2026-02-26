@@ -8,7 +8,7 @@ import { IconifyIcon } from '@vben/icons';
 import { Breadcrumb, Input, message, Modal } from 'ant-design-vue';
 
 import { getMyDataFiles } from '#/api/my-data';
-import FileTable from '#/views/myData/components/FileTable.vue';
+import FileTable from '#/views/biocloud/myData/components/FileTable.vue';
 
 // 定义接口
 interface FileItem {

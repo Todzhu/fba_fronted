@@ -23,7 +23,7 @@ import {
   Upload,
 } from 'ant-design-vue';
 
-import { baseRequestClient } from '../../../api/request';
+import { baseRequestClient } from '#/api/request';
 import PlatformFileSelector from './PlatformFileSelector.vue';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
 
