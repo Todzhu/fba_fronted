@@ -8,10 +8,12 @@
  * - 文件导入/清空/模式切换
  * - 示例数据按 key 匹配加载
  */
+import { previewRdsFile } from '#/api/analysis-tools';
+import { uploadFile } from '#/api/user-file';
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Space, Spin, Tabs, Upload, Dropdown, Menu } from 'ant-design-vue';
+import { Button, Input, message, Space, Spin, Tabs, Upload, Dropdown, Menu, Table} from 'ant-design-vue';
 
 import { baseRequestClient } from '../../../api/request';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
@@ -150,6 +152,52 @@ const spreadsheetRefs = ref<
 
 const exampleLoading = ref(false);
 
+// RDS 元数据预览
+const rdsPreview = ref<{
+  n_cells: number;
+  n_genes: number;
+  assays: string[];
+  n_columns: number;
+  columns: Array<{
+    name: string;
+    type: string;
+    n_unique: number;
+    examples: string | string[];
+  }>;
+} | null>(null);
+const rdsPreviewLoading = ref(false);
+// RDS 元数据表格列定义
+const rdsMetaColumns = [
+  { title: '列名', dataIndex: 'name', width: 140, customRender: ({ text }: any) => text },
+  { title: '类型', dataIndex: 'type', width: 100 },
+  { title: '唯一值', dataIndex: 'n_unique', width: 80, align: 'center' as const },
+  { title: '示例值', dataIndex: 'examples_text', ellipsis: true },
+];
+
+
+// 触发 RDS 预览
+const triggerRdsPreview = async (fileUrl: string) => {
+  rdsPreviewLoading.value = true;
+  rdsPreview.value = null;
+  try {
+    // 直接用 baseRequestClient（已导入），避免 requestClient 拦截器问题
+    const resp = await baseRequestClient.post(
+      '/api/v1/sys/analysis-tools/tools/preview-rds',
+      { file_url: fileUrl },
+    );
+    const json = resp.data || resp;
+    // 从 {code, data, msg} 中提取 data
+    const previewData = json?.data ?? json;
+    if (previewData && previewData.n_cells !== undefined) {
+      rdsPreview.value = previewData;
+    }
+    console.log('[RDS] preview loaded:', previewData?.n_cells, 'cells');
+  } catch (e: any) {
+    console.error('[RDS] preview failed:', e?.message || e);
+  }
+  rdsPreviewLoading.value = false;
+};
+
 // 默认示例数据（仅在后端未配置时使用）
 const DEFAULT_EXAMPLE: string[][] = [
   ['Symbol', 'logFC', 'P.Value'],
@@ -166,6 +214,7 @@ const getExampleByKey = (key: string): ExampleDataConfig | undefined => {
 // 加载所有示例数据（从后端配置的 URL 加载）
 const loadAllExamples = async () => {
   exampleLoading.value = true;
+  message.loading({ content: '正在加载示例数据...', key: 'exampleLoad', duration: 0 });
 
   try {
     const examples = props.exampleData;
@@ -175,7 +224,7 @@ const loadAllExamples = async () => {
       for (const example of examples) {
         await loadExampleForFile(example.key, example);
       }
-      message.success('示例数据已加载');
+      message.success({ content: '示例数据加载完成', key: 'exampleLoad' });
     } else {
       // 没有配置时，只为第一个文件加载默认数据
       const firstKey = fileConfigs.value[0]?.key ?? 'data';
@@ -190,7 +239,7 @@ const loadAllExamples = async () => {
     }
   } catch (error) {
     console.error('Error loading examples:', error);
-    message.error('示例数据加载失败');
+    message.error({ content: '示例数据加载失败', key: 'exampleLoad' });
   } finally {
     exampleLoading.value = false;
   }
@@ -224,8 +273,12 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.fileName = displayName;
       fileData.fileType = 'binary';
       fileData.fileUrl = example.url;
-      updateFileId(key, Date.now());
       console.log(`Loaded binary example for ${key}: ${displayName}`);
+      // 如果是 RDS 文件，先加载预览再标记为完成
+      if ((urlFileName.toLowerCase().endsWith('.rds') || example.url?.toLowerCase().includes('.rds')) && example.url) {
+        await triggerRdsPreview(example.url);
+      }
+      updateFileId(key, Date.now());
     } else {
       // 表格文件：解析 CSV/TSV
       const response = await baseRequestClient.get(example.url);
@@ -328,7 +381,7 @@ const handleImportForKey = async (key: string, file: File) => {
 };
 
 // 导入二进制文件（RDS/H5AD 等）- 不解析内容，只记录文件引用
-const handleBinaryImportForKey = (key: string, file: File) => {
+const handleBinaryImportForKey = async (key: string, file: File) => {
   // 确保 fileDataMap[key] 存在
   if (!fileDataMap.value[key]) {
     fileDataMap.value[key] = {
@@ -340,13 +393,46 @@ const handleBinaryImportForKey = (key: string, file: File) => {
   }
 
   const fileData = fileDataMap.value[key]!;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const isRds = ext === 'rds' || ext === 'rdata' || ext === 'rda';
+  
+  // 如果是 RDS 文件，先设 loading 防止绿色卡片提前显示
+  if (isRds) {
+    rdsPreviewLoading.value = true;
+    rdsPreview.value = null;
+  }
+  
   fileData.fileName = file.name;
   fileData.fileType = 'binary';
-  fileData.fileUrl = URL.createObjectURL(file); // 临时 URL 用于预览/下载
-  fileData.data = []; // 二进制文件不解析
-  updateFileId(key, Date.now());
+  fileData.fileUrl = URL.createObjectURL(file);
+  fileData.data = [];
 
-  message.success(`${file.name} 已选择`);
+  // 如果是 RDS 文件，上传后触发 metadata 预览
+  if (isRds) {
+    try {
+      message.loading({ content: '正在上传并解析文件...', key: 'fileUploadPreview', duration: 0 });
+      const res = await uploadFile(file);
+      console.log('uploadFile response:', JSON.stringify(res));
+      const uploadedPath = (res as any)?.data?.path || (res as any)?.data?.url || (res as any)?.path || (res as any)?.url;
+      if (uploadedPath) {
+        const fileUrl = `/api/v1/sys/files/${uploadedPath}`;
+        fileData.fileUrl = fileUrl;
+        await triggerRdsPreview(fileUrl);
+        message.success({ content: `${file.name} 已加载`, key: 'fileUploadPreview' });
+      } else {
+        rdsPreviewLoading.value = false;
+        message.success({ content: `${file.name} 已选择`, key: 'fileUploadPreview' });
+      }
+    } catch (e) {
+      console.error('Upload for preview failed:', e);
+      rdsPreviewLoading.value = false;
+      message.success({ content: `${file.name} 已选择`, key: 'fileUploadPreview' });
+    }
+  } else {
+    message.success(`${file.name} 已选择`);
+  }
+
+  updateFileId(key, Date.now());
   return false; // 阻止默认上传
 };
 
@@ -478,16 +564,23 @@ const openPlatformSelector = (key: string) => {
   platformSelectorOpen.value = true;
 };
 
-const handlePlatformFileSelect = (file: any) => {
+const handlePlatformFileSelect = async (file: any) => {
   if (!currentSelectorKey.value) return;
   
   const key = currentSelectorKey.value;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const isRds = ext === 'rds' || ext === 'rdata' || ext === 'rda';
+  
+  // 如果是 RDS 文件，先设 loading 防止绿色卡片提前显示
+  if (isRds) {
+    rdsPreviewLoading.value = true;
+    rdsPreview.value = null;
+  }
+  
   fileDataMap.value[key]!.fileName = file.name;
-  fileDataMap.value[key]!.fileType = 'binary'; // 假设平台选择的都是二进制文件，或者根据扩展名判断
+  fileDataMap.value[key]!.fileType = 'binary';
   fileDataMap.value[key]!.fileId = Number(file.id);
   
-  // 简单根据后缀判断类型
-  const ext = file.name.split('.').pop()?.toLowerCase();
   const binaryExts = ['rds', 'rdata', 'rda', 'h5ad', 'h5', 'loom', 'zarr', 'hdf5'];
   if (binaryExts.includes(ext)) {
      fileDataMap.value[key]!.fileType = 'binary';
@@ -495,8 +588,18 @@ const handlePlatformFileSelect = (file: any) => {
      fileDataMap.value[key]!.fileType = 'tabular';
   }
   
+  // 如果是 RDS 文件且有文件路径，触发 metadata 预览
+  if ((ext === 'rds' || ext === 'rdata' || ext === 'rda') && file.path) {
+    const fileUrl = `/api/v1/sys/files/${file.path}`;
+    fileDataMap.value[key]!.fileUrl = fileUrl;
+    message.loading({ content: '正在解析文件元数据...', key: 'platformFilePreview', duration: 0 });
+    await triggerRdsPreview(fileUrl);
+    message.success({ content: `${file.name} 已加载`, key: 'platformFilePreview' });
+  } else {
+    message.success(`已选择文件: ${file.name}`);
+  }
+  
   updateFileId(key, Date.now()); // 触发更新
-  message.success(`已选择文件: ${file.name}`);
 };
 
 // 获取二进制文件的 URL（用于示例数据等）和 ID
@@ -596,7 +699,7 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
       <!-- 二进制文件状态卡片 -->
       <div 
         class="binary-file-card" 
-        :class="{ 'card-success': fileDataMap[fileConfigs[0]?.key]?.fileName }"
+        :class="{ 'card-success': fileDataMap[fileConfigs[0]?.key]?.fileName && !rdsPreviewLoading }"
       >
         <Icon 
           :icon="fileDataMap[fileConfigs[0]?.key]?.fileName ? 'mdi:check-circle' : 'mdi:file-document-outline'" 
@@ -613,7 +716,27 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
             }}
           </div>
         </div>
+
       </div>
+
+    <!-- RDS 元数据预览 - 独立展示区域 -->
+    <div v-if="rdsPreviewLoading" class="rds-loading-card">
+      <Spin size="small" />
+      <span>正在解析 RDS 文件元数据...</span>
+    </div>
+    <div v-if="rdsPreview && !rdsPreviewLoading" class="rds-preview-card">
+      <div class="rds-preview-header">
+        <span>📋 Metadata 概览</span>
+        <span class="rds-summary-text">{{ rdsPreview.n_cells.toLocaleString() }} 细胞 · {{ rdsPreview.n_genes.toLocaleString() }} 基因 · {{ rdsPreview.n_columns }} 列</span>
+      </div>
+      <Table
+          :columns="rdsMetaColumns"
+          :data-source="rdsPreview.columns.map((col: any) => ({ ...col, key: col.name, examples_text: Array.isArray(col.examples) ? col.examples.join(', ') : col.examples }))"
+          :pagination="false"
+          size="small"
+          bordered
+        />
+    </div>
 
     </template>
 

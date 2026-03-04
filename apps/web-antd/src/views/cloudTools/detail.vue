@@ -319,10 +319,7 @@ const submitAnalysis = async () => {
     if (response.is_long_running) {
       message.success('任务已提交，请在任务中心查看进度');
       analyzing.value = false;
-      router.push({
-        path: '/analysis/tasks',
-        query: { highlight: String(response.task_id) },
-      });
+      router.push('/analysis/tasks');
       return;
     }
 
@@ -920,9 +917,9 @@ onMounted(async () => {
 /* Control Panel (now Right) */
 .control-panel {
   display: flex;
-  flex: 0 0 550px; /* Fixed width 600px */
+  flex: 0 0 650px; /* Fixed width 650px */
   flex-direction: column;
-  max-width: 550px;
+  max-width: 650px;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;

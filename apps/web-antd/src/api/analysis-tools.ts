@@ -344,3 +344,21 @@ export async function updateTaskName(taskId: number, taskName: string) {
     `/api/v1/sys/analysis-tools/tasks/${taskId}?task_name=${encodeURIComponent(taskName)}`,
   );
 }
+
+/**
+ * 预览 RDS 文件元数据
+ */
+export async function previewRdsFile(fileUrl: string) {
+  return requestClient.post<{
+    n_cells: number;
+    n_genes: number;
+    assays: string[];
+    n_columns: number;
+    columns: Array<{
+      name: string;
+      type: string;
+      n_unique: number;
+      examples: string | string[];
+    }>;
+  }>('/api/v1/sys/analysis-tools/tools/preview-rds', { file_url: fileUrl });
+}

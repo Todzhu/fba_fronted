@@ -115,10 +115,11 @@ export const useTabbarStore = defineStore('core-tabbar', {
         return tab;
       }
 
-      // 对 fullPathKey: false 的路由，按 path 而非 fullPath 去重
+      // 按 path 去重，避免同一页面因 query 参数不同产生重复标签
       const tabIndex = this.tabs.findIndex((item) => {
-        if (tab.meta?.fullPathKey === false) {
-          return item.path === tab.path;
+        // 优先按 path 去重（忽略 query 参数差异）
+        if (item.path === tab.path && item.name === tab.name) {
+          return true;
         }
         return equalTab(item, tab);
       });

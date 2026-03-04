@@ -105,6 +105,7 @@ interface ParamItem {
   required: boolean; // 是否必填
   minimum?: number;
   maximum?: number;
+  step?: number;
   group: string; // 分组，默认 "通用参数"
   format?: string;
 }
@@ -229,6 +230,7 @@ watch(
           required: p.required || false,
           minimum: p.minimum,
           maximum: p.maximum,
+          step: p.step,
           group: p.group || '通用参数',
           format: p.format,
         };
@@ -402,7 +404,7 @@ const handleExampleUpload = async (index: number, file: File) => {
     // 构建完整的公开下载 URL
     const userId = result.user_id;
     const storagePath = result.storage_path || '';
-    item.url = `/api/v1/sys/my-data/example/${userId}/${storagePath}`;
+    item.url = `/api/v1/sys/analysis-tools/tools/data/${storagePath}`;
     message.success(`${file.name} 上传成功`);
   } catch (error) {
     message.error(`${file.name} 上传失败`);
@@ -482,6 +484,7 @@ const handleSave = async () => {
     if (p.description) prop.description = p.description;
     if (p.minimum !== undefined) prop.minimum = p.minimum;
     if (p.maximum !== undefined) prop.maximum = p.maximum;
+    if (p.step !== undefined) prop.step = p.step;
     properties[p.key] = prop;
     order.push(p.key); // 按顺序添加 key
   }
@@ -498,12 +501,19 @@ const handleSave = async () => {
   };
 
   // 构建 example_data
-  const example_data = exampleItems.value.map((e) => ({
+  const example_data = exampleItems.value.map((e) => {
+      // 如果 url 是相对路径（不以 / 开头），自动拼接工具数据端点前缀
+      let url = e.url || '';
+      if (url && !url.startsWith('/')) {
+        url = `/api/v1/sys/analysis-tools/tools/data/${url}`;
+      }
+      return {
     key: e.key,
     name: e.name,
-    url: e.url,
+    url: url,
     description: e.description,
-  }));
+  };
+  });
 
   const updateData: CloudToolUpdateParams = {
     ...basicInfo.value,
@@ -1007,7 +1017,7 @@ const handleImportConfig = async (file: File) => {
               v-if="['number', 'integer'].includes(editingParam.typeWidget?.[0] || '')"
               :gutter="16"
             >
-              <Col :span="12">
+              <Col :span="8">
                 <Form.Item label="最小值">
                   <InputNumber
                     v-model:value="editingParam.minimum"
@@ -1015,11 +1025,22 @@ const handleImportConfig = async (file: File) => {
                   />
                 </Form.Item>
               </Col>
-              <Col :span="12">
+              <Col :span="8">
                 <Form.Item label="最大值">
                   <InputNumber
                     v-model:value="editingParam.maximum"
                     style="width: 100%"
+                  />
+                </Form.Item>
+              </Col>
+              <Col :span="8">
+                <Form.Item label="步长">
+                  <InputNumber
+                    v-model:value="editingParam.step"
+                    :min="0"
+                    :step="0.01"
+                    style="width: 100%"
+                    placeholder="如 0.1"
                   />
                 </Form.Item>
               </Col>

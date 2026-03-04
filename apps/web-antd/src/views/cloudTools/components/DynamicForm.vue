@@ -343,6 +343,7 @@ const handleSubmit = () => {
                   :value="(modelValue[prop.key] as number) ?? prop.default"
                   :min="prop.minimum"
                   :max="prop.maximum"
+                  :step="prop.step ?? 0.01"
                   class="number-input-only"
                   @change="(val) => updateField(prop.key, val)"
                 />

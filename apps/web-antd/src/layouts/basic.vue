@@ -177,10 +177,7 @@ async function handleNoticeRead(item: NotificationItem) {
   if (item.relatedId) {
     messageModalApi.close();
     // 使用 replace 替换当前路由，避免创建重复标签
-    router.replace({
-      path: '/analysis/tasks',
-      query: { highlight: String(item.relatedId) },
-    });
+    router.replace('/analysis/tasks');
   }
 }
 
