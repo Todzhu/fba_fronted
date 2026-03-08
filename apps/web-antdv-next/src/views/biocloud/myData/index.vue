@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import type { FileItem as ApiFileItem } from '#/api/my-data';
 
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
-import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
+import { useAccessStore } from '@vben/stores';
 
 import { Breadcrumb, message, Modal } from 'ant-design-vue';
+
+import AuthModal from '../landing/components/AuthModal.vue';
 
 import {
   batchDeleteMyDataFiles,
@@ -59,6 +61,11 @@ const previewModalOpen = ref(false);
 const currentRenameFile = ref<FileItem | null>(null);
 const currentMoveFile = ref<FileItem | null>(null);
 const currentPreviewFile = ref<FileItem | null>(null);
+
+// 登录状态
+const accessStore = useAccessStore();
+const isLoggedIn = computed(() => !!accessStore.accessToken);
+const showAuthModal = ref(false);
 
 // Computed
 const files = computed(() => allFiles.value);
@@ -124,6 +131,11 @@ const determineIcon = (filename: string): string => {
 
 // Fetch files from API
 const fetchFiles = async () => {
+  // 未登录时弹出登录框，不调用 API
+  if (!isLoggedIn.value) {
+    showAuthModal.value = true;
+    return;
+  }
   loading.value = true;
   try {
     const params: { keyword?: string; parent_id?: number } = {};
@@ -139,11 +151,24 @@ const fetchFiles = async () => {
     selectedFiles.value = [];
   } catch (error: any) {
     console.error('Fetch files error:', error);
-    message.error(error.message || '获取文件列表失败');
+    // 401 状态码不提示错误，弹出登录框
+    if (error?.response?.status === 401 || error?.status === 401) {
+      showAuthModal.value = true;
+    } else {
+      message.error(error.message || '获取文件列表失败');
+    }
   } finally {
     loading.value = false;
   }
 };
+
+// 登录成功后自动关闭弹窗并加载文件
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    showAuthModal.value = false;
+    fetchFiles();
+  }
+});
 
 onMounted(() => {
   fetchFiles();
@@ -392,53 +417,61 @@ const handlePreview = (file: FileItem) => {
 </script>
 
 <template>
-  <Page>
+  <div class="min-h-screen bg-slate-50 pb-20">
+    <!-- Header Section -->
     <div
-      class="flex h-[calc(100vh-140px)] flex-col overflow-hidden rounded-lg bg-white p-4 shadow-sm"
+      class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
     >
-      <!-- Breadcrumb Navigation -->
-      <div class="mb-6 flex items-center px-4 py-2">
-        <div class="mr-4 h-6 w-1.5 rounded-full bg-blue-600"></div>
-
-        <IconifyIcon
-          v-if="currentFolderId !== null"
-          icon="ant-design:arrow-left-outlined"
-          class="mr-3 cursor-pointer text-xl text-slate-500 transition-colors hover:text-blue-600"
-          @click="handleNavUp"
-        />
-        <Breadcrumb separator=">">
-          <Breadcrumb.Item
-            v-for="(item, index) in breadcrumbs"
-            :key="item.id ?? 'root'"
-          >
-            <span
-              class="cursor-pointer transition-all duration-200 hover:text-blue-600"
-              :class="{
-                'text-xl font-bold text-slate-800':
-                  index === breadcrumbs.length - 1,
-                'text-lg font-medium text-slate-500':
-                  index !== breadcrumbs.length - 1,
-              }"
-              @click="handleBreadcrumbClick(item, index)"
+      <div class="mx-auto max-w-7xl">
+        <!-- Breadcrumb + Title -->
+        <div class="mb-2 flex items-center gap-3">
+          <IconifyIcon
+            v-if="currentFolderId !== null"
+            icon="ant-design:arrow-left-outlined"
+            class="cursor-pointer text-xl text-slate-500 transition-colors hover:text-blue-600"
+            @click="handleNavUp"
+          />
+          <Breadcrumb separator=">">
+            <Breadcrumb.Item
+              v-for="(item, index) in breadcrumbs"
+              :key="item.id ?? 'root'"
             >
-              {{ item.name }}
-            </span>
-          </Breadcrumb.Item>
-        </Breadcrumb>
+              <span
+                class="cursor-pointer transition-all duration-200 hover:text-blue-600"
+                :class="{
+                  'text-3xl font-bold text-slate-900':
+                    index === breadcrumbs.length - 1,
+                  'text-xl font-medium text-slate-500':
+                    index !== breadcrumbs.length - 1,
+                }"
+                @click="handleBreadcrumbClick(item, index)"
+              >
+                {{ item.name }}
+              </span>
+            </Breadcrumb.Item>
+          </Breadcrumb>
+        </div>
+        <p class="max-w-2xl text-slate-500">
+          管理您的个人数据文件，支持上传、下载和文件夹管理。
+        </p>
+
+        <!-- Toolbar -->
+        <div class="mt-8">
+          <FileToolbar
+            :selected-count="selectedFiles.length"
+            @search="handleSearch"
+            @view-change="handleViewChange"
+            @upload="handleUpload"
+            @new-folder="handleNewFolder"
+            @batch-delete="handleBatchDelete"
+          />
+        </div>
       </div>
+    </div>
 
-      <!-- Toolbar -->
-      <FileToolbar
-        :selected-count="selectedFiles.length"
-        @search="handleSearch"
-        @view-change="handleViewChange"
-        @upload="handleUpload"
-        @new-folder="handleNewFolder"
-        @batch-delete="handleBatchDelete"
-      />
-
-      <!-- File List Content -->
-      <div class="mt-2 flex-1 overflow-auto">
+    <!-- File List Content -->
+    <div class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <FileTable
           v-if="viewMode === 'list'"
           :files="files"
@@ -496,12 +529,13 @@ const handlePreview = (file: FileItem) => {
       v-model:open="previewModalOpen"
       :file="currentPreviewFile"
     />
-  </Page>
+
+    <!-- 登录弹窗 -->
+    <AuthModal
+      :is-open="showAuthModal"
+      redirect-path="/data"
+      @close="showAuthModal = false"
+    />
+  </div>
 </template>
 
-<style scoped>
-:deep(.ant-table-thead > tr > th) {
-  font-weight: 600;
-  background: #fafafa;
-}
-</style>

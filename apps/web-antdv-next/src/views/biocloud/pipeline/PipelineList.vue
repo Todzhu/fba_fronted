@@ -1,23 +1,19 @@
 <script setup lang="ts">
-import type { Pipeline } from './types/pipeline';
-
 /**
  * 云流程列表页
  * 展示可用的分析流程类型卡片，点击弹出右侧抽屉详情
  */
 import type { FileNode } from '#/api/pipeline';
 
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
+
+import { useAccessStore } from '@vben/stores';
 
 import {
   ArrowRight,
-  BookOpen,
-  Check,
   ChevronDown,
   ChevronRight,
-  Clock,
-  Eye,
   File,
   Folder,
   FolderOpen,
@@ -25,21 +21,22 @@ import {
   MapPin,
   Microscope,
   Play,
-  Trash2,
   X,
 } from 'lucide-vue-next';
 
 import {
   createPipeline,
-  deletePipeline,
   getFolderChildrenAsNodes,
   getMyDataTree,
-  getPipelines,
 } from '#/api/pipeline';
 
 import { STEP_LABELS, STEP_ORDER } from './types/pipeline';
+import AuthModal from '../landing/components/AuthModal.vue';
 
 const router = useRouter();
+const accessStore = useAccessStore();
+const isLoggedIn = computed(() => !!accessStore.accessToken);
+const showAuthModal = ref(false);
 
 // 流程类型定义
 const pipelineTypes = [
@@ -218,8 +215,14 @@ const handleTypeClick = (type: (typeof pipelineTypes)[0]) => {
   showDrawer.value = true;
 };
 
-// 从抽屉点击"开始分析" → 打开创建弹窗
+// 从抽屉点击"开始分析" → 检查登录状态后打开创建弹窗
 const handleStartAnalysis = async () => {
+  // 未登录时弹出登录框
+  if (!isLoggedIn.value) {
+    showDrawer.value = false;
+    showAuthModal.value = true;
+    return;
+  }
   showDrawer.value = false;
   // 重置表单
   formName.value = '';
@@ -231,6 +234,13 @@ const handleStartAnalysis = async () => {
   await loadDataTree();
   showCreateModal.value = true;
 };
+
+// 登录成功后关闭弹窗
+watch(isLoggedIn, (loggedIn) => {
+  if (loggedIn) {
+    showAuthModal.value = false;
+  }
+});
 
 // 创建新流程
 const handleCreate = async () => {
@@ -244,69 +254,12 @@ const handleCreate = async () => {
       species: formSpecies.value,
     });
     showCreateModal.value = false;
-    await loadMyPipelines();
     router.push(`/pipeline/${pipeline.id}`);
   } catch (error) {
     console.error('创建流程失败:', error);
   } finally {
     creating.value = false;
   }
-};
-
-// ========== 我的分析任务 ==========
-const myPipelines = ref<Pipeline[]>([]);
-const loadingPipelines = ref(false);
-const deletingId = ref<null | string>(null);
-
-// 加载任务列表
-const loadMyPipelines = async () => {
-  loadingPipelines.value = true;
-  try {
-    myPipelines.value = await getPipelines();
-  } finally {
-    loadingPipelines.value = false;
-  }
-};
-
-// 删除任务
-const handleDeletePipeline = async (id: string) => {
-  deletingId.value = id;
-  try {
-    await deletePipeline(id);
-    await loadMyPipelines();
-  } finally {
-    deletingId.value = null;
-  }
-};
-
-// 已完成步骤数
-const getCompletedSteps = (p: Pipeline): number => {
-  return p.steps.filter((s) => s.status === 'completed').length;
-};
-
-// 是否全部完成
-const isAllCompleted = (p: Pipeline): boolean => {
-  return getCompletedSteps(p) === p.steps.length;
-};
-
-// 物种标签映射
-const speciesLabels: Record<string, string> = {
-  human: '人类',
-  mouse: '小鼠',
-  rat: '大鼠',
-  other: '其他',
-};
-
-// 格式化相对时间
-const formatRelativeTime = (dateStr: string): string => {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes} 分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.floor(hours / 24);
-  return `${days} 天前`;
 };
 
 // 关闭树下拉
@@ -319,7 +272,6 @@ const handleClickOutsideTree = (e: MouseEvent) => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutsideTree);
-  loadMyPipelines();
 });
 </script>
 
@@ -423,153 +375,6 @@ onMounted(() => {
               </span>
               <span v-else class="text-sm text-slate-400">敬请期待</span>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========== 我的分析任务 ========== -->
-    <div class="mx-auto mt-12 max-w-7xl px-4 sm:px-6 lg:px-8">
-      <!-- Section Header -->
-      <div class="mb-6 flex items-center justify-between">
-        <div>
-          <h2 class="text-xl font-bold text-slate-900">我的分析任务</h2>
-          <p class="mt-1 text-sm text-slate-500">
-            已创建 {{ myPipelines.length }} 个分析任务
-          </p>
-        </div>
-      </div>
-
-      <!-- 加载中 -->
-      <div
-        v-if="loadingPipelines"
-        class="flex items-center justify-center py-12"
-      >
-        <Loader2 class="h-6 w-6 animate-spin text-blue-500" />
-        <span class="ml-2 text-sm text-slate-500">加载中...</span>
-      </div>
-
-      <!-- 空状态 -->
-      <div
-        v-else-if="myPipelines.length === 0"
-        class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-200 py-16"
-      >
-        <div
-          class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100"
-        >
-          <BookOpen class="h-8 w-8 text-slate-400" />
-        </div>
-        <p class="text-lg font-medium text-slate-600">暂无分析任务</p>
-        <p class="mt-1 text-sm text-slate-400">
-          选择上方的分析流程类型，创建你的第一个任务
-        </p>
-      </div>
-
-      <!-- 任务列表 -->
-      <div v-else class="space-y-3">
-        <div
-          v-for="p in myPipelines"
-          :key="p.id"
-          class="group flex items-center gap-6 rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm transition-all hover:border-blue-200 hover:shadow-md"
-        >
-          <!-- 左侧：名称 + 元信息 -->
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <h3 class="truncate text-base font-semibold text-slate-900">
-                {{ p.name }}
-              </h3>
-              <span
-                v-if="isAllCompleted(p)"
-                class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600"
-              >
-                <Check class="h-3 w-3" />
-                已完成
-              </span>
-              <span
-                v-else
-                class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600"
-              >
-                进行中
-              </span>
-            </div>
-            <div class="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
-              <span v-if="p.species" class="inline-flex items-center gap-1">
-                🧬 {{ speciesLabels[p.species] || p.species }}
-              </span>
-              <span
-                v-if="p.dataPath"
-                class="max-w-[200px] truncate"
-                :title="p.dataPath"
-              >
-                📁 {{ p.dataPath }}
-              </span>
-              <span class="inline-flex items-center gap-1">
-                <Clock class="h-3 w-3" />
-                {{ formatRelativeTime(p.updatedAt) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- 中间：步骤进度圆点 -->
-          <div class="hidden items-center gap-1.5 sm:flex">
-            <div
-              v-for="(step, idx) in p.steps"
-              :key="idx"
-              class="group/dot relative"
-            >
-              <div
-                class="h-3 w-3 rounded-full transition-colors"
-                :class="{
-                  'bg-emerald-500': step.status === 'completed',
-                  'animate-pulse bg-blue-500': step.status === 'running',
-                  'bg-slate-200': step.status === 'pending',
-                  'bg-red-500': step.status === 'error',
-                }"
-              ></div>
-              <!-- Tooltip -->
-              <div
-                class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover/dot:opacity-100"
-              >
-                {{ STEP_LABELS[step.stepType] }}
-                <div
-                  class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"
-                ></div>
-              </div>
-            </div>
-            <span class="ml-1.5 text-xs text-slate-400">
-              {{ getCompletedSteps(p) }}/{{ p.steps.length }}
-            </span>
-          </div>
-
-          <!-- 右侧：操作按钮 -->
-          <div class="flex items-center gap-2">
-            <button
-              v-if="!isAllCompleted(p)"
-              @click="router.push(`/pipeline/${p.id}`)"
-              class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
-            >
-              <Play class="h-4 w-4" />
-              继续分析
-            </button>
-            <button
-              v-else
-              @click="router.push(`/pipeline/${p.id}`)"
-              class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
-            >
-              <Eye class="h-4 w-4" />
-              查看结果
-            </button>
-            <button
-              @click.stop="handleDeletePipeline(p.id)"
-              :disabled="deletingId === p.id"
-              class="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 p-2 text-slate-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Loader2
-                v-if="deletingId === p.id"
-                class="h-4 w-4 animate-spin"
-              />
-              <Trash2 v-else class="h-4 w-4" />
-            </button>
           </div>
         </div>
       </div>
@@ -880,7 +685,7 @@ onMounted(() => {
                           }"
                         >
                           <div
-                            class="flex items-center gap-1 px-3 py-1.5 transition-colors hover:bg-slate-50"
+                            class="group flex items-center gap-1 px-3 py-1.5 transition-colors hover:bg-slate-50"
                           >
                             <span
                               class="flex h-4 w-4 flex-shrink-0 cursor-pointer items-center justify-center"
@@ -900,9 +705,7 @@ onMounted(() => {
                             </span>
                             <div
                               class="flex flex-1 cursor-pointer items-center gap-1"
-                              @click="
-                                node.key !== 'root' && selectTreeNode(node)
-                              "
+                              @click="toggleExpand(node.key)"
                             >
                               <component
                                 :is="
@@ -917,6 +720,15 @@ onMounted(() => {
                                 >{{ node.title }}</span
                               >
                             </div>
+                            <button
+                              v-if="node.key !== 'root'"
+                              type="button"
+                              class="ml-auto mr-1 shrink-0 rounded px-2 py-0.5 text-xs font-medium text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 group-hover:opacity-100"
+                              :class="{ '!opacity-100 bg-blue-50': formDataPath === node.path }"
+                              @click.stop="selectTreeNode(node)"
+                            >
+                              {{ formDataPath === node.path ? '已选' : '选择' }}
+                            </button>
                           </div>
 
                           <!-- 第二层 -->
@@ -943,7 +755,7 @@ onMounted(() => {
                               <!-- 文件夹节点（第二层） -->
                               <template v-else>
                                 <div
-                                  class="flex items-center gap-1 py-1.5 pl-8 pr-3 transition-colors hover:bg-slate-50"
+                                  class="group flex items-center gap-1 py-1.5 pl-8 pr-3 transition-colors hover:bg-slate-50"
                                   :class="{
                                     'bg-blue-50': formDataPath === child.path,
                                   }"
@@ -968,7 +780,7 @@ onMounted(() => {
                                   </span>
                                   <div
                                     class="flex flex-1 cursor-pointer items-center gap-1"
-                                    @click="selectTreeNode(child)"
+                                    @click="toggleExpand(child.key)"
                                   >
                                     <component
                                       :is="
@@ -983,6 +795,14 @@ onMounted(() => {
                                       >{{ child.title }}</span
                                     >
                                   </div>
+                                  <button
+                                    type="button"
+                                    class="ml-auto mr-1 shrink-0 rounded px-2 py-0.5 text-xs font-medium text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 group-hover:opacity-100"
+                                    :class="{ '!opacity-100 bg-blue-50': formDataPath === child.path }"
+                                    @click.stop="selectTreeNode(child)"
+                                  >
+                                    {{ formDataPath === child.path ? '已选' : '选择' }}
+                                  </button>
                                 </div>
 
                                 <!-- 第三层 -->
@@ -1014,7 +834,7 @@ onMounted(() => {
                                     <!-- 文件夹节点（第三层） -->
                                     <template v-else>
                                       <div
-                                        class="flex items-center gap-1 py-1.5 pl-14 pr-3 transition-colors hover:bg-slate-50"
+                                        class="group flex items-center gap-1 py-1.5 pl-14 pr-3 transition-colors hover:bg-slate-50"
                                         :class="{
                                           'bg-blue-50':
                                             formDataPath === gc.path,
@@ -1040,7 +860,7 @@ onMounted(() => {
                                         </span>
                                         <div
                                           class="flex flex-1 cursor-pointer items-center gap-1"
-                                          @click="selectTreeNode(gc)"
+                                          @click="toggleExpand(gc.key)"
                                         >
                                           <component
                                             :is="
@@ -1055,6 +875,14 @@ onMounted(() => {
                                             >{{ gc.title }}</span
                                           >
                                         </div>
+                                        <button
+                                          type="button"
+                                          class="ml-auto mr-1 shrink-0 rounded px-2 py-0.5 text-xs font-medium text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 group-hover:opacity-100"
+                                          :class="{ '!opacity-100 bg-blue-50': formDataPath === gc.path }"
+                                          @click.stop="selectTreeNode(gc)"
+                                        >
+                                          {{ formDataPath === gc.path ? '已选' : '选择' }}
+                                        </button>
                                       </div>
 
                                       <!-- 第四层 -->
@@ -1067,7 +895,7 @@ onMounted(() => {
                                         <div
                                           v-for="leaf in gc.children"
                                           :key="leaf.key"
-                                          class="flex items-center gap-1 py-1.5 pl-20 pr-3 transition-colors"
+                                          class="group flex items-center gap-1 py-1.5 pl-20 pr-3 transition-colors"
                                           :class="{
                                             'bg-blue-50':
                                               formDataPath === leaf.path,
@@ -1082,7 +910,7 @@ onMounted(() => {
                                             !(
                                               leaf.isLeaf ||
                                               leaf.type === 'file'
-                                            ) && selectTreeNode(leaf)
+                                            ) && toggleExpand(leaf.key)
                                           "
                                         >
                                           <component
@@ -1104,6 +932,15 @@ onMounted(() => {
                                             class="ml-1 select-none text-sm"
                                             >{{ leaf.title }}</span
                                           >
+                                          <button
+                                            v-if="!(leaf.isLeaf || leaf.type === 'file')"
+                                            type="button"
+                                            class="ml-auto mr-1 shrink-0 rounded px-2 py-0.5 text-xs font-medium text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 group-hover:opacity-100"
+                                            :class="{ '!opacity-100 bg-blue-50': formDataPath === leaf.path }"
+                                            @click.stop="selectTreeNode(leaf)"
+                                          >
+                                            {{ formDataPath === leaf.path ? '已选' : '选择' }}
+                                          </button>
                                         </div>
                                       </template>
                                     </template>
@@ -1185,6 +1022,12 @@ onMounted(() => {
         </div>
       </div>
     </Transition>
+    <!-- 登录弹窗 -->
+    <AuthModal
+      :is-open="showAuthModal"
+      redirect-path="/pipeline"
+      @close="showAuthModal = false"
+    />
   </div>
 </template>
 

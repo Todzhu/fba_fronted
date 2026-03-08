@@ -7,11 +7,15 @@ import { useRouter } from 'vue-router';
 import { useAccessStore } from '@vben/stores';
 
 import {
+  ArrowRight,
   ChevronLeft,
   ChevronRight,
+  Eye,
   Loader2,
   Lock,
   Search,
+  Sparkles,
+  Star,
   X,
 } from 'lucide-vue-next';
 
@@ -121,19 +125,20 @@ const handleToolClick = (tool: AnalysisTool) => {
 
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
-    <!-- Hero / Header Section -->
+    <!-- ========== Header 区域（与云流程/我的数据一致） ========== -->
     <div
       class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
     >
-      <div class="mx-auto w-full max-w-[1400px]">
+      <div class="mx-auto max-w-7xl">
         <h1 class="mb-2 text-3xl font-bold text-slate-900">云工具</h1>
         <p class="max-w-2xl text-slate-500">
           探索超过 {{ total }}+
           款专业生物信息分析工具，从基础绘图到高级多组学挖掘，一键即用。
         </p>
 
-        <!-- Search & Filter Bar -->
+        <!-- 搜索 & 筛选条 -->
         <div class="mt-8 flex flex-col gap-4 md:flex-row">
+          <!-- 搜索框 -->
           <div class="relative max-w-lg flex-1">
             <div
               class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3"
@@ -156,7 +161,7 @@ const handleToolClick = (tool: AnalysisTool) => {
             </button>
           </div>
 
-          <!-- Category Chips -->
+          <!-- 分类标签 -->
           <div
             class="scrollbar-hide flex items-center gap-2 overflow-x-auto pb-2 md:pb-0"
           >
@@ -178,161 +183,155 @@ const handleToolClick = (tool: AnalysisTool) => {
       </div>
     </div>
 
-    <!-- Tools Grid -->
-    <div class="mx-auto mt-8 w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
-      <!-- Loading -->
-      <div v-if="loading" class="flex items-center justify-center py-20">
-        <Loader2 class="h-8 w-8 animate-spin text-blue-600" />
-        <span class="ml-3 text-slate-500">加载中...</span>
+    <!-- ========== 工具网格 ========== -->
+    <div class="mx-auto mt-10 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <!-- 加载中 -->
+      <div v-if="loading" class="flex flex-col items-center justify-center py-24">
+        <Loader2 class="mb-3 h-10 w-10 animate-spin text-blue-500" />
+        <span class="text-sm text-slate-500">加载工具中...</span>
       </div>
 
-      <!-- Tools Grid - 水平卡片布局 -->
+      <!-- 工具卡片网格 - 竖直布局，与 landing page 和云流程一致 -->
       <div
         v-else-if="tools.length > 0"
-        class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4"
+        class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
       >
         <div
           v-for="tool in tools"
           :key="tool.id"
           @click="handleToolClick(tool)"
-          class="group flex min-h-[200px] cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg"
+          class="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-100/50"
         >
-          <!-- 左侧图片区域 -->
-          <div class="relative w-32 flex-shrink-0 overflow-hidden bg-slate-50">
-            <!-- 如果有图片路径，显示图片 -->
+          <!-- 顶部图片预览区 -->
+          <div class="relative h-40 overflow-hidden sm:h-44">
+            <!-- 有图片：显示工具产出图 -->
             <img
               v-if="tool.icon && tool.icon.includes('/')"
               :src="getFullImageUrl(tool.icon)"
               :alt="tool.title"
-              class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
-            <!-- 否则显示渐变背景和首字母 -->
+            <!-- 无图片：渐变背景 + 首字母 -->
             <div
               v-else
-              class="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100"
+              class="flex h-full w-full items-center justify-center"
+              :style="{
+                background: `linear-gradient(135deg, ${tool.color || '#3b82f6'}20, ${tool.color || '#6366f1'}10)`,
+              }"
             >
               <div
-                class="flex h-12 w-12 items-center justify-center rounded-xl shadow-sm"
-                :style="{ backgroundColor: tool.color || '#3b82f6' }"
+                class="flex h-16 w-16 items-center justify-center rounded-2xl shadow-lg transition-transform duration-300 group-hover:scale-110"
+                :style="{
+                  backgroundColor: tool.color || '#3b82f6',
+                  boxShadow: `0 8px 24px ${tool.color || '#3b82f6'}30`,
+                }"
               >
-                <span class="text-lg font-bold text-white">{{
+                <span class="text-2xl font-bold text-white">{{
                   tool.title?.charAt(0) || 'T'
                 }}</span>
               </div>
             </div>
 
-            <!-- Lock Overlay if not logged in -->
+            <!-- 分类标签 -->
+            <div
+              class="absolute left-3 top-3 rounded-full border border-white/20 bg-white/80 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-md"
+            >
+              {{ tool.omics_category }}
+            </div>
+
+            <!-- 功能分类标签 -->
+            <div
+              v-if="tool.func_category"
+              class="absolute right-3 top-3 rounded-full border border-blue-100 bg-blue-50/90 px-2.5 py-1 text-xs font-medium text-blue-600 backdrop-blur-md"
+            >
+              {{ tool.func_category }}
+            </div>
+
+            <!-- 登录锁定遮罩 -->
             <div
               v-if="!isLoggedIn"
-              class="absolute right-1 top-1 rounded-full bg-black/50 p-1 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100"
+              class="absolute bottom-2 right-2 rounded-full bg-black/40 p-1.5 text-white opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100"
               title="登录后使用"
             >
-              <Lock class="h-3 w-3" />
+              <Lock class="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <!-- 右侧内容区域 -->
-          <div class="flex flex-1 flex-col justify-between p-3">
+          <!-- 底部内容区 -->
+          <div class="p-4">
             <!-- 标题 -->
             <h3
-              class="mb-1.5 text-sm font-semibold text-slate-900 transition-colors group-hover:text-blue-600"
+              class="mb-2 text-base font-bold text-slate-900 transition-colors group-hover:text-blue-600"
             >
               {{ tool.title }}
             </h3>
 
-            <!-- 标签 -->
-            <div class="mb-2 flex flex-wrap items-center gap-1.5">
-              <span
-                class="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-medium text-slate-600"
-              >
-                {{ tool.omics_category }}
-              </span>
-              <span
-                v-if="tool.func_category"
-                class="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-600"
-              >
-                {{ tool.func_category }}
-              </span>
-            </div>
-
             <!-- 描述 -->
             <p
-              class="mb-2 line-clamp-2 flex-1 text-xs leading-relaxed text-slate-500"
+              class="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500"
             >
               {{ tool.description }}
             </p>
 
-            <!-- 底部：统计 -->
-            <div class="flex items-center gap-3 text-xs text-slate-400">
-              <span class="flex items-center gap-1">
-                <svg
-                  class="h-3 w-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                  />
-                </svg>
-                {{ tool.views }} 浏览
-              </span>
-              <span class="flex items-center gap-1">
-                <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 24 24">
-                  <path
-                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-                  />
-                </svg>
-                {{ tool.stars }} 收藏
-              </span>
+            <!-- 底部统计 -->
+            <div
+              class="flex items-center justify-between border-t border-slate-100 pt-3"
+            >
+              <div class="flex items-center gap-3 text-xs text-slate-400">
+                <span class="flex items-center gap-1">
+                  <Eye class="h-3.5 w-3.5" />
+                  {{ tool.views }} 浏览
+                </span>
+                <span class="flex items-center gap-1">
+                  <Star class="h-3.5 w-3.5" />
+                  {{ tool.stars }} 收藏
+                </span>
+              </div>
+              <ArrowRight
+                class="h-4 w-4 text-slate-300 transition-all duration-200 group-hover:translate-x-1 group-hover:text-blue-500"
+              />
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Empty State -->
-      <div v-else class="py-20 text-center">
+      <!-- 空状态 -->
+      <div v-else class="py-24 text-center">
         <div
-          class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100"
+          class="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-slate-100"
         >
-          <Search class="h-8 w-8 text-slate-400" />
+          <Search class="h-10 w-10 text-slate-300" />
         </div>
-        <h3 class="text-lg font-medium text-slate-900">未找到相关工具</h3>
-        <p class="mt-1 text-slate-500">换个关键词试试，或者浏览全部工具。</p>
+        <h3 class="text-lg font-bold text-slate-900">未找到相关工具</h3>
+        <p class="mt-2 text-sm text-slate-500">
+          换个关键词试试，或者浏览全部工具。
+        </p>
         <button
           @click="
             searchQuery = '';
             selectedCategory = '全部';
           "
-          class="mt-4 font-medium text-blue-600 hover:text-blue-700"
+          class="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-6 py-2.5 text-sm font-semibold text-blue-600 transition-all hover:bg-blue-100"
         >
-          清除筛选
+          <Sparkles class="h-4 w-4" />
+          查看全部工具
         </button>
       </div>
 
-      <!-- 分页控件 -->
+      <!-- ========== 分页控件 ========== -->
       <div
         v-if="tools.length > 0 && totalPages > 1"
-        class="mt-12 flex items-center justify-center gap-2"
+        class="mt-14 flex items-center justify-center gap-2"
       >
         <!-- 上一页 -->
         <button
           @click="goToPage(currentPage - 1)"
           :disabled="currentPage === 1"
-          class="flex h-10 w-10 items-center justify-center rounded-lg border transition-all"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border transition-all"
           :class="
             currentPage === 1
               ? 'cursor-not-allowed border-slate-200 text-slate-300'
-              : 'border-slate-300 text-slate-600 hover:border-slate-400 hover:bg-slate-100'
+              : 'border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600'
           "
         >
           <ChevronLeft class="h-5 w-5" />
@@ -347,11 +346,11 @@ const handleToolClick = (tool: AnalysisTool) => {
               (page >= currentPage - 1 && page <= currentPage + 1)
             "
             @click="goToPage(page)"
-            class="flex h-10 w-10 items-center justify-center rounded-lg border font-medium transition-all"
+            class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border font-medium transition-all"
             :class="
               page === currentPage
-                ? 'border-blue-600 bg-blue-600 text-white'
-                : 'border-slate-300 text-slate-600 hover:border-slate-400 hover:bg-slate-100'
+                ? 'border-blue-600 bg-blue-600 text-white shadow-md shadow-blue-500/25'
+                : 'border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600'
             "
           >
             {{ page }}
@@ -367,30 +366,30 @@ const handleToolClick = (tool: AnalysisTool) => {
         <button
           @click="goToPage(currentPage + 1)"
           :disabled="currentPage === totalPages"
-          class="flex h-10 w-10 items-center justify-center rounded-lg border transition-all"
+          class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border transition-all"
           :class="
             currentPage === totalPages
               ? 'cursor-not-allowed border-slate-200 text-slate-300'
-              : 'border-slate-300 text-slate-600 hover:border-slate-400 hover:bg-slate-100'
+              : 'border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600'
           "
         >
           <ChevronRight class="h-5 w-5" />
         </button>
 
         <!-- 页码信息 -->
-        <span class="ml-4 text-sm text-slate-500">
+        <span class="ml-4 text-sm text-slate-400">
           第 {{ currentPage }} / {{ totalPages }} 页，共 {{ total }} 个工具
         </span>
       </div>
     </div>
 
-    <!-- Global Auth Modal (Reused) -->
+    <!-- Auth Modal -->
     <AuthModal :is-open="showAuthModal" @close="showAuthModal = false" />
   </div>
 </template>
 
 <style scoped>
-/* Hide scrollbar for category list */
+/* 隐藏分类滚动条 */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }

@@ -77,17 +77,19 @@ export const useAuthStore = defineStore('auth', () => {
           onSuccess
             ? await onSuccess?.()
             : await router.push(
-                userInfo.homePath || preferences.app.defaultHomePath,
-              );
+              userInfo.homePath || preferences.app.defaultHomePath,
+            );
         }
 
         // 初始化WebSocket连接
         const wsStore = useWebSocketStore();
         wsStore.connect();
 
-        if (userInfo?.nickname) {
+        // 使用登录时输入的用户名作为显示名（后端 nickname/realName 可能异常）
+        const displayName = (params as LoginParams).username || '';
+        if (displayName) {
           notification.success({
-            description: `${$t('authentication.loginSuccessDesc')}:${userInfo?.nickname}`,
+            description: `${$t('authentication.loginSuccessDesc')}:${displayName}`,
             duration: 3,
             title: $t('authentication.loginSuccess'),
           });

@@ -8,7 +8,6 @@ import { useRouter } from 'vue-router';
 
 import {
   ArrowRight,
-  BarChart3,
   BookOpen,
   CheckCircle,
   ChevronLeft,
@@ -215,6 +214,7 @@ const galleryTools = [
   {
     name: '火山图',
     category: '蛋白组学',
+    image: '/images/tools/previews/volcano-plot-preview.png',
     color: 'text-orange-400',
     bgGradient: 'from-orange-500/20 to-amber-500/10',
     borderColor: 'border-orange-500/20',
@@ -223,6 +223,7 @@ const galleryTools = [
   {
     name: '主成分分析',
     category: '转录组学',
+    image: '/images/tools/previews/pca-analysis-preview.png',
     color: 'text-blue-400',
     bgGradient: 'from-blue-500/20 to-indigo-500/10',
     borderColor: 'border-blue-500/20',
@@ -231,6 +232,7 @@ const galleryTools = [
   {
     name: 'Ro/e 分析',
     category: '单细胞',
+    image: '/images/tools/previews/roe-analysis-preview.png',
     color: 'text-emerald-400',
     bgGradient: 'from-emerald-500/20 to-teal-500/10',
     borderColor: 'border-emerald-500/20',
@@ -239,6 +241,7 @@ const galleryTools = [
   {
     name: 'Heatmap 热图',
     category: '转录组学',
+    image: '/images/tools/previews/heatmap-preview.png',
     color: 'text-purple-400',
     bgGradient: 'from-purple-500/20 to-violet-500/10',
     borderColor: 'border-purple-500/20',
@@ -247,6 +250,7 @@ const galleryTools = [
   {
     name: '差异基因火山图',
     category: '单细胞',
+    image: '/images/tools/previews/deg-volcano-preview.png',
     color: 'text-rose-400',
     bgGradient: 'from-rose-500/20 to-pink-500/10',
     borderColor: 'border-rose-500/20',
@@ -255,6 +259,7 @@ const galleryTools = [
   {
     name: 'Monocle2 拟时序',
     category: '单细胞',
+    image: '/images/tools/previews/monocle-trajectory-preview.png',
     color: 'text-cyan-400',
     bgGradient: 'from-cyan-500/20 to-sky-500/10',
     borderColor: 'border-cyan-500/20',
@@ -660,31 +665,31 @@ const formatViews = (views: number): string => {
       </div>
     </section>
 
-    <!-- ========== 热门工具画廊（暗色 Glassmorphism） ========== -->
+    <!-- ========== 热门工具画廊（浅色主题） ========== -->
     <section
-      class="relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-950 to-purple-950 py-24"
+      class="relative overflow-hidden bg-gradient-to-b from-slate-50/80 via-white to-blue-50/40 py-24"
     >
-      <!-- 装饰光源 -->
+      <!-- 柔和装饰光源 -->
       <div
-        class="pointer-events-none absolute left-1/4 top-0 h-[400px] w-[400px] rounded-full bg-blue-600/15 blur-[120px]"
+        class="pointer-events-none absolute left-1/4 top-0 h-[400px] w-[400px] rounded-full bg-blue-100/40 blur-[120px]"
       ></div>
       <div
-        class="pointer-events-none absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-purple-600/15 blur-[120px]"
+        class="pointer-events-none absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-purple-100/30 blur-[120px]"
       ></div>
 
       <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <!-- 标题 -->
         <div class="mb-16 text-center">
           <span
-            class="mb-3 inline-flex items-center gap-1.5 rounded-full border border-purple-500/20 bg-purple-500/10 px-4 py-1.5 text-sm font-semibold text-purple-300"
+            class="mb-3 inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-4 py-1.5 text-sm font-semibold text-purple-600"
           >
             <FlaskConical class="h-3.5 w-3.5" />
             工具集锦
           </span>
-          <h2 class="mt-5 text-3xl font-bold text-white sm:text-4xl">
+          <h2 class="mt-5 text-3xl font-bold text-slate-900 sm:text-4xl">
             热门分析工具
           </h2>
-          <p class="mx-auto mt-4 max-w-2xl text-base text-slate-400">
+          <p class="mx-auto mt-4 max-w-2xl text-base text-slate-500">
             覆盖转录组、单细胞、蛋白组学等多领域，一键生成出版级图表。
           </p>
         </div>
@@ -695,21 +700,31 @@ const formatViews = (views: number): string => {
             v-for="tool in galleryTools"
             :key="tool.name"
             @click="goToTools"
-            class="group cursor-pointer overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.05] backdrop-blur-lg transition-all duration-300 hover:-translate-y-1 hover:border-white/15 hover:bg-white/[0.08] hover:shadow-2xl hover:shadow-blue-500/10"
+            class="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-200/50"
           >
             <!-- 工具预览区 -->
             <div
-              class="relative flex h-40 items-center justify-center bg-gradient-to-br sm:h-48"
-              :class="tool.bgGradient"
+              class="relative h-40 overflow-hidden sm:h-48"
             >
-              <BarChart3
-                class="h-16 w-16 opacity-30 transition-all duration-300 group-hover:scale-110 group-hover:opacity-50 sm:h-20 sm:w-20"
-                :class="tool.color"
+              <!-- 底色渐变层 -->
+              <div
+                class="absolute inset-0 bg-gradient-to-br"
+                :class="tool.bgGradient"
+              ></div>
+              <!-- 分析结果预览图 -->
+              <img
+                :src="tool.image"
+                :alt="tool.name"
+                class="absolute inset-0 h-full w-full object-cover opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
               />
+              <!-- 渐变叠加层，增强底部文字可读性 -->
+              <div
+                class="absolute inset-0 bg-gradient-to-t from-slate-900/50 via-transparent to-transparent"
+              ></div>
 
               <!-- 分类标签 -->
               <div
-                class="absolute left-3 top-3 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur-md"
+                class="absolute left-3 top-3 z-10 rounded-full border border-white/20 bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur-md"
                 :class="tool.color"
               >
                 {{ tool.category }}
@@ -719,11 +734,11 @@ const formatViews = (views: number): string => {
             <!-- 底部信息 -->
             <div class="flex items-center justify-between px-4 py-4">
               <h3
-                class="text-sm font-bold text-white/90 transition-colors group-hover:text-white sm:text-base"
+                class="text-sm font-bold text-slate-800 transition-colors group-hover:text-blue-600 sm:text-base"
               >
                 {{ tool.name }}
               </h3>
-              <div class="flex items-center gap-1 text-xs text-slate-500">
+              <div class="flex items-center gap-1 text-xs text-slate-400">
                 <Users class="h-3.5 w-3.5" />
                 {{ formatViews(tool.views) }}
               </div>
@@ -735,40 +750,11 @@ const formatViews = (views: number): string => {
         <div class="mt-14 text-center">
           <button
             @click="goToTools"
-            class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-white/15 bg-white/5 px-7 py-3 text-sm font-semibold text-white/80 backdrop-blur-sm transition-all duration-300 hover:border-white/25 hover:bg-white/10 hover:text-white"
+            class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-300 hover:border-blue-300 hover:text-blue-600 hover:shadow-md"
           >
             查看全部工具
             <ArrowRight class="h-4 w-4" />
           </button>
-        </div>
-      </div>
-    </section>
-
-    <!-- ========== 大数据统计横幅 ========== -->
-    <section
-      class="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 py-16"
-    >
-      <!-- 光效 -->
-      <div
-        class="pointer-events-none absolute -left-20 -top-20 h-60 w-60 rounded-full bg-white/10 blur-[80px]"
-      ></div>
-      <div
-        class="pointer-events-none absolute -bottom-20 -right-20 h-60 w-60 rounded-full bg-white/10 blur-[80px]"
-      ></div>
-
-      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-2 gap-8 text-center sm:grid-cols-4">
-          <div v-for="stat in statsData" :key="stat.label" class="group">
-            <div
-              class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 backdrop-blur-sm transition-transform duration-300 group-hover:scale-110"
-            >
-              <component :is="stat.icon" class="h-7 w-7 text-white/90" />
-            </div>
-            <div class="text-3xl font-extrabold text-white sm:text-4xl">
-              {{ stat.value }}
-            </div>
-            <div class="mt-1 text-sm text-white/60">{{ stat.label }}</div>
-          </div>
         </div>
       </div>
     </section>

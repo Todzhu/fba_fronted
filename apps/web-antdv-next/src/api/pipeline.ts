@@ -216,6 +216,27 @@ export async function getStepCharts(
   };
 }
 
+/**
+ * 获取步骤运行日志
+ * @param pipelineId 流程 ID
+ * @param stepIndex 步骤序号
+ * @returns 日志条目列表 [{time, level, message}, ...]
+ */
+export async function getStepLogs(
+  pipelineId: string,
+  stepIndex: number,
+): Promise<{ level: string; message: string; time: string }[]> {
+  try {
+    const resp = await requestClient.get<
+      { level: string; message: string; time: string }[]
+    >(`/api/v1/pipelines/${pipelineId}/steps/${stepIndex}/logs`);
+    return resp ?? [];
+  } catch {
+    // 日志获取失败时静默返回空数组，不影响主流程
+    return [];
+  }
+}
+
 // ========== 用户数据文件 API ==========
 
 /** 文件节点（树形结构） */

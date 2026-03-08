@@ -30,6 +30,7 @@ import {
 import {
   getPipeline as fetchPipelineApi,
   getFilesInFolder,
+  getStepLogs,
   runStep as runStepApi,
   updateSampleDict,
 } from '#/api/pipeline';
@@ -152,7 +153,7 @@ const showLogDrawer = ref(false);
 // 日志条目
 interface LogEntry {
   time: string;
-  level: 'error' | 'info' | 'success' | 'warn';
+  level: string;
   message: string;
 }
 
@@ -163,76 +164,6 @@ const stepLogsMap = ref<Record<number, LogEntry[]>>({});
 const currentStepLogs = computed(() => {
   return stepLogsMap.value[activeStepIndex.value] || [];
 });
-
-// 模拟生成日志
-const generateMockLogs = (stepType: StepType): LogEntry[] => {
-  const now = new Date();
-  const fmt = (offset: number) => {
-    const d = new Date(now.getTime() - offset * 1000);
-    return d.toLocaleTimeString('zh-CN', { hour12: false });
-  };
-  const baseEntries: LogEntry[] = [
-    {
-      time: fmt(10),
-      level: 'info',
-      message: `[${STEP_LABELS[stepType]}] 开始执行...`,
-    },
-    { time: fmt(8), level: 'info', message: '加载参数配置...' },
-    { time: fmt(6), level: 'info', message: '连接计算节点...' },
-  ];
-  const stepSpecific: Record<StepType, LogEntry[]> = {
-    data_load: [
-      { time: fmt(5), level: 'info', message: '扫描数据目录...' },
-      { time: fmt(4), level: 'info', message: '检测到 4 个样本文件夹' },
-      { time: fmt(3), level: 'info', message: '读取 10x Genomics 格式数据...' },
-      {
-        time: fmt(2),
-        level: 'info',
-        message: '合并表达矩阵 (2700 cells × 32738 genes)',
-      },
-      {
-        time: fmt(1),
-        level: 'success',
-        message: '数据读取完成，生成 AnnData 对象',
-      },
-    ],
-    qc_filter: [
-      {
-        time: fmt(4),
-        level: 'info',
-        message: '计算质控指标 (n_genes, pct_mito)...',
-      },
-      { time: fmt(2), level: 'warn', message: '过滤 320 个低质量细胞' },
-      { time: fmt(1), level: 'success', message: '质控过滤完成' },
-    ],
-    preprocessing: [
-      {
-        time: fmt(4),
-        level: 'info',
-        message: '执行归一化 (target_sum=10000)...',
-      },
-      { time: fmt(2), level: 'info', message: '筛选高变基因 (n=2000)...' },
-      { time: fmt(1), level: 'success', message: '预处理完成' },
-    ],
-    dim_reduce: [
-      { time: fmt(3), level: 'info', message: 'PCA 降维 (n_pcs=50)...' },
-      { time: fmt(1), level: 'success', message: '降维可视化完成' },
-    ],
-    clustering: [
-      {
-        time: fmt(3),
-        level: 'info',
-        message: '计算邻域图 (n_neighbors=15)...',
-      },
-      { time: fmt(1), level: 'success', message: '聚类完成 (8 clusters)' },
-    ],
-    annotation: [
-      { time: fmt(3), level: 'info', message: '匹配 Marker 基因数据库...' },
-      { time: fmt(1), level: 'success', message: '细胞注释完成' },
-    ],
-  };
-  return [...baseEntries, ...stepSpecific[stepType]];
-};
 
 // ========== 通用逻辑 ==========
 
@@ -342,8 +273,40 @@ const isStepClickable = (idx: number) => {
 };
 
 // 运行当前步骤（调用后端 API，轮询状态）
+// 日志轮询定时器
+let logPollTimer: null | ReturnType<typeof setInterval> = null;
 // 轮询定时器引用（用于清理）
 let pollTimer: null | ReturnType<typeof setInterval> = null;
+
+// 轮询获取真实日志
+const startLogPolling = (stepIdx: number) => {
+  if (logPollTimer) clearInterval(logPollTimer);
+
+  const fetchLogs = async () => {
+    if (!pipeline.value) return;
+    try {
+      const logs = await getStepLogs(pipeline.value.id, stepIdx);
+      if (logs && logs.length > 0) {
+        stepLogsMap.value[stepIdx] = logs;
+      }
+    } catch {
+      // 日志获取失败不影响主流程
+    }
+  };
+
+  // 立即获取一次
+  fetchLogs();
+  // 每 2 秒轮询
+  logPollTimer = setInterval(fetchLogs, 2000);
+};
+
+// 停止日志轮询
+const stopLogPolling = () => {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+};
 
 // 启动轮询：定期检查步骤状态直到完成
 const startPolling = (stepIdx: number) => {
@@ -360,6 +323,16 @@ const startPolling = (stepIdx: number) => {
         pollTimer = null;
         pipeline.value = updated;
         running.value = false;
+        // 最后获取一次日志确保完整
+        if (pipeline.value) {
+          try {
+            const finalLogs = await getStepLogs(pipeline.value.id, stepIdx);
+            if (finalLogs && finalLogs.length > 0) {
+              stepLogsMap.value[stepIdx] = finalLogs;
+            }
+          } catch {}
+        }
+        stopLogPolling();
         // 运行完成后自动切换到结果 Tab
         if (step.status === 'completed') {
           activeContentTab.value = 'results';
@@ -369,6 +342,7 @@ const startPolling = (stepIdx: number) => {
       clearInterval(pollTimer!);
       pollTimer = null;
       running.value = false;
+      stopLogPolling();
     }
   }, 3000); // 每 3 秒轮询一次
 };
@@ -383,11 +357,11 @@ const handleRunStep = async () => {
       activeStepIndex.value,
       activeStep.value.params,
     );
-    // 生成 mock 日志（后续可替换为真实日志）
-    stepLogsMap.value[activeStepIndex.value] = generateMockLogs(
-      activeStep.value.stepType,
-    );
-    // 启动轮询
+    // 清空旧日志
+    stepLogsMap.value[activeStepIndex.value] = [];
+    // 启动日志轮询（获取真实运行日志）
+    startLogPolling(activeStepIndex.value);
+    // 启动状态轮询
     startPolling(activeStepIndex.value);
   } catch (error) {
     console.error('运行步骤失败:', error);
@@ -396,12 +370,15 @@ const handleRunStep = async () => {
 };
 
 // 打开日志抽屉
-const openLogDrawer = () => {
-  if (activeStep.value && !stepLogsMap.value[activeStepIndex.value]?.length) {
-    // 如果已完成但没有日志，模拟生成
-    stepLogsMap.value[activeStepIndex.value] = generateMockLogs(
-      activeStep.value.stepType,
-    );
+const openLogDrawer = async () => {
+  // 如果没有日志，尝试从 API 获取
+  if (pipeline.value && !stepLogsMap.value[activeStepIndex.value]?.length) {
+    try {
+      const logs = await getStepLogs(pipeline.value.id, activeStepIndex.value);
+      if (logs && logs.length > 0) {
+        stepLogsMap.value[activeStepIndex.value] = logs;
+      }
+    } catch {}
   }
   showLogDrawer.value = true;
 };
@@ -535,7 +512,7 @@ onUnmounted(() => {
       <div class="mx-auto max-w-7xl">
         <div class="flex items-center gap-4">
           <button
-            @click="router.push('/pipeline')"
+            @click="router.push('/tasks')"
             class="cursor-pointer rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
           >
             <ArrowLeft class="h-5 w-5" />
@@ -721,7 +698,7 @@ onUnmounted(() => {
                       数据来源
                     </div>
                     <div class="mt-0.5 truncate text-sm text-slate-700">
-                      {{ pipeline.dataPath || '未指定数据路径' }}
+                      {{ pipeline.dataPath ? `我的数据/${pipeline.dataPath}` : '未指定数据路径' }}
                     </div>
                   </div>
                   <span

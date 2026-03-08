@@ -39,12 +39,12 @@ const columns = [
     title: '操作',
     key: 'action',
     width: '15%',
-    align: 'center',
+    align: 'center' as const,
   },
 ];
 
 const getFileIcon = (type: string, icon?: string) => {
-  if (type === 'folder') return 'ant-design:folder-outlined';
+  if (type === 'folder') return 'ant-design:folder-filled';
   switch (icon) {
     case 'image': return 'ant-design:file-image-outlined';
     case 'pdf': return 'ant-design:file-pdf-outlined';
@@ -75,7 +75,7 @@ const getIconColor = (icon?: string) => {
 }
 
 const rowSelection = computed(() => ({
-  onChange: (selectedRowKeys: Key[], selectedRows: FileItem[]) => {
+  onChange: (_selectedRowKeys: Key[], selectedRows: FileItem[]) => {
     emit('selection-change', selectedRows);
   },
 }));
@@ -90,76 +90,101 @@ const rowSelection = computed(() => ({
     :scroll="{ x: 1000 }"
     :pagination="{ pageSize: 10 }"
     row-key="id"
+    class="file-table"
   >
     <template #bodyCell="{ column, record }">
       <template v-if="column.key === 'name'">
         <div 
-            class="flex items-center gap-2 cursor-pointer hover:text-blue-500 transition-colors"
+            class="flex items-center gap-3 cursor-pointer group py-1"
             @click="record.type === 'folder' ? emit('enter', record) : emit('preview', record)"
         >
-          <IconifyIcon 
-            :icon="getFileIcon(record.type, record.icon)" 
-            class="text-lg"
-            :style="{ color: record.type === 'folder' ? '#faad14' : getIconColor(record.icon) }" 
-          />
-          <span class="font-medium">{{ record.name }}</span>
+          <!-- 文件/文件夹图标 -->
+          <div 
+            class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg transition-colors"
+            :class="record.type === 'folder' ? 'bg-amber-50' : 'bg-slate-50'"
+          >
+            <IconifyIcon 
+              :icon="getFileIcon(record.type, record.icon)" 
+              class="text-xl"
+              :style="{ color: record.type === 'folder' ? '#f59e0b' : getIconColor(record.icon) }" 
+            />
+          </div>
+          <!-- 文件名 -->
+          <span class="text-sm font-semibold text-slate-800 transition-colors group-hover:text-blue-600">
+            {{ record.name }}
+          </span>
         </div>
+      </template>
+
+      <!-- 大小列 -->
+      <template v-if="column.key === 'size'">
+        <span class="text-sm text-slate-500">{{ record.size }}</span>
+      </template>
+
+      <!-- 修改时间列 -->
+      <template v-if="column.key === 'updateTime'">
+        <span class="text-sm text-slate-500">{{ record.updateTime }}</span>
       </template>
       
       <template v-if="column.key === 'action'">
         <div class="flex justify-center items-center gap-1">
             <Tooltip title="下载">
               <div 
-                class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer transition-colors text-gray-500 hover:text-blue-600"
+                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 cursor-pointer transition-colors text-slate-400 hover:text-blue-600"
                 @click.stop="emit('download', record)"
               >
-                <IconifyIcon icon="ant-design:download-outlined" class="text-lg" />
+                <IconifyIcon icon="ant-design:download-outlined" class="text-base" />
               </div>
             </Tooltip>
             
             <Tooltip title="删除">
               <div 
-                class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 cursor-pointer transition-colors text-gray-500 hover:text-red-600"
+                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 cursor-pointer transition-colors text-slate-400 hover:text-red-500"
                 @click.stop="emit('delete', record)"
               >
-                <IconifyIcon icon="ant-design:delete-outlined" class="text-lg" />
+                <IconifyIcon icon="ant-design:delete-outlined" class="text-base" />
               </div>
             </Tooltip>
 
             <Dropdown trigger="click">
                 <div 
-                    class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 cursor-pointer transition-colors text-gray-500 hover:text-gray-700"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 cursor-pointer transition-colors text-slate-400 hover:text-slate-700"
                     @click.stop
                 >
-                    <IconifyIcon icon="ant-design:more-outlined" class="text-lg font-bold" />
+                    <IconifyIcon icon="ant-design:more-outlined" class="text-base font-bold" />
                 </div>
                 <template #overlay>
-                    <Menu>
+                    <Menu class="min-w-[140px]">
                         <Menu.Item @click="record.type === 'folder' ? emit('enter', record) : emit('preview', record)">
-                            <div class="flex items-center gap-2 min-w-[100px]">
-                                <IconifyIcon :icon="record.type === 'folder' ? 'ant-design:folder-open-outlined' : 'ant-design:eye-outlined'" /> {{ record.type === 'folder' ? '打开' : '预览' }}
+                            <div class="flex items-center gap-2.5 py-0.5">
+                                <IconifyIcon :icon="record.type === 'folder' ? 'ant-design:folder-open-outlined' : 'ant-design:eye-outlined'" class="text-slate-500" /> 
+                                <span>{{ record.type === 'folder' ? '打开' : '预览' }}</span>
                             </div>
                         </Menu.Item>
                         <Menu.Item @click="emit('download', record)">
-                            <div class="flex items-center gap-2">
-                                <IconifyIcon icon="ant-design:download-outlined" /> 下载
+                            <div class="flex items-center gap-2.5 py-0.5">
+                                <IconifyIcon icon="ant-design:download-outlined" class="text-slate-500" /> 
+                                <span>下载</span>
                             </div>
                         </Menu.Item>
                         <Menu.Divider />
                         <Menu.Item @click="emit('rename', record)">
-                            <div class="flex items-center gap-2">
-                                <IconifyIcon icon="ant-design:edit-outlined" /> 重命名
+                            <div class="flex items-center gap-2.5 py-0.5">
+                                <IconifyIcon icon="ant-design:edit-outlined" class="text-slate-500" /> 
+                                <span>重命名</span>
                             </div>
                         </Menu.Item>
                         <Menu.Item @click="emit('move', record)">
-                            <div class="flex items-center gap-2">
-                                <IconifyIcon icon="ant-design:export-outlined" /> 移动到
+                            <div class="flex items-center gap-2.5 py-0.5">
+                                <IconifyIcon icon="ant-design:export-outlined" class="text-slate-500" /> 
+                                <span>移动到</span>
                             </div>
                         </Menu.Item>
                         <Menu.Divider />
                         <Menu.Item danger @click="emit('delete', record)">
-                            <div class="flex items-center gap-2">
-                                <IconifyIcon icon="ant-design:delete-outlined" /> 删除
+                            <div class="flex items-center gap-2.5 py-0.5">
+                                <IconifyIcon icon="ant-design:delete-outlined" /> 
+                                <span>删除</span>
                             </div>
                         </Menu.Item>
                     </Menu>
@@ -170,3 +195,54 @@ const rowSelection = computed(() => ({
     </template>
   </Table>
 </template>
+
+<style scoped>
+/* 表头样式美化 */
+:deep(.ant-table-thead > tr > th) {
+  font-weight: 600;
+  font-size: 13px;
+  color: #64748b;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  padding: 14px 16px !important;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* 表格行样式 */
+:deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  transition: background-color 0.15s;
+}
+
+/* hover 行高亮 */
+:deep(.ant-table-tbody > tr:hover > td) {
+  background: #f8fafc !important;
+}
+
+/* 选中行样式 */
+:deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+  background: #eff6ff !important;
+}
+
+/* 分页器样式微调 */
+:deep(.ant-pagination) {
+  padding: 16px !important;
+  margin: 0 !important;
+}
+
+:deep(.ant-pagination .ant-pagination-item-active) {
+  border-color: #3b82f6 !important;
+}
+
+:deep(.ant-pagination .ant-pagination-item-active a) {
+  color: #3b82f6 !important;
+}
+
+/* 复选框颜色统一 */
+:deep(.ant-checkbox-checked .ant-checkbox-inner) {
+  background-color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+</style>
