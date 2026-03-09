@@ -70,7 +70,7 @@ function generateMockResult(
       };
     }
 
-    case 'clustering': {
+    case 'dim_cluster': {
       const clusterColors = [
         '#3B82F6',
         '#EF4444',
@@ -82,7 +82,6 @@ function generateMockResult(
         '#F97316',
       ];
       const nClusters = 8;
-      // 生成带聚类着色的 UMAP
       const clusterSeries = Array.from({ length: nClusters }, (_, i) => ({
         name: `Cluster ${i}`,
         type: 'scatter',
@@ -99,6 +98,8 @@ function generateMockResult(
 
       return {
         stats: {
+          n_hvg: (params.n_top_genes as number) || 2000,
+          n_pcs: (params.n_pcs as number) || 50,
           n_clusters: nClusters,
           algorithm: (params.clustering_method as string) || 'leiden',
           resolution: (params.resolution as number) || 0.5,
@@ -110,26 +111,6 @@ function generateMockResult(
             xAxis: { type: 'value', show: false },
             yAxis: { type: 'value', show: false },
             series: clusterSeries,
-          },
-          cluster_bar: {
-            title: { text: '各聚类细胞数', left: 'center' },
-            xAxis: {
-              type: 'category',
-              data: Array.from({ length: nClusters }, (_, i) => `C${i}`),
-            },
-            yAxis: { type: 'value', name: '细胞数' },
-            series: [
-              {
-                type: 'bar',
-                data: Array.from({ length: nClusters }, () =>
-                  Math.floor(200 + Math.random() * 300),
-                ),
-                itemStyle: {
-                  color: (p: { dataIndex: number }) =>
-                    clusterColors[p.dataIndex % clusterColors.length],
-                },
-              },
-            ],
           },
         },
         completedAt: now,
@@ -145,85 +126,6 @@ function generateMockResult(
           format: 'AnnData (.h5ad)',
         },
         charts: {},
-        completedAt: now,
-      };
-    }
-
-    case 'dim_reduce': {
-      // 生成 UMAP 散点图（无聚类着色）
-      const umapData = Array.from({ length: 300 }, () => [
-        (Math.random() - 0.5) * 20,
-        (Math.random() - 0.5) * 20,
-      ]);
-
-      return {
-        stats: {
-          n_pcs: (params.n_pcs as number) || 50,
-          method: (params.visualization_method as string) || 'umap',
-          variance_explained_top10: '45.3%',
-        },
-        charts: {
-          umap: {
-            title: { text: 'UMAP 降维可视化', left: 'center' },
-            xAxis: { type: 'value', name: 'UMAP1', show: false },
-            yAxis: { type: 'value', name: 'UMAP2', show: false },
-            series: [
-              {
-                type: 'scatter',
-                data: umapData,
-                symbolSize: 4,
-                itemStyle: { color: '#3B82F6', opacity: 0.6 },
-              },
-            ],
-          },
-        },
-        completedAt: now,
-      };
-    }
-
-    case 'preprocessing': {
-      // 生成高变基因散点图数据
-      const hvgData = Array.from({ length: 200 }, () => [
-        Math.random() * 5,
-        Math.random() * 3,
-      ]);
-      const hvgHighData = Array.from({ length: 50 }, () => [
-        Math.random() * 3 + 2,
-        Math.random() * 2 + 1.5,
-      ]);
-
-      return {
-        stats: {
-          normalization:
-            (params.normalization_method as string) || 'log_normalize',
-          target_sum: (params.target_sum as number) || 10_000,
-          n_hvg: (params.n_top_genes as number) || 2000,
-          n_genes_total: 32_738,
-        },
-        charts: {
-          hvg_scatter: {
-            title: { text: '高变基因筛选', left: 'center' },
-            tooltip: { trigger: 'item' },
-            xAxis: { type: 'value', name: '平均表达量', scale: true },
-            yAxis: { type: 'value', name: '离散度', scale: true },
-            series: [
-              {
-                name: '非高变基因',
-                type: 'scatter',
-                data: hvgData,
-                symbolSize: 4,
-                itemStyle: { color: '#CBD5E1' },
-              },
-              {
-                name: '高变基因',
-                type: 'scatter',
-                data: hvgHighData,
-                symbolSize: 6,
-                itemStyle: { color: '#EF4444' },
-              },
-            ],
-          },
-        },
         completedAt: now,
       };
     }
@@ -301,36 +203,17 @@ function seedMockData() {
         history: [],
       },
       {
-        stepType: 'preprocessing',
+        stepType: 'dim_cluster',
         status: 'pending',
         params: {
-          normalization_method: 'log_normalize',
-          target_sum: 10_000,
           n_top_genes: 2000,
-          hvg_method: 'seurat',
+          target_sum: 10_000,
           regress_out_mito: true,
-        },
-        history: [],
-      },
-      {
-        stepType: 'dim_reduce',
-        status: 'pending',
-        params: {
           n_pcs: 50,
-          use_highly_variable: true,
-          visualization_method: 'umap',
-          umap_min_dist: 0.5,
-        },
-        history: [],
-      },
-      {
-        stepType: 'clustering',
-        status: 'pending',
-        params: {
-          clustering_method: 'leiden',
-          resolution: 0.5,
           n_neighbors: 15,
-          random_state: 42,
+          umap_min_dist: 0.5,
+          resolution: 0.5,
+          clustering_method: 'leiden',
         },
         history: [],
       },

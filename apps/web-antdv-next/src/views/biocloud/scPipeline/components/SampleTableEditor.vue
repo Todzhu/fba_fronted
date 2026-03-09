@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 /**
- * SampleTableEditor - 样本信息可编辑表格
- * 支持编辑样本名称、分组、启用状态，以及分组模板管理
+ * SampleTableEditor - 样本列表独立卡片
+ * 独立白色卡片，展示样本信息表格
  */
 import type { GroupTemplate, SampleInfo } from '../mock/myDataMock';
 
@@ -16,9 +16,9 @@ import {
   Menu,
   message,
   Modal,
+  Pagination,
   Select,
   Space,
-  Table,
   Tag,
   Tooltip,
 } from 'ant-design-vue';
@@ -40,11 +40,18 @@ const emit = defineEmits<{
 // 本地数据副本
 const samples = ref<SampleInfo[]>([]);
 
+// 分页
+const currentPage = ref(1);
+const pageSize = ref(4);
+
+const pagedSamples = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return samples.value.slice(start, start + pageSize.value);
+});
+
 // 分组模板
 const templates = ref<GroupTemplate[]>([]);
 const loadingTemplates = ref(false);
-
-// 保存模板对话框
 const saveTemplateVisible = ref(false);
 const newTemplateName = ref('');
 
@@ -81,34 +88,33 @@ const loadTemplates = async () => {
   }
 };
 
-// 初始化
 loadTemplates();
 
-// 更新单个样本
 const updateSample = (index: number, field: keyof SampleInfo, value: any) => {
-  samples.value[index][field] = value;
+  // 计算实际 index（考虑分页）
+  const realIndex = (currentPage.value - 1) * pageSize.value + index;
+  samples.value[realIndex][field] = value;
   emitChange();
 };
 
-// 发送变更
 const emitChange = () => {
   emit('update:modelValue', [...samples.value]);
 };
 
-// 全选/取消全选
-const allEnabled = computed({
-  get: () => samples.value.every((s) => s.enabled),
-  set: (val: boolean) => {
-    samples.value.forEach((s) => (s.enabled = val));
-    emitChange();
-  },
-});
+// 分组颜色映射
+const groupColorMap: Record<string, string> = {};
+const groupColors = ['blue', 'green', 'orange', 'purple', 'cyan', 'magenta', 'gold', 'lime'];
+const getGroupColor = (group: string) => {
+  if (!group) return 'default';
+  if (!groupColorMap[group]) {
+    groupColorMap[group] = groupColors[Object.keys(groupColorMap).length % groupColors.length] || 'blue';
+  }
+  return groupColorMap[group];
+};
 
 // 应用分组模板
 const applyTemplate = (template: GroupTemplate) => {
   if (template.groups.length === 0) return;
-
-  // 按顺序循环分配分组
   samples.value.forEach((sample, index) => {
     sample.group = template.groups[index % template.groups.length];
   });
@@ -116,7 +122,6 @@ const applyTemplate = (template: GroupTemplate) => {
   message.success(`已应用模板「${template.name}」`);
 };
 
-// 保存当前分组为模板
 const showSaveTemplateDialog = () => {
   if (currentGroups.value.length === 0) {
     message.warning('请先设置分组信息');
@@ -131,14 +136,12 @@ const handleSaveTemplate = async () => {
     message.warning('请输入模板名称');
     return;
   }
-
   await saveGroupTemplate(newTemplateName.value, currentGroups.value);
   message.success('模板保存成功');
   saveTemplateVisible.value = false;
   loadTemplates();
 };
 
-// 删除模板
 const handleDeleteTemplate = async (template: GroupTemplate) => {
   Modal.confirm({
     title: '确认删除',
@@ -151,10 +154,8 @@ const handleDeleteTemplate = async (template: GroupTemplate) => {
   });
 };
 
-// 快速填充：按前缀分组
 const autoGroupByPrefix = () => {
   samples.value.forEach((sample) => {
-    // 提取下划线或连字符前的部分作为分组
     const match = sample.folderName.match(/^([a-z]+)/i);
     if (match) {
       sample.group = match[1];
@@ -163,47 +164,22 @@ const autoGroupByPrefix = () => {
   emitChange();
   message.success('已按前缀自动分组');
 };
-
-// 表格列定义
-const columns = [
-  {
-    title: '启用',
-    dataIndex: 'enabled',
-    key: 'enabled',
-    width: 70,
-    align: 'center' as const,
-  },
-  {
-    title: '文件夹名称',
-    dataIndex: 'folderName',
-    key: 'folderName',
-    width: 180,
-  },
-  {
-    title: '样本名称',
-    dataIndex: 'sampleName',
-    key: 'sampleName',
-    width: 200,
-  },
-  {
-    title: '分组',
-    dataIndex: 'group',
-    key: 'group',
-    width: 180,
-  },
-];
 </script>
 
 <template>
-  <div class="sample-table-editor">
-    <!-- 工具栏 -->
-    <div class="toolbar">
-      <Space>
+  <div class="sample-card">
+    <!-- 卡片标题栏 -->
+    <div class="card-header">
+      <div class="card-title">
+        <Icon icon="mdi:table" class="title-icon" />
+        <span>样本列表</span>
+        <span class="sample-count">共 {{ samples.length }} 个样本</span>
+      </div>
+      <div class="card-actions">
         <Dropdown :trigger="['click']">
-          <Button>
+          <Button size="small">
             <Icon icon="mdi:bookmark-outline" />
-            应用模板
-            <Icon icon="mdi:chevron-down" />
+            批量标记分组
           </Button>
           <template #overlay>
             <Menu>
@@ -234,94 +210,101 @@ const columns = [
                 <Icon icon="mdi:content-save" />
                 保存当前分组为模板
               </Menu.Item>
+              <Menu.Item key="auto" @click="autoGroupByPrefix">
+                <Icon icon="mdi:auto-fix" />
+                按前缀自动分组
+              </Menu.Item>
             </Menu>
           </template>
         </Dropdown>
 
-        <Tooltip title="根据文件夹名称前缀自动分组">
-          <Button @click="autoGroupByPrefix">
-            <Icon icon="mdi:auto-fix" />
-            按前缀分组
+        <Tooltip title="导入样本 Meta 信息">
+          <Button size="small">
+            <Icon icon="mdi:file-import-outline" />
+            导入Meta信息
           </Button>
         </Tooltip>
-      </Space>
-
-      <div class="sample-count">
-        共 {{ samples.length }} 个样本， 已启用
-        {{ samples.filter((s) => s.enabled).length }} 个
       </div>
     </div>
 
-    <!-- 表格 -->
-    <Table
-      :columns="columns"
-      :data-source="samples"
-      :pagination="false"
-      :scroll="{ y: 300 }"
-      row-key="folderName"
-      size="small"
-      bordered
-    >
-      <!-- 启用列 -->
-      <template #headerCell="{ column }">
-        <template v-if="column.key === 'enabled'">
-          <Checkbox v-model:checked="allEnabled" />
-        </template>
-        <template v-else>{{ column.title }}</template>
-      </template>
+    <!-- 表格区域 -->
+    <div class="table-area">
+      <!-- 表头 -->
+      <div class="table-header">
+        <div class="th-cell th-id">样本 ID</div>
+        <div class="th-cell th-name">显示名称</div>
+        <div class="th-cell th-group">分组标签</div>
+        <div class="th-cell th-status">状态</div>
+        <div class="th-cell th-action">操作</div>
+      </div>
 
-      <template #bodyCell="{ column, record, index }">
-        <!-- 启用 -->
-        <template v-if="column.key === 'enabled'">
-          <Checkbox
-            :checked="record.enabled"
-            @change="
-              (e: any) => updateSample(index, 'enabled', e.target.checked)
-            "
-          />
-        </template>
-
-        <!-- 文件夹名称（只读） -->
-        <template v-else-if="column.key === 'folderName'">
-          <span class="folder-name">
-            <Icon icon="mdi:folder" class="folder-icon" />
-            {{ record.folderName }}
-          </span>
-        </template>
-
-        <!-- 样本名称（可编辑） -->
-        <template v-else-if="column.key === 'sampleName'">
+      <!-- 表体 -->
+      <div
+        v-for="(sample, index) in pagedSamples"
+        :key="sample.folderName"
+        class="table-row"
+      >
+        <div class="td-cell th-id">
+          <span class="sample-id">{{ sample.folderName }}</span>
+        </div>
+        <div class="td-cell th-name">
           <Input
-            :value="record.sampleName"
+            :value="sample.sampleName"
             size="small"
-            @change="
-              (e: any) => updateSample(index, 'sampleName', e.target.value)
-            "
+            class="inline-input"
+            @change="(e: any) => updateSample(index, 'sampleName', e.target.value)"
           />
-        </template>
-
-        <!-- 分组（可编辑/选择） -->
-        <template v-else-if="column.key === 'group'">
+        </div>
+        <div class="td-cell th-group">
+          <Tag
+            v-if="sample.group"
+            :color="getGroupColor(sample.group)"
+          >
+            {{ sample.group }}
+          </Tag>
           <Select
-            :value="record.group"
+            v-else
+            :value="sample.group"
             mode="tags"
             :max-tag-count="1"
             size="small"
-            style="width: 100%"
-            placeholder="输入或选择分组"
+            style="width: 120px"
+            placeholder="选择分组"
             :options="groupOptions"
-            @change="
-              (val: any) =>
-                updateSample(
-                  index,
-                  'group',
-                  Array.isArray(val) ? val[0] || '' : val,
-                )
-            "
+            @change="(val: any) => updateSample(index, 'group', Array.isArray(val) ? val[0] || '' : val)"
           />
-        </template>
-      </template>
-    </Table>
+        </div>
+        <div class="td-cell th-status">
+          <span class="status-dot" :class="sample.enabled ? 'dot-ready' : 'dot-loading'"></span>
+          <span :class="sample.enabled ? 'status-ready' : 'status-loading'">
+            {{ sample.enabled ? '就绪' : '加载中...' }}
+          </span>
+        </div>
+        <div class="td-cell th-action">
+          <Button
+            type="text"
+            size="small"
+            @click="() => {}"
+          >
+            <Icon icon="mdi:pencil-outline" />
+          </Button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部分页 -->
+    <div v-if="samples.length > pageSize" class="table-footer">
+      <span class="page-info">
+        显示 {{ (currentPage - 1) * pageSize + 1 }}-{{ Math.min(currentPage * pageSize, samples.length) }} / 共 {{ samples.length }} 个样本
+      </span>
+      <Pagination
+        v-model:current="currentPage"
+        :total="samples.length"
+        :page-size="pageSize"
+        size="small"
+        simple
+      />
+    </div>
 
     <!-- 保存模板对话框 -->
     <Modal
@@ -346,23 +329,141 @@ const columns = [
 </template>
 
 <style scoped>
-.sample-table-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.sample-card {
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
 }
 
-.toolbar {
+.card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.card-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.title-icon {
+  font-size: 20px;
+  color: #1677ff;
 }
 
 .sample-count {
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 400;
   color: #8c8c8c;
 }
 
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 表格 */
+.table-area {
+  padding: 0 24px;
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.th-cell {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8c8c8c;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.th-id { width: 160px; }
+.th-name { flex: 1; }
+.th-group { width: 140px; }
+.th-status { width: 100px; }
+.th-action { width: 60px; text-align: center; }
+
+.table-row {
+  display: flex;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid #fafafa;
+  transition: background 0.15s;
+}
+
+.table-row:hover {
+  background: #fafbff;
+}
+
+.td-cell {
+  font-size: 14px;
+  color: #262626;
+}
+
+.sample-id {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+  font-size: 13px;
+  color: #595959;
+}
+
+.inline-input {
+  max-width: 200px;
+  font-weight: 500;
+}
+
+/* 状态 */
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+}
+
+.dot-ready {
+  background: #52c41a;
+}
+
+.dot-loading {
+  background: #faad14;
+}
+
+.status-ready {
+  font-size: 13px;
+  color: #52c41a;
+}
+
+.status-loading {
+  font-size: 13px;
+  color: #faad14;
+}
+
+/* 底部 */
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-top: 1px solid #f5f5f5;
+}
+
+.page-info {
+  font-size: 12px;
+  color: #8c8c8c;
+}
+
+/* 模板 */
 .template-item {
   display: flex;
   gap: 8px;
@@ -376,17 +477,6 @@ const columns = [
   gap: 4px;
 }
 
-.folder-name {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  color: #595959;
-}
-
-.folder-icon {
-  color: #faad14;
-}
-
 .save-template-form p {
   margin-bottom: 8px;
   font-weight: 500;
@@ -396,9 +486,5 @@ const columns = [
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-}
-
-:deep(.ant-table-cell) {
-  padding: 8px !important;
 }
 </style>

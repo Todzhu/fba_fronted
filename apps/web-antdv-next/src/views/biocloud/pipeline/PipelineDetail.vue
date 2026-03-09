@@ -4,7 +4,7 @@
  * 6 步分析导航 + 参数配置 + 结果展示
  * 第1步"数据读取"自动从创建时选的文件夹加载样本表格
  */
-import type { Pipeline, StepConfig, StepType } from './types/pipeline';
+import type { Pipeline, StepConfig } from './types/pipeline';
 import type { ParamFieldConfig } from './types/stepParamConfigs';
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -12,19 +12,24 @@ import { useRoute, useRouter } from 'vue-router';
 
 import {
   ArrowLeft,
+  BookOpen,
   Check,
   ChevronRight,
   Database,
+  Dna,
   FileText,
   Filter,
   Folder,
-  Group,
+  Layers,
   Loader2,
   Pencil,
   Play,
   ScatterChart,
-  Settings,
+  Table2,
   Tag,
+  Users,
+  X,
+  ZoomIn,
 } from 'lucide-vue-next';
 
 import {
@@ -37,6 +42,7 @@ import {
 
 import { STEP_DESCRIPTIONS, STEP_LABELS } from './types/pipeline';
 import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
+import { STEP_HELP_CONTENT } from './types/stepHelpContent';
 
 const route = useRoute();
 const router = useRouter();
@@ -45,17 +51,23 @@ const pipeline = ref<null | Pipeline>(null);
 const loading = ref(false);
 const activeStepIndex = ref(0);
 const running = ref(false);
-const showAdvanced = ref(false);
 const activeContentTab = ref<'params' | 'results'>('params');
 
+// ========== 图片放大预览 ==========
+const lightboxUrl = ref('');
+const showLightbox = ref(false);
+const openLightbox = (url: string) => {
+  lightboxUrl.value = url;
+  showLightbox.value = true;
+};
+
 // 步骤图标映射
-const stepIcons: Record<StepType, typeof Database> = {
+const stepIcons: Record<string, typeof Database> = {
   data_load: Database,
   qc_filter: Filter,
-  preprocessing: Settings,
-  dim_reduce: ScatterChart,
-  clustering: Group,
+  dim_cluster: ScatterChart,
   annotation: Tag,
+  sub_annotation: ZoomIn,
 };
 
 // ========== 数据读取步骤：样本表格 ==========
@@ -149,16 +161,15 @@ const saveSampleDict = () => {
 
 // ========== 日志抽屉 ==========
 const showLogDrawer = ref(false);
+const showHelpDrawer = ref(false);
 
-// 日志条目
-interface LogEntry {
-  time: string;
-  level: string;
-  message: string;
-}
+const currentHelp = computed(() => {
+  if (!activeStep.value) return null;
+  return STEP_HELP_CONTENT[activeStep.value.stepType] || null;
+});
 
-// 按步骤索引存储日志
-const stepLogsMap = ref<Record<number, LogEntry[]>>({});
+// 按步骤索引存储日志（纯文本行）
+const stepLogsMap = ref<Record<number, string[]>>({});
 
 // 当前步骤的日志
 const currentStepLogs = computed(() => {
@@ -226,14 +237,40 @@ const currentStepParamConfigs = computed<ParamFieldConfig[]>(() => {
   return STEP_PARAM_CONFIGS[activeStep.value.stepType] || [];
 });
 
-// 常用参数
-const basicParams = computed(() => {
-  return currentStepParamConfigs.value.filter((cfg) => !cfg.advanced);
+// 从数据读取步骤获取 QC 推荐阈值
+const qcSuggestions = computed<Record<string, unknown> | null>(() => {
+  if (!pipeline.value) return null;
+  const dataLoadStep = pipeline.value.steps[0];
+  if (!dataLoadStep?.result?.stats) return null;
+  const suggestions = (dataLoadStep.result.stats as Record<string, unknown>)['qc_suggestions'];
+  return (suggestions as Record<string, unknown>) || null;
 });
 
-// 高级参数
-const advancedParams = computed(() => {
-  return currentStepParamConfigs.value.filter((cfg) => cfg.advanced);
+// 格式化推荐值：数组显示为区间，单值直接显示
+const formatSuggestion = (val: unknown): string => {
+  if (Array.isArray(val)) return `${val[0]}~${val[1]}`;
+  return String(val);
+};
+
+// 当前步骤参数的分组列表（去重，保留顺序）
+const paramGroups = computed<string[]>(() => {
+  const groups: string[] = [];
+  for (const cfg of currentStepParamConfigs.value) {
+    if (cfg.group && !groups.includes(cfg.group)) {
+      groups.push(cfg.group);
+    }
+  }
+  return groups;
+});
+
+// 按分组获取参数
+const getParamsByGroup = (group: string) => {
+  return currentStepParamConfigs.value.filter((cfg) => cfg.group === group);
+};
+
+// 未分组的参数
+const ungroupedParams = computed(() => {
+  return currentStepParamConfigs.value.filter((cfg) => !cfg.group);
 });
 
 // 设置参数值
@@ -357,6 +394,9 @@ const handleRunStep = async () => {
       activeStepIndex.value,
       activeStep.value.params,
     );
+    // 清空旧结果
+    activeStep.value.result = undefined;
+    activeStep.value.status = 'running';
     // 清空旧日志
     stepLogsMap.value[activeStepIndex.value] = [];
     // 启动日志轮询（获取真实运行日志）
@@ -405,10 +445,64 @@ const STAT_LABELS: Record<string, string> = {
   total_cells: '总细胞数',
   total_genes: '总基因数',
   n_samples: '样本数',
+  n_groups: '分组数',
+  cells_after_filter: '过滤后细胞数',
+  genes_after_filter: '过滤后基因数',
+  filter_ratio: '过滤比例',
+  median_genes: '基因中位数',
   n_clusters: '聚类数',
   n_hvg: '高变基因数',
   n_pcs: '主成分数',
 };
+
+// 统计指标图标映射
+const STAT_ICONS: Record<string, any> = {
+  total_cells: Users,
+  total_genes: Dna,
+  n_samples: Folder,
+  n_groups: Layers,
+  n_clusters: ScatterChart,
+  n_hvg: Dna,
+  n_pcs: Layers,
+};
+
+// 统计指标图标背景色
+const STAT_ICON_COLORS: Record<string, string> = {
+  total_cells: 'bg-blue-600',
+  total_genes: 'bg-indigo-600',
+  n_samples: 'bg-emerald-600',
+  n_groups: 'bg-slate-700',
+  n_clusters: 'bg-violet-600',
+  n_hvg: 'bg-teal-600',
+  n_pcs: 'bg-cyan-600',
+};
+
+// 统计指标排序优先级（越小越前）
+const STAT_ORDER: Record<string, number> = {
+  total_cells: 1,
+  total_genes: 2,
+  n_samples: 3,
+  n_groups: 4,
+  cells_after_filter: 1,
+  genes_after_filter: 2,
+  filter_ratio: 3,
+  median_genes: 4,
+  n_clusters: 5,
+  n_hvg: 6,
+  n_pcs: 7,
+};
+
+// 获取排序后的统计数据
+const getSortedStats = (stats: Record<string, unknown>): Array<{ key: string; value: unknown }> => {
+  const simple: Array<{ key: string; value: unknown }> = [];
+  for (const [key, value] of Object.entries(stats)) {
+    if (typeof value !== 'object' || value === null) {
+      simple.push({ key, value });
+    }
+  }
+  return simple.sort((a, b) => (STAT_ORDER[a.key] ?? 99) - (STAT_ORDER[b.key] ?? 99));
+};
+
 
 // 过滤 stats 中的简单值（排除嵌套对象）
 const getSimpleStats = (
@@ -443,10 +537,9 @@ const formatStatValue = (value: unknown): string => {
 const STEP_OUTPUT_DIRS: Record<string, string> = {
   data_load: 'step_0_data_load',
   qc_filter: 'step_1_qc_filter',
-  preprocessing: 'step_2_dim_cluster',
-  dim_reduce: 'step_2_dim_cluster',
-  clustering: 'step_2_dim_cluster',
+  dim_cluster: 'step_2_dim_cluster',
   annotation: 'step_3_annotation',
+  sub_annotation: 'step_4_sub_annotation',
 };
 
 // 构建图表/表格的完整访问 URL
@@ -476,9 +569,41 @@ watch(
 watch(
   () => activeStepIndex.value,
   (idx) => {
-    // 重置高级设置折叠和 Tab
-    showAdvanced.value = false;
     activeContentTab.value = 'params';
+
+    // 统一填充未设置的参数默认值
+    const step = pipeline.value?.steps[idx];
+    if (step) {
+      const configs = STEP_PARAM_CONFIGS[step.stepType];
+      if (configs) {
+        for (const cfg of configs) {
+          if (step.params[cfg.key] === undefined && cfg.defaultValue !== undefined) {
+            step.params[cfg.key] = cfg.defaultValue;
+          }
+        }
+      }
+    }
+
+    // 切换到 qc_filter 步骤时，自动填充 MAD 推荐值
+    if (
+      pipeline.value?.steps[idx]?.stepType === 'qc_filter' &&
+      qcSuggestions.value
+    ) {
+      const step = pipeline.value.steps[idx];
+      const suggestions = qcSuggestions.value;
+      const configs = STEP_PARAM_CONFIGS['qc_filter'];
+      for (const cfg of configs) {
+        const suggestedVal = suggestions[cfg.key];
+        if (
+          suggestedVal !== undefined &&
+          (step.params[cfg.key] === undefined ||
+            step.params[cfg.key] === cfg.defaultValue)
+        ) {
+          // 区间取宽松值（5×MAD，数组第 2 项）
+          step.params[cfg.key] = Array.isArray(suggestedVal) ? suggestedVal[1] : suggestedVal;
+        }
+      }
+    }
     if (
       pipeline.value?.steps[idx]?.stepType === 'data_load' &&
       sampleRows.value.length === 0
@@ -545,9 +670,9 @@ onUnmounted(() => {
           <div
             class="overflow-hidden rounded-xl border border-slate-200 bg-white"
           >
-            <div class="p-4">
-              <h3 class="text-sm font-bold text-slate-900">分析步骤</h3>
-              <p class="text-xs text-slate-500">
+            <div class="px-5 py-4">
+              <h3 class="text-base font-bold text-slate-900">分析步骤</h3>
+              <p class="mt-0.5 text-xs font-medium text-slate-500">
                 {{
                   pipeline.steps.filter((s) => s.status === 'completed').length
                 }}/{{ pipeline.steps.length }}
@@ -555,12 +680,12 @@ onUnmounted(() => {
               </p>
             </div>
 
-            <div class="space-y-0.5 px-2 pb-3">
+            <div class="space-y-0.5 px-3 pb-4">
               <button
                 v-for="(step, idx) in pipeline.steps"
                 :key="idx"
                 @click="isStepClickable(idx) && (activeStepIndex = idx)"
-                class="flex w-full items-center gap-3 rounded-lg border-l-[3px] px-3 py-3 text-left transition-all"
+                class="flex w-full items-center gap-3 rounded-lg border-l-[3px] px-3 py-3.5 text-left transition-all"
                 :class="[
                   getStepClass(step, idx),
                   isStepClickable(idx)
@@ -588,25 +713,25 @@ onUnmounted(() => {
                   />
                   <component
                     v-else
-                    :is="stepIcons[step.stepType]"
+                    :is="stepIcons[step.stepType] || Database"
                     class="h-4 w-4"
                   />
                 </div>
 
                 <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1">
-                    <span class="text-[10px] font-bold text-slate-400">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-bold text-slate-400">
                       {{ idx + 1 }}.
                     </span>
                     <span
-                      class="truncate text-sm font-medium"
+                      class="truncate text-base font-semibold"
                       :class="
                         idx === activeStepIndex
                           ? 'text-slate-900'
-                          : 'text-slate-600'
+                          : 'text-slate-700'
                       "
                     >
-                      {{ STEP_LABELS[step.stepType] }}
+                      {{ STEP_LABELS[step.stepType] || step.stepType }}
                     </span>
                   </div>
                 </div>
@@ -621,30 +746,38 @@ onUnmounted(() => {
         </div>
 
         <!-- 右侧：步骤详情 -->
-        <div class="min-w-0 flex-1">
-          <div
-            v-if="activeStep"
-            class="overflow-hidden rounded-xl border border-slate-200 bg-white"
-          >
-            <!-- 步骤头部 -->
-            <div class="border-b border-slate-100 p-6">
+        <div class="min-w-0 flex-1 space-y-4">
+          <template v-if="activeStep">
+            <!-- 步骤头部卡片 -->
+            <div class="overflow-hidden rounded-t-xl rounded-b-none border border-slate-200 bg-white">
+            <div class="px-8 py-6">
               <div class="flex items-center justify-between">
                 <div>
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-4">
                     <div
-                      class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100"
+                      class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100"
                     >
                       <component
-                        :is="stepIcons[activeStep.stepType]"
-                        class="h-5 w-5 text-blue-600"
+                        :is="stepIcons[activeStep.stepType] || Database"
+                        class="h-6 w-6 text-blue-600"
                       />
                     </div>
                     <div>
-                      <h2 class="text-lg font-bold text-slate-900">
-                        {{ STEP_LABELS[activeStep.stepType] }}
+                      <h2 class="text-xl font-black text-slate-900">
+                        步骤 {{ activeStepIndex + 1 }}: {{ STEP_LABELS[activeStep.stepType] || activeStep.stepType }}
                       </h2>
-                      <p class="text-sm text-slate-500">
-                        {{ STEP_DESCRIPTIONS[activeStep.stepType] }}
+                      <p v-if="isDataLoadStep && pipeline" class="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
+                        <Folder class="h-3.5 w-3.5 text-blue-400" />
+                        {{ pipeline.dataPath ? `我的数据/${pipeline.dataPath}` : '未指定数据路径' }}
+                        <span
+                          v-if="pipeline.species"
+                          class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700"
+                        >
+                          {{ pipeline.species }}
+                        </span>
+                      </p>
+                      <p v-else class="mt-0.5 text-sm text-slate-500">
+                        {{ STEP_DESCRIPTIONS[activeStep.stepType] || '' }}
                       </p>
                     </div>
                   </div>
@@ -652,6 +785,15 @@ onUnmounted(() => {
 
                 <!-- 右侧操作区 -->
                 <div class="flex items-center gap-3">
+                  <!-- 使用说明按钮 -->
+                  <button
+                    v-if="STEP_HELP_CONTENT[activeStep.stepType]"
+                    @click="showHelpDrawer = true"
+                    class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                  >
+                    <BookOpen class="h-4 w-4" />
+                    使用说明
+                  </button>
                   <!-- 日志按钮 -->
                   <button
                     v-if="
@@ -684,31 +826,13 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
+            </div>
 
-            <!-- ========== 数据读取步骤：直接展示样本表格 ========== -->
+            <!-- ========== 数据读取步骤 ========== -->
             <template v-if="isDataLoadStep">
-              <div class="p-6">
-                <!-- 数据来源信息 -->
-                <div
-                  class="mb-6 flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-3"
-                >
-                  <Folder class="h-5 w-5 flex-shrink-0 text-blue-500" />
-                  <div class="min-w-0 flex-1">
-                    <div class="text-xs font-medium text-blue-600">
-                      数据来源
-                    </div>
-                    <div class="mt-0.5 truncate text-sm text-slate-700">
-                      {{ pipeline.dataPath ? `我的数据/${pipeline.dataPath}` : '未指定数据路径' }}
-                    </div>
-                  </div>
-                  <span
-                    v-if="pipeline.species"
-                    class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700"
-                  >
-                    {{ pipeline.species }}
-                  </span>
-                </div>
 
+              <!-- 样本列表卡片（视觉上与步骤头合并） -->
+              <div class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white">
                 <!-- 加载中 -->
                 <div
                   v-if="loadingSamples"
@@ -722,16 +846,18 @@ onUnmounted(() => {
 
                 <!-- 样本表格 -->
                 <div v-else-if="sampleRows.length > 0">
-                  <div class="mb-3 flex items-center justify-between">
-                    <h3 class="text-sm font-bold text-slate-700">
+                  <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
+                    <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
+                      <Table2 class="h-5 w-5 text-blue-500" />
                       样本列表
-                      <span class="ml-2 font-normal text-slate-400">
+                      <span class="ml-2 text-sm font-normal text-slate-400">
                         共 {{ sampleRows.length }} 个样本
                       </span>
                     </h3>
                   </div>
 
                   <!-- 表格 -->
+                  <div class="px-8 py-4">
                   <div
                     class="overflow-hidden rounded-lg border border-slate-200"
                   >
@@ -739,12 +865,12 @@ onUnmounted(() => {
                       <thead>
                         <tr class="bg-slate-50">
                           <th
-                            class="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500"
+                            class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600"
                           >
                             Sample
                           </th>
                           <th
-                            class="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500"
+                            class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600"
                           >
                             <span class="flex items-center gap-1">
                               Sample Name
@@ -752,7 +878,7 @@ onUnmounted(() => {
                             </span>
                           </th>
                           <th
-                            class="px-4 py-2.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500"
+                            class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600"
                           >
                             <span class="flex items-center gap-1">
                               Group
@@ -768,35 +894,36 @@ onUnmounted(() => {
                           class="transition-colors hover:bg-slate-50/50"
                         >
                           <!-- Sample（只读） -->
-                          <td class="px-4 py-2">
+                          <td class="px-5 py-3">
                             <span
-                              class="flex items-center gap-2 text-sm text-slate-600"
+                              class="flex items-center gap-2 text-sm font-medium text-slate-700"
                             >
                               <Folder class="h-3.5 w-3.5 text-amber-500" />
                               {{ row.sample }}
                             </span>
                           </td>
                           <!-- Sample Name（可编辑） -->
-                          <td class="px-4 py-1.5">
+                          <td class="px-5 py-2">
                             <input
                               v-model="row.sampleName"
                               type="text"
-                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                               @input="saveSampleDict"
                             />
                           </td>
                           <!-- Group（可编辑） -->
-                          <td class="px-4 py-1.5">
+                          <td class="px-5 py-2">
                             <input
                               v-model="row.group"
                               type="text"
-                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                               @input="saveSampleDict"
                             />
                           </td>
                         </tr>
                       </tbody>
                     </table>
+                  </div>
                   </div>
                 </div>
 
@@ -826,37 +953,40 @@ onUnmounted(() => {
                     路径：{{ pipeline.dataPath }}
                   </p>
                 </div>
+              </div>
 
-                <!-- 运行结果（点击运行后显示在表格下方） -->
-                <div
-                  v-if="activeStep.result"
-                  class="mt-6 border-t border-slate-200 pt-6"
-                >
-                  <h3 class="mb-4 text-sm font-bold text-slate-700">
+              <!-- 运行结果卡片 -->
+              <div
+                v-if="activeStep.result"
+                class="overflow-hidden rounded-xl border border-slate-200 bg-white"
+              >
+                <div class="border-b border-slate-100 px-8 py-5">
+                  <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
+                    <ScatterChart class="h-5 w-5 text-emerald-500" />
                     运行结果
                   </h3>
+                </div>
 
-                  <!-- 统计指标 -->
+                <div class="px-8 py-5">
                   <div
                     v-if="
                       activeStep.result.stats &&
                       Object.keys(getSimpleStats(activeStep.result.stats))
                         .length > 0
                     "
-                    class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"
+                    class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4"
                   >
                     <div
-                      v-for="(value, key) in getSimpleStats(
-                        activeStep.result.stats,
-                      )"
-                      :key="key"
-                      class="rounded-lg border border-slate-100 bg-white px-4 py-3 shadow-sm"
+                      v-for="(item, sIdx) in getSortedStats(activeStep.result.stats)"
+                      :key="item.key"
+                      class="rounded-lg border border-slate-200 bg-white px-5 py-4"
+                      :style="{ borderLeftWidth: '3px', borderLeftColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"
                     >
-                      <div class="text-xs text-slate-500">
-                        {{ STAT_LABELS[key as string] || key }}
+                      <div class="text-xs font-semibold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">
+                        {{ STAT_LABELS[item.key] || item.key }}
                       </div>
-                      <div class="mt-1 text-lg font-bold text-slate-900">
-                        {{ formatStatValue(value) }}
+                      <div class="mt-2 text-2xl font-black text-slate-900">
+                        {{ formatStatValue(item.value) }}
                       </div>
                     </div>
                   </div>
@@ -871,7 +1001,8 @@ onUnmounted(() => {
                     <div
                       v-for="(chartUrl, idx) in activeStep.result.charts"
                       :key="idx"
-                      class="mb-4 overflow-hidden rounded-lg border border-slate-100 bg-slate-50 p-4"
+                      class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                      @click="openLightbox(getChartUrl(chartUrl))"
                     >
                       <img
                         :src="getChartUrl(chartUrl)"
@@ -879,320 +1010,181 @@ onUnmounted(() => {
                         class="w-full rounded-lg"
                         loading="lazy"
                       />
+                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                          <ZoomIn class="h-3.5 w-3.5" />
+                          点击放大
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
             </template>
 
-            <!-- ========== 通用步骤UI：Tab 布局 ========== -->
+            <!-- ========== 通用步骤UI：参数 + 结果独立卡片 ========== -->
             <template v-else>
-              <!-- Tab 栏 -->
-              <div class="flex border-b border-slate-200">
-                <button
-                  type="button"
-                  @click="activeContentTab = 'params'"
-                  class="relative cursor-pointer px-6 py-3 text-sm font-medium transition-colors"
-                  :class="
-                    activeContentTab === 'params'
-                      ? 'text-blue-600'
-                      : 'text-slate-500 hover:text-slate-700'
-                  "
-                >
-                  <Settings class="mr-1.5 inline-block h-4 w-4" />
-                  参数配置
-                  <div
-                    v-if="activeContentTab === 'params'"
-                    class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
-                  ></div>
-                </button>
-                <button
-                  type="button"
-                  @click="activeContentTab = 'results'"
-                  class="relative cursor-pointer px-6 py-3 text-sm font-medium transition-colors"
-                  :class="
-                    activeContentTab === 'results'
-                      ? 'text-blue-600'
-                      : 'text-slate-500 hover:text-slate-700'
-                  "
-                >
-                  <ScatterChart class="mr-1.5 inline-block h-4 w-4" />
-                  分析结果
-                  <span
-                    v-if="activeStep.result"
-                    class="ml-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500"
-                  ></span>
-                  <div
-                    v-if="activeContentTab === 'results'"
-                    class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"
-                  ></div>
-                </button>
-              </div>
-
-              <!-- ===== 参数配置面板 ===== -->
-              <div v-if="activeContentTab === 'params'" class="p-6">
+              <!-- ===== 参数配置卡片 ===== -->
+              <div class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white px-8 py-6">
                 <div v-if="currentStepParamConfigs.length > 0">
-                  <!-- 常用参数 -->
-                  <div class="space-y-4">
-                    <template v-for="cfg in basicParams" :key="cfg.key">
-                      <div class="flex items-start gap-4">
-                        <div class="w-40 flex-shrink-0 pt-2">
-                          <div class="flex items-center gap-1.5">
-                            <span class="text-sm font-medium text-slate-700">{{
-                              cfg.label
-                            }}</span>
-                            <div class="group relative">
+
+                  <!-- 有分组时：卡片式分组布局 -->
+                  <template v-if="paramGroups.length > 0">
+                    <div v-for="(group, gIdx) in paramGroups" :key="group" :class="gIdx > 0 ? 'mt-6 pt-2' : ''">
+                      <!-- 分组标题 -->
+                      <div class="mb-4 flex items-center gap-2">
+                        <Layers class="h-4 w-4 text-blue-500" />
+                        <span class="text-base font-bold text-slate-800">{{ group }}</span>
+                      </div>
+                      <!-- 参数 grid -->
+                      <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
+                        <template v-for="cfg in getParamsByGroup(group)" :key="cfg.key">
+                          <div class="space-y-1">
+                            <!-- 标签行：label + tooltip + 推荐值 -->
+                            <div class="mb-1.5 flex items-center justify-between">
+                              <div class="flex items-center gap-1.5">
+                                <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
+                                <div class="group relative">
+                                  <span class="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-400 transition-colors group-hover:border-blue-400 group-hover:text-blue-500">?</span>
+                                  <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                    {{ cfg.tooltip }}
+                                    <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                  </div>
+                                </div>
+                              </div>
+                              <!-- MAD 推荐值标签 -->
                               <span
-                                class="flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-500 transition-colors group-hover:bg-blue-100 group-hover:text-blue-600"
-                                >?</span
+                                v-if="qcSuggestions && qcSuggestions[cfg.key] !== undefined"
+                                class="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-500"
+                                :title="String(qcSuggestions['_method'] || '3~5×MAD')"
                               >
-                              <div
-                                class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-56 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
-                              >
+                                推荐 {{ formatSuggestion(qcSuggestions[cfg.key]) }}
+                              </span>
+                            </div>
+                            <!-- 输入控件 -->
+                            <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
+                              <button
+                                type="button"
+                                @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)"
+                                class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                              >−</button>
+                              <input
+                                :value="activeStep.params[cfg.key]"
+                                @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)"
+                                type="number"
+                                class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              />
+                              <button
+                                type="button"
+                                @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)"
+                                class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                              >+</button>
+                            </div>
+                            <select
+                              v-else-if="cfg.controlType === 'select'"
+                              :value="activeStep.params[cfg.key]"
+                              @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)"
+                              class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            >
+                              <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                            </select>
+                            <button
+                              v-else-if="cfg.controlType === 'switch'"
+                              type="button"
+                              @click="setParam(cfg.key, !activeStep.params[cfg.key])"
+                              class="relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors"
+                              :class="activeStep.params[cfg.key] ? 'bg-blue-600' : 'bg-slate-300'"
+                            >
+                              <span
+                                class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
+                                :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"
+                              ></span>
+                            </button>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                    <!-- 未分组的参数 -->
+                    <div v-if="ungroupedParams.length > 0" class="mt-6">
+                      <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
+                        <template v-for="cfg in ungroupedParams" :key="cfg.key">
+                          <div class="space-y-1">
+                            <div class="mb-1.5 flex items-center gap-1.5">
+                              <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
+                              <div class="group relative">
+                                <span class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold text-slate-400 transition-colors group-hover:text-blue-500">?</span>
+                                <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                  {{ cfg.tooltip }}
+                                  <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                </div>
+                              </div>
+                            </div>
+                            <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
+                              <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
+                              <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                              <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
+                            </div>
+                            <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                              <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                            </select>
+                            <button
+                              v-else-if="cfg.controlType === 'switch'"
+                              type="button"
+                              @click="setParam(cfg.key, !activeStep.params[cfg.key])"
+                              class="relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors"
+                              :class="activeStep.params[cfg.key] ? 'bg-blue-600' : 'bg-slate-300'"
+                            >
+                              <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"></span>
+                            </button>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 无分组时：同样的卡片 grid -->
+                  <template v-else>
+                    <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
+                      <template v-for="cfg in currentStepParamConfigs" :key="cfg.key">
+                        <div class="space-y-1">
+                          <div class="mb-1.5 flex items-center gap-1">
+                            <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
+                            <div class="group relative">
+                              <span class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold text-slate-400 transition-colors group-hover:text-blue-500">?</span>
+                              <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                                 {{ cfg.tooltip }}
-                                <div
-                                  class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"
-                                ></div>
+                                <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                               </div>
                             </div>
                           </div>
-                        </div>
-                        <div class="flex-1">
-                          <div
-                            v-if="cfg.controlType === 'number'"
-                            class="flex items-center gap-0"
-                          >
-                            <button
-                              type="button"
-                              @click="
-                                adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)
-                              "
-                              class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              −
-                            </button>
-                            <input
-                              :value="activeStep.params[cfg.key]"
-                              @change="
-                                (e: Event) =>
-                                  setParam(
-                                    cfg.key,
-                                    parseFloat(
-                                      (e.target as HTMLInputElement).value,
-                                    ) || 0,
-                                  )
-                              "
-                              type="number"
-                              class="h-9 w-24 border border-slate-200 bg-white px-3 text-center text-sm text-slate-800 [appearance:textfield] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            />
-                            <button
-                              type="button"
-                              @click="
-                                adjustParam(
-                                  cfg.key,
-                                  cfg.step ?? 1,
-                                  undefined,
-                                  cfg.max,
-                                )
-                              "
-                              class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              +
-                            </button>
+                           <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
+                            <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
+                            <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                            <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
                           </div>
-                          <select
-                            v-else-if="cfg.controlType === 'select'"
-                            :value="activeStep.params[cfg.key]"
-                            @change="
-                              (e: Event) =>
-                                setParam(
-                                  cfg.key,
-                                  (e.target as HTMLSelectElement).value,
-                                )
-                            "
-                            class="h-9 w-52 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          >
-                            <option
-                              v-for="opt in cfg.options"
-                              :key="opt.value"
-                              :value="opt.value"
-                            >
-                              {{ opt.label }}
-                            </option>
+                          <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                            <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                           </select>
                           <button
                             v-else-if="cfg.controlType === 'switch'"
                             type="button"
-                            @click="
-                              setParam(cfg.key, !activeStep.params[cfg.key])
-                            "
+                            @click="setParam(cfg.key, !activeStep.params[cfg.key])"
                             class="relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors"
-                            :class="
-                              activeStep.params[cfg.key]
-                                ? 'bg-blue-600'
-                                : 'bg-slate-300'
-                            "
+                            :class="activeStep.params[cfg.key] ? 'bg-blue-600' : 'bg-slate-300'"
                           >
-                            <span
-                              class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                              :class="
-                                activeStep.params[cfg.key]
-                                  ? 'translate-x-6'
-                                  : 'translate-x-1'
-                              "
-                            ></span>
+                            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"></span>
                           </button>
                         </div>
-                      </div>
-                    </template>
-                  </div>
+                      </template>
+                    </div>
+                  </template>
 
-                  <!-- 高级设置 -->
-                  <div v-if="advancedParams.length > 0" class="mt-5">
-                    <button
-                      type="button"
-                      @click="showAdvanced = !showAdvanced"
-                      class="flex cursor-pointer items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
-                    >
-                      <ChevronRight
-                        class="h-4 w-4 transition-transform"
-                        :class="{ 'rotate-90': showAdvanced }"
-                      />
-                      高级设置
-                      <span class="text-xs text-slate-400"
-                        >({{ advancedParams.length }})</span
-                      >
-                    </button>
-                    <Transition name="expand">
-                      <div
-                        v-if="showAdvanced"
-                        class="mt-4 space-y-4 rounded-lg bg-slate-50/50 px-4 py-4"
-                      >
-                        <template v-for="cfg in advancedParams" :key="cfg.key">
-                          <div class="flex items-start gap-4">
-                            <div class="w-40 flex-shrink-0 pt-2">
-                              <div class="flex items-center gap-1.5">
-                                <span
-                                  class="text-sm font-medium text-slate-600"
-                                  >{{ cfg.label }}</span
-                                >
-                                <div class="group relative">
-                                  <span
-                                    class="flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-500 transition-colors group-hover:bg-blue-100 group-hover:text-blue-600"
-                                    >?</span
-                                  >
-                                  <div
-                                    class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-56 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
-                                  >
-                                    {{ cfg.tooltip }}
-                                    <div
-                                      class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"
-                                    ></div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            <div class="flex-1">
-                              <div
-                                v-if="cfg.controlType === 'number'"
-                                class="flex items-center gap-0"
-                              >
-                                <button
-                                  type="button"
-                                  @click="
-                                    adjustParam(
-                                      cfg.key,
-                                      -(cfg.step ?? 1),
-                                      cfg.min,
-                                    )
-                                  "
-                                  class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  −
-                                </button>
-                                <input
-                                  :value="activeStep.params[cfg.key]"
-                                  @change="
-                                    (e: Event) =>
-                                      setParam(
-                                        cfg.key,
-                                        parseFloat(
-                                          (e.target as HTMLInputElement).value,
-                                        ) || 0,
-                                      )
-                                  "
-                                  type="number"
-                                  class="h-9 w-24 border border-slate-200 bg-white px-3 text-center text-sm text-slate-800 [appearance:textfield] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                                />
-                                <button
-                                  type="button"
-                                  @click="
-                                    adjustParam(
-                                      cfg.key,
-                                      cfg.step ?? 1,
-                                      undefined,
-                                      cfg.max,
-                                    )
-                                  "
-                                  class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                                >
-                                  +
-                                </button>
-                              </div>
-                              <select
-                                v-else-if="cfg.controlType === 'select'"
-                                :value="activeStep.params[cfg.key]"
-                                @change="
-                                  (e: Event) =>
-                                    setParam(
-                                      cfg.key,
-                                      (e.target as HTMLSelectElement).value,
-                                    )
-                                "
-                                class="h-9 w-52 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              >
-                                <option
-                                  v-for="opt in cfg.options"
-                                  :key="opt.value"
-                                  :value="opt.value"
-                                >
-                                  {{ opt.label }}
-                                </option>
-                              </select>
-                              <button
-                                v-else-if="cfg.controlType === 'switch'"
-                                type="button"
-                                @click="
-                                  setParam(cfg.key, !activeStep.params[cfg.key])
-                                "
-                                class="relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors"
-                                :class="
-                                  activeStep.params[cfg.key]
-                                    ? 'bg-blue-600'
-                                    : 'bg-slate-300'
-                                "
-                              >
-                                <span
-                                  class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform"
-                                  :class="
-                                    activeStep.params[cfg.key]
-                                      ? 'translate-x-6'
-                                      : 'translate-x-1'
-                                  "
-                                ></span>
-                              </button>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
-                    </Transition>
-                  </div>
                 </div>
 
                 <!-- 无参数配置时 -->
                 <div
                   v-else
-                  class="flex flex-col items-center justify-center py-12"
+                  class="flex flex-col items-center justify-center py-8"
                 >
                   <component
                     :is="stepIcons[activeStep.stepType]"
@@ -1204,99 +1196,95 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <!-- ===== 分析结果面板 ===== -->
-              <div v-else-if="activeContentTab === 'results'" class="p-6">
-                <div v-if="activeStep.result">
-                  <!-- 统计指标 -->
-                  <div
-                    v-if="
-                      activeStep.result.stats &&
-                      Object.keys(getSimpleStats(activeStep.result.stats))
-                        .length > 0
-                    "
-                    class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4"
-                  >
-                    <div
-                      v-for="(value, key) in getSimpleStats(
-                        activeStep.result.stats,
-                      )"
-                      :key="key"
-                      class="rounded-lg border border-slate-100 bg-white px-4 py-3 shadow-sm"
-                    >
-                      <div class="text-xs text-slate-500">
-                        {{ STAT_LABELS[key as string] || key }}
-                      </div>
-                      <div class="mt-1 text-lg font-bold text-slate-900">
-                        {{ formatStatValue(value) }}
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 图表展示 -->
-                  <div
-                    v-if="
-                      activeStep.result.charts &&
-                      activeStep.result.charts.length > 0
-                    "
-                  >
-                    <div
-                      v-for="(chartUrl, idx) in activeStep.result.charts"
-                      :key="idx"
-                      class="mb-4 overflow-hidden rounded-lg border border-slate-100 bg-white p-4"
-                    >
-                      <img
-                        :src="getChartUrl(chartUrl)"
-                        :alt="`分析图表 ${idx + 1}`"
-                        class="w-full rounded-lg"
-                        loading="lazy"
-                      />
-                    </div>
-                  </div>
-
-                  <!-- 表格下载 -->
-                  <div
-                    v-if="
-                      activeStep.result.tables &&
-                      activeStep.result.tables.length > 0
-                    "
-                    class="mt-4"
-                  >
-                    <h4 class="mb-3 text-sm font-bold text-slate-700">
-                      数据表格
-                    </h4>
-                    <div class="space-y-2">
-                      <a
-                        v-for="(tableUrl, idx) in activeStep.result.tables"
-                        :key="idx"
-                        :href="getChartUrl(tableUrl)"
-                        target="_blank"
-                        class="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm text-blue-600 transition-colors hover:bg-blue-50"
-                      >
-                        <FileText class="h-4 w-4" />
-                        {{ tableUrl.split('/').pop() }}
-                      </a>
-                    </div>
-                  </div>
+              <!-- ===== 分析结果卡片 ===== -->
+              <div v-if="activeStep.result" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <div class="border-b border-slate-100 px-8 py-5">
+                <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
+                  <ScatterChart class="h-5 w-5 text-emerald-500" />
+                  分析结果
+                </h3>
                 </div>
-
-                <!-- 无结果 -->
+                <div class="p-8">
+                <!-- 统计指标 -->
                 <div
-                  v-else
-                  class="flex flex-col items-center justify-center py-16"
+                  v-if="
+                    activeStep.result.stats &&
+                    Object.keys(getSimpleStats(activeStep.result.stats))
+                      .length > 0
+                  "
+                  class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4"
                 >
                   <div
-                    class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100"
+                    v-for="(item, sIdx) in getSortedStats(activeStep.result.stats)"
+                    :key="item.key"
+                    class="rounded-lg border border-slate-200 bg-white px-5 py-4"
+                    :style="{ borderLeftWidth: '3px', borderLeftColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"
                   >
-                    <ScatterChart class="h-8 w-8 text-slate-300" />
+                    <div class="text-xs font-semibold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">
+                      {{ STAT_LABELS[item.key] || item.key }}
+                    </div>
+                    <div class="mt-2 text-2xl font-black text-slate-900">
+                      {{ formatStatValue(item.value) }}
+                    </div>
                   </div>
-                  <p class="text-slate-500">尚无分析结果</p>
-                  <p class="mt-1 text-sm text-slate-400">
-                    点击"运行"开始分析，结果将在此展示
-                  </p>
+                </div>
+
+                <!-- 图表展示 -->
+                <div
+                  v-if="
+                    activeStep.result.charts &&
+                    activeStep.result.charts.length > 0
+                  "
+                >
+                  <div
+                    v-for="(chartUrl, idx) in activeStep.result.charts"
+                    :key="idx"
+                    class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                    @click="openLightbox(getChartUrl(chartUrl))"
+                  >
+                    <img
+                      :src="getChartUrl(chartUrl)"
+                      :alt="`分析图表 ${idx + 1}`"
+                      class="w-full rounded-lg"
+                      loading="lazy"
+                    />
+                    <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                      <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                        <ZoomIn class="h-3.5 w-3.5" />
+                        点击放大
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 表格下载 -->
+                <div
+                  v-if="
+                    activeStep.result.tables &&
+                    activeStep.result.tables.length > 0
+                  "
+                  class="mt-4"
+                >
+                  <h4 class="mb-3 text-sm font-bold text-slate-700">
+                    数据表格
+                  </h4>
+                  <div class="space-y-2">
+                    <a
+                      v-for="(tableUrl, idx) in activeStep.result.tables"
+                      :key="idx"
+                      :href="getChartUrl(tableUrl)"
+                      target="_blank"
+                      class="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm text-blue-600 transition-colors hover:bg-blue-50"
+                    >
+                      <FileText class="h-4 w-4" />
+                      {{ tableUrl.split('/').pop() }}
+                    </a>
+                  </div>
                 </div>
               </div>
+              </div>
             </template>
-          </div>
+          </template>
         </div>
       </div>
     </div>
@@ -1347,35 +1335,20 @@ onUnmounted(() => {
           <!-- 日志内容 -->
           <div class="h-[calc(100vh-64px)] overflow-y-auto">
             <div v-if="currentStepLogs.length > 0" class="p-4">
-              <div class="rounded-lg bg-slate-900 p-4 font-mono text-sm">
+              <div class="rounded-lg bg-slate-900 p-4 font-mono text-xs leading-relaxed">
                 <div
-                  v-for="(log, idx) in currentStepLogs"
+                  v-for="(line, idx) in currentStepLogs"
                   :key="idx"
-                  class="flex gap-3 py-1 leading-relaxed"
+                  class="py-0.5"
+                  :class="{
+                    'text-emerald-400': line.includes('[INFO]') || line.includes('成功'),
+                    'text-amber-400': line.includes('[WARN]') || line.includes('STDERR'),
+                    'text-red-400': line.includes('[ERROR]') || line.includes('失败'),
+                    'text-blue-300': line.startsWith('=====') || line.startsWith('流程') || line.startsWith('步骤') || line.startsWith('脚本') || line.startsWith('开始时间') || line.startsWith('结束时间') || line.startsWith('耗时') || line.startsWith('执行命令') || line.startsWith('参数'),
+                    'text-slate-300': !line.includes('[INFO]') && !line.includes('[WARN]') && !line.includes('[ERROR]') && !line.startsWith('=====') && !line.includes('成功') && !line.includes('失败') && !line.includes('STDERR') && !line.startsWith('流程') && !line.startsWith('步骤') && !line.startsWith('脚本') && !line.startsWith('开始时间') && !line.startsWith('结束时间') && !line.startsWith('耗时') && !line.startsWith('执行命令') && !line.startsWith('参数'),
+                  }"
                 >
-                  <span class="flex-shrink-0 text-slate-500">{{
-                    log.time
-                  }}</span>
-                  <span
-                    class="w-6 flex-shrink-0 text-center"
-                    :class="{
-                      'text-emerald-400': log.level === 'success',
-                      'text-amber-400': log.level === 'warn',
-                      'text-red-400': log.level === 'error',
-                      'text-blue-400': log.level === 'info',
-                    }"
-                  >
-                    {{
-                      log.level === 'success'
-                        ? '✔'
-                        : log.level === 'warn'
-                          ? '⚠'
-                          : log.level === 'error'
-                            ? '✘'
-                            : '●'
-                    }}
-                  </span>
-                  <span class="text-slate-200">{{ log.message }}</span>
+                  <span class="mr-3 select-none text-slate-600">{{ String(idx + 1).padStart(3, ' ') }}</span>{{ line }}
                 </div>
               </div>
             </div>
@@ -1384,6 +1357,70 @@ onUnmounted(() => {
               <p class="text-sm text-slate-400">暂无日志记录</p>
             </div>
           </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- ========== 步骤说明抽屉（右侧滑出） ========== -->
+    <Transition name="drawer">
+      <div v-if="showHelpDrawer && currentHelp" class="fixed inset-0 z-50 flex justify-end">
+        <!-- 遮罩 -->
+        <div class="absolute inset-0 bg-black/20" @click="showHelpDrawer = false"></div>
+        <!-- 抽屉内容 -->
+        <div class="relative flex w-full max-w-lg flex-col bg-white shadow-2xl">
+          <!-- 抽屉头部 -->
+          <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+            <div class="flex items-center gap-2">
+              <BookOpen class="h-5 w-5 text-blue-600" />
+              <h3 class="text-base font-bold text-slate-900">使用说明</h3>
+              <span v-if="activeStep" class="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                {{ STEP_LABELS[activeStep.stepType] }}
+              </span>
+            </div>
+            <button @click="showHelpDrawer = false" class="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 cursor-pointer">
+              <X class="h-5 w-5" />
+            </button>
+          </div>
+          <!-- 抽屉正文 -->
+          <div class="flex-1 overflow-y-auto">
+            <!-- 概要 -->
+            <div class="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+              <p class="text-sm leading-relaxed text-slate-600">{{ currentHelp.summary }}</p>
+            </div>
+            <!-- 各个 section -->
+            <div class="space-y-0">
+              <div v-for="(section, idx) in currentHelp.sections" :key="idx" class="border-b border-slate-50 px-6 py-5">
+                <h4 class="mb-3 text-sm font-semibold text-slate-800">{{ section.title }}</h4>
+                <div class="text-sm leading-relaxed text-slate-600" v-html="section.content"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- ========== 图片放大 Lightbox ========== -->
+    <Transition name="lightbox">
+      <div
+        v-if="showLightbox"
+        class="fixed inset-0 z-[60] flex items-center justify-center"
+        @click.self="showLightbox = false"
+      >
+        <!-- 遮罩 -->
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+        <!-- 内容 -->
+        <div class="relative max-h-[90vh] max-w-[90vw]">
+          <img
+            :src="lightboxUrl"
+            class="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl"
+            alt="放大查看"
+          />
+          <button
+            @click="showLightbox = false"
+            class="absolute -right-3 -top-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white text-slate-600 shadow-lg transition-colors hover:bg-slate-100"
+          >
+            <X class="h-4 w-4" />
+          </button>
         </div>
       </div>
     </Transition>
@@ -1415,24 +1452,28 @@ onUnmounted(() => {
   transform: translateX(100%);
 }
 
-/* 高级设置展开/折叠动画 */
-.expand-enter-active,
-.expand-leave-active {
-  overflow: hidden;
+/* lightbox 淡入淡出动画 */
+.lightbox-enter-active,
+.lightbox-leave-active {
   transition: all 0.25s ease;
 }
 
-.expand-enter-from,
-.expand-leave-to {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+.lightbox-enter-from,
+.lightbox-leave-to {
   opacity: 0;
 }
 
-.expand-enter-to,
-.expand-leave-from {
-  max-height: 500px;
-  opacity: 1;
+.lightbox-enter-active img,
+.lightbox-leave-active img {
+  transition: transform 0.25s ease;
+}
+
+.lightbox-enter-from img {
+  transform: scale(0.9);
+}
+
+.lightbox-leave-to img {
+  transform: scale(0.9);
 }
 </style>
+

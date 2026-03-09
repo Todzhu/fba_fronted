@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 /**
- * StepResultPanel - 步骤结果展示面板
- * 支持统计卡片、ECharts 图表和数据表格
+ * StepResultPanel - 运行结果独立卡片
+ * 统计数据 + 图表，白色卡片包裹
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
@@ -12,7 +12,7 @@ import { nextTick, ref, watch } from 'vue';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
-import { Card, Empty, Statistic, Table, Tabs } from 'ant-design-vue';
+import { Empty, Table, Tabs } from 'ant-design-vue';
 
 const props = defineProps<{
   loading?: boolean;
@@ -57,50 +57,62 @@ const getTableColumns = (columns: string[]) => {
   }));
 };
 
-// Chart 数量
 const chartKeys = () => Object.keys(props.result?.charts || {});
 const tableKeys = () => Object.keys(props.result?.tables || {});
 </script>
 
 <template>
-  <div class="step-result-panel">
-    <!-- Empty State -->
-    <Empty v-if="!result" description="执行步骤后查看结果" class="empty-state">
+  <div class="result-card">
+    <!-- 卡片标题 -->
+    <div class="card-header">
+      <div class="card-title">
+        <Icon icon="mdi:chart-box-outline" class="title-icon" />
+        <span>运行结果</span>
+      </div>
+    </div>
+
+    <!-- Empty -->
+    <Empty
+      v-if="!result"
+      description="执行步骤后查看结果"
+      class="empty-state"
+    >
       <template #image>
         <Icon icon="mdi:chart-timeline-variant" class="empty-icon" />
       </template>
     </Empty>
 
     <!-- Result Content -->
-    <div v-else class="result-content">
-      <!-- Message -->
+    <div v-else class="result-body">
+      <!-- 统计卡片行 -->
+      <div v-if="result.stats" class="stats-row">
+        <div
+          v-for="(value, key) in result.stats"
+          :key="key"
+          class="stat-item"
+        >
+          <div class="stat-label">{{ String(key).replace(/_/g, ' ') }}</div>
+          <div class="stat-value">
+            {{
+              typeof value === 'number'
+                ? value.toLocaleString()
+                : value
+            }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 成功消息 -->
       <div v-if="result.message" class="result-message">
-        <Icon icon="mdi:check-circle" class="message-icon" />
+        <Icon icon="mdi:check-circle" class="msg-icon" />
         <span>{{ result.message }}</span>
       </div>
 
-      <!-- Stats Cards -->
-      <div v-if="result.stats" class="stats-grid">
-        <Card
-          v-for="(value, key) in result.stats"
-          :key="key"
-          size="small"
-          class="stat-card"
-        >
-          <Statistic
-            :title="String(key).replace(/_/g, ' ')"
-            :value="value"
-            :precision="typeof value === 'number' && value % 1 !== 0 ? 2 : 0"
-          />
-        </Card>
-      </div>
-
-      <!-- Charts & Tables -->
+      <!-- 图表与表格 -->
       <Tabs
         v-if="chartKeys().length > 0 || tableKeys().length > 0"
         class="result-tabs"
       >
-        <!-- Charts -->
         <Tabs.TabPane
           v-for="chartKey in chartKeys()"
           :key="chartKey"
@@ -117,7 +129,6 @@ const tableKeys = () => Object.keys(props.result?.tables || {});
           </div>
         </Tabs.TabPane>
 
-        <!-- Tables -->
         <Tabs.TabPane
           v-for="tableKey in tableKeys()"
           :key="tableKey"
@@ -138,79 +149,99 @@ const tableKeys = () => Object.keys(props.result?.tables || {});
 </template>
 
 <style scoped>
-.step-result-panel {
+.result-card {
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+}
+
+.card-header {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 16px;
-  overflow-y: auto;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.card-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.title-icon {
+  font-size: 20px;
+  color: #1677ff;
 }
 
 .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
+  padding: 40px 0;
 }
 
 .empty-icon {
-  font-size: 64px;
-  color: #bfbfbf;
+  font-size: 48px;
+  color: #d9d9d9;
 }
 
-.result-content {
+.result-body {
+  padding: 20px 24px;
+}
+
+/* 统计行 */
+.stats-row {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 16px;
 }
 
+.stat-item {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 16px;
+}
+
+.stat-item:not(:last-child) {
+  border-right: 1px solid #f5f5f5;
+}
+
+.stat-label {
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #1677ff;
+  text-transform: capitalize;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+/* 消息 */
 .result-message {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 12px 16px;
-  font-size: 14px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
   color: #389e0d;
-  background: linear-gradient(135deg, #f6ffed 0%, #e6fffb 100%);
+  background: #f6ffed;
   border-radius: 8px;
 }
 
-.message-icon {
-  font-size: 18px;
+.msg-icon {
+  font-size: 16px;
+  color: #52c41a;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 12px;
-}
-
-.stat-card {
-  background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
-  border-radius: 8px;
-  transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-  box-shadow: 0 4px 12px rgb(0 0 0 / 8%);
-  transform: translateY(-2px);
-}
-
-:deep(.ant-statistic-title) {
-  font-size: 12px;
-  color: #8c8c8c;
-  text-transform: capitalize;
-}
-
-:deep(.ant-statistic-content-value) {
-  font-size: 20px;
-  font-weight: 600;
-  color: #262626;
-}
-
+/* 图表 */
 .result-tabs {
-  flex: 1;
+  margin-top: 8px;
 }
 
 .chart-container {

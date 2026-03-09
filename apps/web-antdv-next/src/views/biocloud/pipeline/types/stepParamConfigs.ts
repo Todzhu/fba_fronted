@@ -21,6 +21,7 @@ export interface ParamFieldConfig {
   controlType: ParamControlType;
   defaultValue: boolean | number | string;
   advanced?: boolean; // 是否为高级参数
+  group?: string; // 参数分组（如 '细胞过滤'、'基因过滤'）
 
   // number 类型专用
   min?: number;
@@ -47,6 +48,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       min: 0,
       max: 10_000,
       step: 50,
+      group: '细胞过滤',
     },
     {
       key: 'max_genes',
@@ -57,6 +59,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       min: 500,
       max: 20_000,
       step: 100,
+      group: '细胞过滤',
     },
     {
       key: 'max_mito_pct',
@@ -68,43 +71,58 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       min: 0,
       max: 100,
       step: 1,
+      group: '细胞过滤',
     },
     {
-      key: 'min_cells',
-      label: '最少细胞数',
-      tooltip: '表达该基因的细胞数低于此值的基因将被过滤',
+      key: 'min_log10GenesPerUMI',
+      label: '最小 log10GenesPerUMI',
+      tooltip: '基因复杂度下限，低于此值的细胞可能是空液滴或低质量细胞',
       controlType: 'number',
-      defaultValue: 3,
+      defaultValue: 0.7,
       min: 0,
-      max: 100,
-      step: 1,
-      advanced: true,
+      max: 1,
+      step: 0.01,
+      group: '细胞过滤',
+    },
+    {
+      key: 'expected_doublet_rate',
+      label: '期望双细胞率 (%)',
+      tooltip:
+        'Scrublet 模拟双细胞的期望比例。10x Genomics 平台通常为 0.5%~8%，取决于上样细胞数',
+      controlType: 'number',
+      defaultValue: 6,
+      min: 0.1,
+      max: 30,
+      step: 0.5,
+      group: '细胞过滤',
+    },
+    {
+      key: 'threshold',
+      label: 'Scrublet 阈值',
+      tooltip:
+        '双细胞得分阈值，高于此值的细胞被标记为双细胞。值越低越严格，通常 Scrublet 自动检测即可',
+      controlType: 'number',
+      defaultValue: 0.25,
+      min: 0.05,
+      max: 0.9,
+      step: 0.05,
+      group: '细胞过滤',
     },
   ],
 
-  // ========== 步骤3：数据预处理 ==========
-  preprocessing: [
-    {
-      key: 'normalization_method',
-      label: '归一化方法',
-      tooltip: '用于消除细胞间测序深度差异的归一化算法',
-      controlType: 'select',
-      defaultValue: 'log_normalize',
-      options: [
-        { label: 'Log Normalize', value: 'log_normalize' },
-        { label: 'SCTransform', value: 'sctransform' },
-        { label: 'Scran', value: 'scran' },
-      ],
-    },
+  // ========== 步骤3：降维聚类（含预处理） ==========
+  dim_cluster: [
+    // --- 预处理 ---
     {
       key: 'target_sum',
-      label: '目标总和',
-      tooltip: '归一化时将每个细胞的表达量缩放到此目标总和',
+      label: '归一化深度',
+      tooltip: '每个细胞的总 UMI 计数缩放到此值后取对数。10000 为标准值',
       controlType: 'number',
       defaultValue: 10_000,
       min: 1000,
-      max: 100_000,
+      max: 1_000_000,
       step: 1000,
+      group: '预处理',
     },
     {
       key: 'n_top_genes',
@@ -115,19 +133,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       min: 500,
       max: 10_000,
       step: 100,
-    },
-    {
-      key: 'hvg_method',
-      label: 'HVG 方法',
-      tooltip: '高变基因 (Highly Variable Genes) 的筛选算法',
-      controlType: 'select',
-      defaultValue: 'seurat',
-      options: [
-        { label: 'Seurat', value: 'seurat' },
-        { label: 'Cell Ranger', value: 'cell_ranger' },
-        { label: 'Seurat v3', value: 'seurat_v3' },
-      ],
-      advanced: true,
+      group: '预处理',
     },
     {
       key: 'regress_out_mito',
@@ -135,55 +141,67 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       tooltip: '在数据缩放时是否回归掉线粒体基因的影响',
       controlType: 'switch',
       defaultValue: true,
-      advanced: true,
+      group: '预处理',
     },
-  ],
-
-  // ========== 步骤4：降维可视化 ==========
-  dim_reduce: [
+    // --- 降维 ---
+    {
+      key: 'batch_remove',
+      label: '批次校正',
+      tooltip: '多样本数据建议使用 Harmony 消除批次效应',
+      controlType: 'select',
+      defaultValue: 'harmony',
+      options: [
+        { label: 'Harmony', value: 'harmony' },
+        { label: 'BBKNN', value: 'bbknn' },
+        { label: '无', value: 'none' },
+      ],
+      group: '降维聚类',
+    },
     {
       key: 'n_pcs',
       label: '主成分数',
       tooltip: 'PCA 降维保留的主成分数量，通常选择包含大部分变异的前 N 个',
       controlType: 'number',
-      defaultValue: 50,
+      defaultValue: 30,
       min: 5,
       max: 200,
       step: 5,
+      group: '降维聚类',
     },
     {
-      key: 'visualization_method',
-      label: '可视化方法',
-      tooltip: '用于二维可视化的降维算法',
-      controlType: 'select',
-      defaultValue: 'umap',
-      options: [
-        { label: 'UMAP', value: 'umap' },
-        { label: 't-SNE', value: 'tsne' },
-      ],
-    },
-    {
-      key: 'use_highly_variable',
-      label: '仅用高变基因',
-      tooltip: '是否仅使用筛选出的高变基因进行降维',
-      controlType: 'switch',
-      defaultValue: true,
+      key: 'n_neighbors',
+      label: '近邻数',
+      tooltip: '构建近邻图时使用的近邻数量，影响 UMAP 和聚类',
+      controlType: 'number',
+      defaultValue: 20,
+      min: 2,
+      max: 100,
+      step: 1,
+      group: '降维聚类',
     },
     {
       key: 'umap_min_dist',
       label: 'UMAP min_dist',
       tooltip: 'UMAP 最小距离参数，较小的值产生更紧密的聚类',
       controlType: 'number',
-      defaultValue: 0.5,
+      defaultValue: 0.3,
       min: 0.01,
       max: 1,
       step: 0.05,
-      advanced: true,
+      group: '降维聚类',
     },
-  ],
-
-  // ========== 步骤5：细胞聚类 ==========
-  clustering: [
+    // --- 聚类 ---
+    {
+      key: 'resolution',
+      label: '分辨率',
+      tooltip: '聚类分辨率，值越大产生的聚类数越多。通常 0.3~1.5 之间',
+      controlType: 'number',
+      defaultValue: 0.8,
+      min: 0.1,
+      max: 3,
+      step: 0.1,
+      group: '降维聚类',
+    },
     {
       key: 'clustering_method',
       label: '聚类方法',
@@ -194,37 +212,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
         { label: 'Leiden', value: 'leiden' },
         { label: 'Louvain', value: 'louvain' },
       ],
-    },
-    {
-      key: 'resolution',
-      label: '分辨率',
-      tooltip: '聚类分辨率，值越大产生的聚类数越多。通常 0.3~1.5 之间',
-      controlType: 'number',
-      defaultValue: 0.5,
-      min: 0.1,
-      max: 3,
-      step: 0.1,
-    },
-    {
-      key: 'n_neighbors',
-      label: '近邻数',
-      tooltip: '构建近邻图时使用的近邻数量',
-      controlType: 'number',
-      defaultValue: 15,
-      min: 2,
-      max: 100,
-      step: 1,
-    },
-    {
-      key: 'random_state',
-      label: '随机种子',
-      tooltip: '用于结果可重复性的随机数种子',
-      controlType: 'number',
-      defaultValue: 42,
-      min: 0,
-      max: 99_999,
-      step: 1,
-      advanced: true,
+      group: '降维聚类',
     },
   ],
 
@@ -257,6 +245,52 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       controlType: 'switch',
       defaultValue: true,
       advanced: true,
+    },
+  ],
+
+  // ========== 步骤5：亚群分析 ==========
+  sub_annotation: [
+    {
+      key: 'target_cluster',
+      label: '目标亚群',
+      tooltip: '选择要进行亚群分析的细胞类型或聚类编号，如 "T cells" 或 "0,1,3"',
+      controlType: 'select',
+      defaultValue: '',
+      options: [], // 动态填充
+      group: '亚群选择',
+    },
+    {
+      key: 'sub_n_top_genes',
+      label: '高变基因数',
+      tooltip: '亚群重新分析时筛选的高变基因数',
+      controlType: 'number',
+      defaultValue: 2000,
+      min: 500,
+      max: 10_000,
+      step: 100,
+      group: '重聚类',
+    },
+    {
+      key: 'sub_resolution',
+      label: '分辨率',
+      tooltip: '亚群聚类分辨率，亚群分析通常需要更高的分辨率（0.5~2.0）',
+      controlType: 'number',
+      defaultValue: 0.8,
+      min: 0.1,
+      max: 3,
+      step: 0.1,
+      group: '重聚类',
+    },
+    {
+      key: 'sub_n_neighbors',
+      label: '近邻数',
+      tooltip: '亚群分析的近邻数',
+      controlType: 'number',
+      defaultValue: 15,
+      min: 2,
+      max: 50,
+      step: 1,
+      group: '重聚类',
     },
   ],
 };

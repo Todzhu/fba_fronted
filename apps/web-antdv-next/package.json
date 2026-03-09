@@ -43,14 +43,15 @@
     "@vueuse/core": "catalog:",
     "ant-design-vue": "catalog:",
     "antdv-next": "catalog:",
+    "croner": "catalog:",
     "dayjs": "catalog:",
     "lucide-vue-next": "catalog:",
     "mitt": "^3.0.1",
     "pinia": "catalog:",
     "socket.io-client": "^4.8.1",
+    "sortablejs": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:",
-    "x-data-spreadsheet": "^1.1.9",
-    "sortablejs": "catalog:"
+    "x-data-spreadsheet": "^1.1.9"
   }
 }

@@ -2,7 +2,7 @@
 import type { SampleInfo } from './mock/myDataMock';
 /**
  * 单细胞分析流程详情页
- * 三栏布局：左侧步骤导航 / 中间结果展示 / 右侧参数配置
+ * 左侧步骤导航 + 右侧卡片式垂直滚动内容
  */
 import type { PipelineState, StepType } from './types/pipeline';
 
@@ -13,9 +13,10 @@ import { Page } from '@vben/common-ui';
 import { useTabs } from '@vben/hooks';
 
 import { Icon } from '@iconify/vue';
-import { Button, Drawer, message, Spin, Tabs, Timeline } from 'ant-design-vue';
+import { Button, Drawer, message, Spin, Timeline } from 'ant-design-vue';
 
-import StepConfigPanel from './components/StepConfigPanel.vue';
+import DynamicForm from '../cloudTools/components/DynamicForm.vue';
+import SampleTableEditor from './components/SampleTableEditor.vue';
 import StepNavigation from './components/StepNavigation.vue';
 import StepResultPanel from './components/StepResultPanel.vue';
 import {
@@ -24,6 +25,7 @@ import {
   runStep,
   updateStepParams,
 } from './mock/mockApi';
+import { STEP_DEFINITIONS } from './mock/stepSchemas';
 import { getSamplesInFolder } from './mock/myDataMock';
 import { STEP_ORDER } from './types/pipeline';
 
@@ -36,7 +38,6 @@ const loading = ref(true);
 const pipeline = ref<null | PipelineState>(null);
 const selectedStepIndex = ref(0);
 const samples = ref<SampleInfo[]>([]);
-const activeTab = ref('config');
 
 // 获取流程 ID
 const pipelineId = computed(() => route.params.id as string);
@@ -52,20 +53,40 @@ const selectedStepType = computed<StepType>(() => {
   return selectedStep.value?.stepType || STEP_ORDER[0];
 });
 
+// 当前步骤定义
+const stepDef = computed(() => STEP_DEFINITIONS[selectedStepType.value]);
+
+// 是否为数据读取步骤
+const isDataLoadStep = computed(() => selectedStepType.value === 'data_load');
+
+// 参数 Schema
+const paramSchema = computed(() => stepDef.value?.paramSchema || null);
+
+// 本地参数副本
+const localParams = ref<Record<string, unknown>>({});
+
+// 同步参数
+watch(
+  () => selectedStep.value?.params,
+  (newParams) => {
+    if (newParams) {
+      localParams.value = { ...newParams };
+    }
+  },
+  { immediate: true, deep: true },
+);
+
 // 加载流程数据
 const fetchPipeline = async () => {
   loading.value = true;
   try {
     pipeline.value = await getPipeline(pipelineId.value);
     if (pipeline.value) {
-      // 设置页签标题
       setTabTitle(pipeline.value.name);
-      // 定位到当前步骤
       selectedStepIndex.value = Math.min(
         pipeline.value.currentStep,
         pipeline.value.steps.length - 1,
       );
-      // 加载样本数据
       await loadSamples();
     } else {
       message.error('流程不存在');
@@ -81,7 +102,6 @@ const fetchPipeline = async () => {
 // 加载样本数据
 const loadSamples = async () => {
   if (!pipeline.value) return;
-
   const metadata = (pipeline.value as any).metadata;
   if (metadata?.dataPath) {
     try {
@@ -98,14 +118,27 @@ const handleSelectStep = (_stepType: StepType, index: number) => {
   selectedStepIndex.value = index;
 };
 
-// 更新步骤参数
-const handleUpdateParams = async (params: Record<string, unknown>) => {
-  if (!pipeline.value || !selectedStep.value) return;
+// 参数变更
+const handleParamsChange = (params: Record<string, unknown>) => {
+  localParams.value = params;
+  if (pipeline.value && selectedStep.value) {
+    updateStepParams(pipelineId.value, selectedStepType.value, params);
+    selectedStep.value.params = { ...selectedStep.value.params, ...params };
+  }
+};
 
-  await updateStepParams(pipelineId.value, selectedStepType.value, params);
-
-  // 同步更新本地状态
-  selectedStep.value.params = { ...selectedStep.value.params, ...params };
+// 重置参数
+const handleReset = () => {
+  if (!paramSchema.value?.properties) return;
+  const defaults: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(paramSchema.value.properties)) {
+    if (prop.default !== undefined) {
+      defaults[key] = prop.default;
+    }
+  }
+  localParams.value = defaults;
+  handleParamsChange(defaults);
+  message.success('参数已重置');
 };
 
 // 更新样本数据
@@ -131,8 +164,6 @@ const handleRunStep = async () => {
       step.status = 'completed';
       step.result = response.result;
       message.success(response.result.message || '执行成功');
-
-      // 刷新流程状态
       await fetchPipeline();
     } else {
       step.status = 'error';
@@ -144,6 +175,18 @@ const handleRunStep = async () => {
   }
 };
 
+// 是否可以执行
+const canRun = computed(() => {
+  if (!pipeline.value || !selectedStep.value) return false;
+  if (selectedStep.value.status === 'running') return false;
+  // 前置步骤需要完成
+  if (selectedStepIndex.value > 0) {
+    const prevStep = pipeline.value.steps[selectedStepIndex.value - 1];
+    if (prevStep?.status !== 'completed') return false;
+  }
+  return true;
+});
+
 // ========== 历史记录抽屉 ==========
 const historyDrawerVisible = ref(false);
 const historyLoading = ref(false);
@@ -152,7 +195,6 @@ const historyList = ref<any[]>([]);
 const showHistory = async () => {
   historyDrawerVisible.value = true;
   historyLoading.value = true;
-
   try {
     historyList.value = await getStepHistory(
       pipelineId.value,
@@ -191,27 +233,10 @@ onMounted(fetchPipeline);
   <Page auto-content-height class="sc-pipeline-detail">
     <Spin :spinning="loading" class="full-spin">
       <template v-if="pipeline">
-        <!-- Header -->
-        <div class="page-header">
-          <div class="header-left">
-            <Button type="text" shape="circle" @click="goBack">
-              <Icon icon="mdi:arrow-left" style="font-size: 20px" />
-            </Button>
-            <div class="pipeline-info">
-              <h1 class="pipeline-name">{{ pipeline.name }}</h1>
-              <span class="pipeline-id">ID: {{ pipeline.id }}</span>
-            </div>
-          </div>
-        </div>
-
         <!-- Main Content: 两栏布局 -->
-        <div class="main-content">
+        <div class="main-layout">
           <!-- Left: Step Navigation -->
           <div class="left-panel">
-            <div class="panel-title">
-              <Icon icon="mdi:format-list-numbered" />
-              分析步骤
-            </div>
             <StepNavigation
               :steps="pipeline.steps"
               :current-step="selectedStepIndex"
@@ -219,57 +244,95 @@ onMounted(fetchPipeline);
             />
           </div>
 
-          <!-- Center: Tabs (参数配置 + 分析结果) -->
-          <div class="center-panel">
-            <Tabs v-model:active-key="activeTab" class="center-tabs">
-              <Tabs.TabPane key="config">
-                <template #tab>
-                  <span class="tab-label">
-                    <Icon icon="mdi:cog" />
-                    参数配置
-                  </span>
-                </template>
-                <div class="tab-content">
-                  <StepConfigPanel
-                    v-if="selectedStep"
-                    :step-type="selectedStepType"
-                    :params="selectedStep.params"
-                    :status="selectedStep.status"
-                    :disabled="
-                      selectedStepIndex > 0 &&
-                      pipeline.steps[selectedStepIndex - 1]?.status !==
-                        'completed'
-                    "
-                    :history-count="selectedStep.history.length"
-                    :samples="samples"
-                    @update:params="handleUpdateParams"
-                    @update:samples="handleUpdateSamples"
-                    @run="handleRunStep"
-                    @show-history="showHistory"
-                  />
+          <!-- Right: Content Area -->
+          <div class="content-panel">
+            <!-- 步骤标题栏 -->
+            <div class="step-header">
+              <div class="step-header-left">
+                <div class="step-icon-wrap">
+                  <Icon :icon="stepDef?.icon || 'mdi:cog'" />
                 </div>
-              </Tabs.TabPane>
+                <div class="step-info">
+                  <h2 class="step-name">{{ stepDef?.displayName || '参数配置' }}</h2>
+                  <p class="step-desc">{{ stepDef?.description }}</p>
+                </div>
+              </div>
+              <div class="step-header-actions">
+                <Button size="small" @click="showHistory">
+                  <Icon icon="mdi:book-open-outline" />
+                  使用说明
+                </Button>
+                <Button size="small" @click="showHistory">
+                  <Icon icon="mdi:text-box-outline" />
+                  日志
+                </Button>
+                <Button
+                  type="primary"
+                  :disabled="!canRun"
+                  :loading="selectedStep?.status === 'running'"
+                  @click="handleRunStep"
+                >
+                  <Icon icon="mdi:play" />
+                  {{ selectedStep?.status === 'completed' ? '重新运行' : '运行' }}
+                </Button>
+              </div>
+            </div>
 
-              <Tabs.TabPane key="result">
-                <template #tab>
-                  <span class="tab-label">
-                    <Icon icon="mdi:chart-box" />
-                    分析结果
-                    <span
-                      v-if="selectedStep?.status === 'completed'"
-                      class="result-badge"
-                      >✓</span
-                    >
-                  </span>
-                </template>
-                <div class="tab-content">
-                  <StepResultPanel
-                    :result="selectedStep?.result"
-                    :loading="selectedStep?.status === 'running'"
+            <!-- 滚动内容区 -->
+            <div class="content-scroll">
+              <!-- 数据来源卡片 (仅数据读取步骤) -->
+              <div v-if="isDataLoadStep && pipeline.dataPath" class="source-card">
+                <div class="source-inner">
+                  <div class="source-left">
+                    <Icon icon="mdi:folder-open-outline" class="source-icon" />
+                    <div>
+                      <div class="source-label">数据来源</div>
+                      <div class="source-path">{{ pipeline.dataPath }}</div>
+                    </div>
+                  </div>
+                  <div v-if="pipeline.species" class="species-tag">
+                    {{ pipeline.species }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 样本列表卡片 (仅数据读取步骤) -->
+              <SampleTableEditor
+                v-if="isDataLoadStep"
+                :model-value="samples"
+                @update:model-value="handleUpdateSamples"
+              />
+
+              <!-- 参数配置卡片 (非数据读取步骤) -->
+              <div v-if="!isDataLoadStep && paramSchema" class="config-card">
+                <div class="card-header">
+                  <div class="card-title">
+                    <Icon icon="mdi:tune-variant" class="title-icon" />
+                    <span>参数配置</span>
+                  </div>
+                  <Button size="small" @click="handleReset">
+                    <Icon icon="mdi:refresh" />
+                    重置
+                  </Button>
+                </div>
+                <div class="config-body">
+                  <DynamicForm
+                    :model-value="localParams"
+                    :schema="paramSchema as any"
+                    :show-actions="false"
+                    @update:model-value="handleParamsChange"
+                    @reset="handleReset"
                   />
                 </div>
-              </Tabs.TabPane>
-            </Tabs>
+              </div>
+
+              <!-- 运行结果卡片 -->
+              <StepResultPanel
+                v-if="selectedStep?.result || selectedStep?.status === 'running'"
+                :result="selectedStep?.result"
+                :loading="selectedStep?.status === 'running'"
+              />
+            </div>
           </div>
         </div>
       </template>
@@ -307,16 +370,6 @@ onMounted(fetchPipeline);
 </template>
 
 <style scoped>
-@media (max-width: 1000px) {
-  .main-content {
-    flex-direction: column;
-  }
-
-  .left-panel {
-    width: 100%;
-  }
-}
-
 .sc-pipeline-detail {
   display: flex;
   flex-direction: column;
@@ -335,43 +388,10 @@ onMounted(fetchPipeline);
   height: 100%;
 }
 
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 24px;
-  background: white;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.header-left {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.pipeline-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.pipeline-name {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #262626;
-}
-
-.pipeline-id {
-  font-size: 12px;
-  color: #8c8c8c;
-}
-
-.main-content {
+/* 两栏布局 */
+.main-layout {
   display: flex;
   flex: 1;
-  gap: 16px;
-  padding: 16px;
   overflow: hidden;
 }
 
@@ -379,85 +399,158 @@ onMounted(fetchPipeline);
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
-  width: 240px;
+  width: 220px;
   overflow: hidden;
   background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 6%);
+  border-right: 1px solid #f0f0f0;
 }
 
-.center-panel {
+.content-panel {
   display: flex;
   flex: 1;
   flex-direction: column;
   overflow: hidden;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 6%);
 }
 
-.panel-title {
+/* 步骤标题栏 */
+.step-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  background: white;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.step-header-left {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.step-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  color: #1677ff;
+  background: #e6f4ff;
+  border-radius: 10px;
+}
+
+.step-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.step-desc {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #8c8c8c;
+}
+
+.step-header-actions {
   display: flex;
   gap: 8px;
   align-items: center;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #262626;
-  border-bottom: 1px solid #f0f0f0;
 }
 
-/* Tab 样式 */
-.center-tabs {
+/* 滚动内容区 */
+.content-scroll {
   display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.center-tabs :deep(.ant-tabs-nav) {
-  padding: 0 16px;
-  margin: 0;
-  background: #fafafa;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.center-tabs :deep(.ant-tabs-content-holder) {
   flex: 1;
-  overflow: hidden;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px 32px;
+  overflow-y: auto;
 }
 
-.center-tabs :deep(.ant-tabs-content) {
-  height: 100%;
+/* 数据来源卡片 */
+.source-card {
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
 }
 
-.center-tabs :deep(.ant-tabs-tabpane) {
-  height: 100%;
-  overflow: auto;
-}
-
-.tab-label {
+.source-inner {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+
+.source-left {
+  display: flex;
+  gap: 12px;
   align-items: center;
 }
 
-.tab-content {
-  height: 100%;
-  padding: 16px;
-  overflow: auto;
+.source-icon {
+  font-size: 24px;
+  color: #1677ff;
 }
 
-.result-badge {
-  display: inline-flex;
+.source-label {
+  font-size: 12px;
+  color: #1677ff;
+}
+
+.source-path {
+  font-size: 14px;
+  font-weight: 500;
+  color: #262626;
+}
+
+.species-tag {
+  padding: 4px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1677ff;
+  background: #e6f4ff;
+  border-radius: 16px;
+}
+
+/* 参数配置卡片 */
+.config-card {
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+}
+
+.card-header {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  margin-left: 4px;
-  font-size: 10px;
-  color: white;
-  background: #52c41a;
-  border-radius: 50%;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.card-title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.title-icon {
+  font-size: 20px;
+  color: #1677ff;
+}
+
+.config-body {
+  padding: 20px 24px;
 }
 
 /* 历史记录 */
@@ -494,5 +587,18 @@ onMounted(fetchPipeline);
   padding: 40px 0;
   color: #8c8c8c;
   text-align: center;
+}
+
+/* 响应式 */
+@media (max-width: 1000px) {
+  .main-layout {
+    flex-direction: column;
+  }
+
+  .left-panel {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #f0f0f0;
+  }
 }
 </style>
