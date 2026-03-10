@@ -7,7 +7,7 @@
 import type { Pipeline, StepConfig } from './types/pipeline';
 import type { ParamFieldConfig } from './types/stepParamConfigs';
 
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
@@ -33,16 +33,19 @@ import {
 } from 'lucide-vue-next';
 
 import {
+  generateDotplot as generateDotplotApi,
   getPipeline as fetchPipelineApi,
   getFilesInFolder,
   getStepLogs,
   runStep as runStepApi,
   updateSampleDict,
 } from '#/api/pipeline';
+import { Plus, Trash2 } from 'lucide-vue-next';
+import { useVbenVxeGrid } from '#/adapter/vxe-table';
 
 import { STEP_DESCRIPTIONS, STEP_LABELS } from './types/pipeline';
 import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
-import { TISSUE_MARKER_PRESETS } from './types/tissueMarkerPresets';
+import { TISSUE_TYPE_OPTIONS } from './types/tissueMarkerPresets';
 import { STEP_HELP_CONTENT } from './types/stepHelpContent';
 import { getCellTypesForTissue } from './types/cellTypeMarkers';
 
@@ -241,12 +244,6 @@ const isAnnotationStep = computed(() => {
   return activeStep.value?.stepType === 'annotation';
 });
 
-// 降维聚类步骤（注释步骤需要引用其UMAP图）
-const dimReduceStep = computed(() => {
-  if (!pipeline.value) return null;
-  return pipeline.value.steps.find(s => s.stepType === 'dim_cluster') ?? null;
-});
-
 // ========== 参数表单逻辑 ==========
 
 // 当前步骤的参数配置列表
@@ -282,11 +279,6 @@ const ungroupedParams = computed(() => {
 const setParam = (key: string, value: unknown) => {
   if (!activeStep.value) return;
   activeStep.value.params[key] = value;
-  // 组织类型联动预填 Marker 基因
-  if (key === 'tissue_type' && typeof value === 'string') {
-    const preset = TISSUE_MARKER_PRESETS[value] || '';
-    if (preset) activeStep.value.params['marker_genes'] = preset;
-  }
 };
 
 // 步进调整数字参数
@@ -312,58 +304,175 @@ const activeResultTab = ref<'charts' | 'tables'>('charts');
 // 辅助图折叠状态
 const showAuxCharts = ref(false);
 
-const editingAnnotation = ref<Record<string, string>>({});
-const annotationSearchQuery = ref<Record<string, string>>({}); // 每个cluster的搜索关键词
-const annotationDropdownOpen = ref<Record<string, boolean>>({}); // 每个cluster的下拉是否打开
+// ===== Marker 可编辑表格 =====
+interface MarkerRow {
+  cellType: string;
+  markers: string;
+}
+const selectedTissueType = ref('pbmc');
+const markerTableRows = ref<MarkerRow[]>([]);
+const dotplotUrl = ref('');
+const dotplotLoading = ref(false);
 
-// 当前组织的候选细胞类型（从知识库获取）
-const candidateCellTypes = computed(() => {
-  if (!activeStep.value) return [];
+// 从知识库加载组织类型的 Marker 预设
+const loadMarkerPreset = (tissue: string) => {
+  selectedTissueType.value = tissue;
+  if (!activeStep.value) return;
   const organism = activeStep.value.params['organism'] as string || 'human';
-  const tissueType = activeStep.value.params['tissue_type'] as string || 'pbmc';
-  // 将参数值映射到知识库的 key
   const speciesMap: Record<string, 'Human' | 'Mouse'> = { human: 'Human', mouse: 'Mouse' };
   const tissueMap: Record<string, string> = {
     pbmc: 'Immune', lung: 'Lung', liver: 'Liver', brain: 'Brain',
     tumor: 'Immune', gut: 'GI_tract', kidney: 'Kidney', skin: 'Skin', other: 'Immune',
   };
   const sp = speciesMap[organism] || 'Human';
-  const ts = tissueMap[tissueType] || 'Immune';
-  return getCellTypesForTissue(sp, ts);
+  const ts = tissueMap[tissue] || 'Immune';
+  const cellTypes = getCellTypesForTissue(sp, ts);
+  markerTableRows.value = cellTypes.map((ct) => ({
+    cellType: ct.cellType,
+    markers: ct.positive.join(', '),
+  }));
+};
+
+const addMarkerRow = () => {
+  markerTableRows.value.push({ cellType: '', markers: '' });
+};
+
+const removeMarkerRow = (idx: number) => {
+  markerTableRows.value.splice(idx, 1);
+};
+
+// 收集 marker 表格构建分组字典并调用后端生成 dotplot
+const handleGenerateDotplot = async () => {
+  if (!pipeline.value || markerTableRows.value.length === 0) return;
+  dotplotLoading.value = true;
+  try {
+    // 构建 {细胞类型: [基因列表]} 的字典结构
+    const markerDict: Record<string, string[]> = {};
+    for (const row of markerTableRows.value) {
+      if (!row.cellType.trim()) continue;
+      const genes = row.markers
+        .split(/[,，\s]+/)
+        .map((g) => g.trim())
+        .filter(Boolean);
+      if (genes.length > 0) {
+        markerDict[row.cellType.trim()] = genes;
+      }
+    }
+    if (Object.keys(markerDict).length === 0) return;
+    const resp = await generateDotplotApi(pipeline.value.id, markerDict);
+    dotplotUrl.value = resp.url;
+  } catch (error) {
+    console.error('生成 Dotplot 失败:', error);
+  } finally {
+    dotplotLoading.value = false;
+  }
+};
+
+// ===== Cluster→CellType 映射表 =====
+// 从 dim_cluster 步骤结果中获取 cluster 列表
+const clusterList = computed<string[]>(() => {
+  if (!pipeline.value) return [];
+
+  // 来源1：dim_cluster 步骤的 stats.n_clusters
+  const dimStep = pipeline.value.steps.find(s => s.stepType === 'dim_cluster');
+  if (dimStep?.result?.stats) {
+    const n = (dimStep.result.stats as Record<string, unknown>)['n_clusters'] as number;
+    if (typeof n === 'number' && n > 0) {
+      return Array.from({ length: n }, (_, i) => String(i));
+    }
+  }
+
+  // 来源2：find_marker 步骤的 stats.n_clusters
+  const markerStep = pipeline.value.steps.find(s => s.stepType === 'find_marker');
+  if (markerStep?.result?.stats) {
+    const n = (markerStep.result.stats as Record<string, unknown>)['n_clusters'] as number;
+    if (typeof n === 'number' && n > 0) {
+      return Array.from({ length: n }, (_, i) => String(i));
+    }
+  }
+
+  // 来源3：annotation 步骤已有结果（旧数据兼容）
+  const annoStep = pipeline.value.steps.find(s => s.stepType === 'annotation');
+  if (annoStep?.result?.stats?.annotation_dict) {
+    return Object.keys(annoStep.result.stats.annotation_dict as Record<string, string>).sort(
+      (a, b) => Number(a) - Number(b),
+    );
+  }
+
+  return [];
 });
 
-// 过滤后的候选细胞类型（根据cluster的搜索关键词）
-const getFilteredCandidates = (cluster: string) => {
-  const query = (annotationSearchQuery.value[cluster] || '').toLowerCase();
-  if (!query) return candidateCellTypes.value;
-  return candidateCellTypes.value.filter(
-    (ct: { cellType: string; positive: string[] }) => ct.cellType.toLowerCase().includes(query)
-  );
+// vxe-table 的数据源
+interface ClusterRow { cluster: string; cellType: string; }
+const clusterTableData = ref<ClusterRow[]>([]);
+
+// useVbenVxeGrid Cluster 映射表格
+const [ClusterGrid, clusterGridApi] = useVbenVxeGrid({
+  gridOptions: {
+    border: true,
+    size: 'small',
+    maxHeight: 400,
+    rowConfig: { isHover: true, keyField: 'cluster' },
+    editConfig: { trigger: 'click', mode: 'cell' },
+    columns: [
+      { field: 'cluster', title: 'Cluster', width: 100, align: 'center' },
+      {
+        field: 'cellType',
+        title: '自定义细胞类型名称',
+        editRender: { name: 'input', attrs: { placeholder: '输入细胞类型...' } },
+      },
+    ],
+    pagerConfig: { enabled: false },
+    toolbarConfig: { enabled: false },
+    proxyConfig: {
+      autoLoad: false,
+      ajax: {
+        query: async () => clusterTableData.value,
+      },
+    },
+  },
+});
+
+// 初始化映射表（空值或已有注释结果）
+const initClusterMap = () => {
+  const existingDict = activeStep.value?.result?.stats?.annotation_dict as Record<string, string> | undefined;
+  clusterTableData.value = clusterList.value.map(c => ({
+    cluster: c,
+    cellType: existingDict?.[c] || '',
+  }));
+  // 通过 proxy 的 query 刷新 Grid 数据（需要延迟等组件挂载）
+  nextTick(() => {
+    clusterGridApi?.query();
+  });
 };
 
-// 选择候选细胞类型
-const selectCellType = (cluster: string, cellType: string) => {
-  editingAnnotation.value[cluster] = cellType;
-  annotationDropdownOpen.value[cluster] = false;
-  annotationSearchQuery.value[cluster] = '';
-};
-
-// blur时延迟关闭下拉（让mousedown事件先执行）
-const closeDropdownLater = (cluster: string) => {
-  globalThis.setTimeout(() => { annotationDropdownOpen.value[cluster] = false }, 200);
-};
-
-// 初始化注释映射表
-const initAnnotationEdit = () => {
-  if (!activeStep.value?.result?.stats?.annotation_dict) return;
-  editingAnnotation.value = { ...(activeStep.value.result.stats.annotation_dict as Record<string, string>) };
-};
-
-// 确认注释并重新出图
-const confirmAnnotation = async () => {
+// 提交 Cluster→CellType 注释并运行后端
+const submitClusterAnnotation = async () => {
   if (!pipeline.value || !activeStep.value) return;
-  // 将编辑后的映射写入 params.cell_type
-  activeStep.value.params['cell_type'] = { ...editingAnnotation.value };
+  // 从 clusterTableData 获取数据（proxyConfig query 同源）
+  const cellTypeMapping: Record<string, string> = {};
+  for (const row of clusterTableData.value) {
+    if (row.cellType?.trim()) {
+      cellTypeMapping[row.cluster] = row.cellType.trim();
+    }
+  }
+  if (Object.keys(cellTypeMapping).length === 0) return;
+
+  // 注入 marker 基因和 cell_type
+  if (markerTableRows.value.length > 0) {
+    const allGenes = new Set<string>();
+    for (const row of markerTableRows.value) {
+      for (const g of row.markers.split(/[,，\s]+/)) {
+        const gene = g.trim();
+        if (gene) allGenes.add(gene);
+      }
+    }
+    activeStep.value.params['marker_genes'] = [...allGenes].join(',');
+  }
+  activeStep.value.params['tissue_type'] = selectedTissueType.value;
+  activeStep.value.params['cell_type'] = cellTypeMapping;
+  activeStep.value.params['annotation_method'] = 'manual';
+
   running.value = true;
   try {
     await runStepApi(
@@ -377,10 +486,17 @@ const confirmAnnotation = async () => {
     startLogPolling(activeStepIndex.value);
     startPolling(activeStepIndex.value);
   } catch (error) {
-    console.error('确认注释失败:', error);
+    console.error('提交注释失败:', error);
     running.value = false;
   }
 };
+
+// 监听 step 切换时自动初始化映射表
+watch([activeStepIndex, clusterList], () => {
+  if (isAnnotationStep.value && clusterList.value.length > 0) {
+    initClusterMap();
+  }
+}, { immediate: true });
 
 // 步骤是否可点击
 const isStepClickable = (idx: number) => {
@@ -474,6 +590,18 @@ const handleRunStep = async () => {
   if (!pipeline.value || !activeStep.value) return;
   running.value = true;
   try {
+    // 注释步骤：自动注入 Marker 表格数据到参数
+    if (activeStep.value.stepType === 'annotation' && markerTableRows.value.length > 0) {
+      const allGenes = new Set<string>();
+      for (const row of markerTableRows.value) {
+        for (const g of row.markers.split(/[,，\s]+/)) {
+          const gene = g.trim();
+          if (gene) allGenes.add(gene);
+        }
+      }
+      activeStep.value.params['marker_genes'] = [...allGenes].join(',');
+      activeStep.value.params['tissue_type'] = selectedTissueType.value;
+    }
     // 派发 Celery 任务
     await runStepApi(
       pipeline.value.id,
@@ -1107,52 +1235,124 @@ onUnmounted(() => {
             <!-- ========== 通用步骤UI：参数 + 结果独立卡片 ========== -->
             <template v-else>
 
-              <!-- ===== 🔬 注释步骤专属：UMAP 参考图 + Cluster 概览 ===== -->
+              <!-- ===== 🔬 注释步骤专属：Marker 基因辅助面板 ===== -->
               <div
-                v-if="isAnnotationStep && dimReduceStep?.result"
+                v-if="isAnnotationStep"
                 class="!-mt-px overflow-hidden rounded-none border border-b-0 border-slate-200 bg-white"
               >
                 <!-- 标题栏 -->
                 <div class="flex items-center gap-2 border-b border-slate-100 px-8 py-4">
-                  <ScatterChart class="h-5 w-5 text-blue-500" />
-                  <h3 class="text-base font-bold text-slate-800">聚类参考</h3>
+                  <Tag class="h-5 w-5 text-blue-500" />
+                  <h3 class="text-base font-bold text-slate-800">Marker 基因参考</h3>
                   <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                    来自降维聚类结果
+                    选择组织 → 编辑 Marker → 生成 Dotplot
                   </span>
                 </div>
 
                 <div class="px-8 py-5">
-                  <!-- 统计指标卡片 -->
-                  <div
-                    v-if="dimReduceStep.result.stats"
-                    class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4"
-                  >
-                    <div
-                      v-for="(item, sIdx) in getSortedStats(dimReduceStep.result.stats as Record<string, unknown>)"
-                      :key="item.key"
-                      class="rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3"
+                  <!-- 组织类型选择 -->
+                  <div class="mb-5 flex items-center gap-4">
+                    <label class="text-sm font-medium text-slate-700 whitespace-nowrap">组织类型</label>
+                    <select
+                      :value="selectedTissueType"
+                      @change="(e: Event) => loadMarkerPreset((e.target as HTMLSelectElement).value)"
+                      class="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
                     >
-                      <div class="text-xs font-medium text-slate-500">{{ STAT_LABELS[item.key] || item.key }}</div>
-                      <div class="mt-1 text-lg font-bold text-slate-800">{{ formatStatValue(item.value) }}</div>
-                    </div>
+                      <option v-for="opt in TISSUE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}
+                      </option>
+                    </select>
+                    <span class="text-xs text-slate-400">选择后自动加载对应组织的细胞类型和 Marker 基因</span>
                   </div>
 
-                  <!-- UMAP 图表（后端 PNG） -->
-                  <div
-                    v-if="dimReduceStep.result.charts && dimReduceStep.result.charts.length > 0"
-                    class="grid grid-cols-1 gap-3 lg:grid-cols-2"
-                  >
+                  <!-- Marker 可编辑表格 -->
+                  <div v-if="markerTableRows.length > 0" class="overflow-hidden rounded-lg border border-slate-200">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="bg-slate-50">
+                          <th class="w-48 px-4 py-2.5 text-left font-semibold text-slate-600">细胞类型</th>
+                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">Marker 基因（逗号分隔）</th>
+                          <th class="w-16 px-4 py-2.5 text-center font-semibold text-slate-600">操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="(row, idx) in markerTableRows"
+                          :key="idx"
+                          class="border-t border-slate-100 transition-colors hover:bg-slate-50/50"
+                        >
+                          <td class="px-4 py-2">
+                            <input
+                              v-model="row.cellType"
+                              type="text"
+                              class="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
+                              placeholder="细胞类型名称"
+                            />
+                          </td>
+                          <td class="px-4 py-2">
+                            <input
+                              v-model="row.markers"
+                              type="text"
+                              class="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
+                              placeholder="CD3D, CD3E, CD4..."
+                            />
+                          </td>
+                          <td class="px-4 py-2 text-center">
+                            <button
+                              type="button"
+                              class="cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                              @click="removeMarkerRow(idx)"
+                            >
+                              <Trash2 class="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <!-- 无数据提示 -->
+                  <div v-else class="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                    <Tag class="h-4 w-4" />
+                    请先选择组织类型以加载预设 Marker 基因，或手动添加
+                  </div>
+
+                  <!-- 底部操作栏 -->
+                  <div class="mt-4 flex items-center justify-between">
+                    <button
+                      type="button"
+                      @click="addMarkerRow"
+                      class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:border-blue-400 hover:text-blue-600"
+                    >
+                      <Plus class="h-3.5 w-3.5" />
+                      添加细胞类型
+                    </button>
+                    <button
+                      type="button"
+                      @click="handleGenerateDotplot"
+                      :disabled="dotplotLoading || markerTableRows.length === 0"
+                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Loader2 v-if="dotplotLoading" class="h-4 w-4 animate-spin" />
+                      <ScatterChart v-else class="h-4 w-4" />
+                      {{ dotplotLoading ? '生成中...' : '生成 Dotplot' }}
+                    </button>
+                  </div>
+
+                  <!-- Dotplot 结果展示 -->
+                  <div v-if="dotplotUrl" class="mt-5">
+                    <div class="mb-2 flex items-center gap-2">
+                      <ScatterChart class="h-4 w-4 text-emerald-500" />
+                      <span class="text-sm font-bold text-slate-700">Dotplot 预览</span>
+                    </div>
                     <div
-                      v-for="(chartUrl, idx) in (dimReduceStep.result.charts as string[]).slice(0, 4)"
-                      :key="idx"
                       class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                      @click="openLightbox(getStepChartUrl(chartUrl, 'dim_cluster'))"
+                      @click="openLightbox(getStepChartUrl(dotplotUrl, 'annotation'))"
                     >
                       <img
-                        :src="getStepChartUrl(chartUrl, 'dim_cluster')"
-                        :alt="`UMAP ${idx + 1}`"
+                        :src="getStepChartUrl(dotplotUrl, 'annotation')"
+                        alt="Marker Dotplot"
                         class="w-full rounded-lg"
-                        loading="lazy"
                       />
                       <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
                         <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
@@ -1162,17 +1362,43 @@ onUnmounted(() => {
                       </div>
                     </div>
                   </div>
-
-                  <!-- 无图表时的提示 -->
-                  <div v-else class="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                    <ScatterChart class="h-4 w-4" />
-                    降维聚类步骤尚未生成图表，请先完成降维聚类步骤
-                  </div>
                 </div>
               </div>
 
               <!-- ===== 参数配置卡片 ===== -->
               <div class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white px-8 py-6">
+
+                <!-- 注释步骤专属：Cluster → CellType 映射表格 -->
+                <template v-if="isAnnotationStep && clusterList.length > 0">
+                  <div class="mb-4 flex items-center gap-2">
+                    <Tag class="h-5 w-5 text-blue-500" />
+                    <h3 class="text-base font-bold text-slate-800">Cluster 细胞类型注释</h3>
+                    <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+                      共 {{ clusterList.length }} 个 Cluster
+                    </span>
+                  </div>
+
+                  <ClusterGrid />
+
+                  <div class="mt-4 flex items-center justify-between">
+                    <p class="text-xs text-slate-400">
+                      💡 参考上方 Dotplot 和特征基因分析结果，为每个 Cluster 指定细胞类型
+                    </p>
+                    <button
+                      type="button"
+                      @click="submitClusterAnnotation"
+                      :disabled="running"
+                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Loader2 v-if="running" class="h-4 w-4 animate-spin" />
+                      <Check v-else class="h-4 w-4" />
+                      {{ running ? '运行中...' : '提交注释' }}
+                    </button>
+                  </div>
+                </template>
+
+                <!-- 通用参数配置 -->
+                <template v-else>
                 <div v-if="currentStepParamConfigs.length > 0">
 
                   <!-- 有分组时：卡片式分组布局 -->
@@ -1357,6 +1583,7 @@ onUnmounted(() => {
                     {{ STEP_DESCRIPTIONS[activeStep.stepType] }}
                   </p>
                 </div>
+                </template>
               </div>
 
               <!-- ===== 分析结果卡片 ===== -->
@@ -1617,93 +1844,6 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <!-- 细胞注释映射表（仅 annotation 步骤显示） -->
-                <div
-                  v-if="activeStep.stepType === 'annotation' && activeStep.result?.stats?.annotation_dict"
-                  class="mt-6"
-                >
-                  <div class="mb-4 flex items-center justify-between">
-                    <h4 class="flex items-center gap-2 text-sm font-bold text-slate-700">
-                      <Tag class="h-4 w-4 text-blue-500" />
-                      细胞类型注释
-                    </h4>
-                    <span class="text-xs text-slate-400">
-                      已注释 {{ Object.keys(editingAnnotation).length }} 个 Cluster
-                    </span>
-                  </div>
-
-                  <div class="overflow-hidden rounded-lg border border-slate-200">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="bg-slate-50">
-                          <th class="w-24 px-4 py-2.5 text-left font-semibold text-slate-600">Cluster</th>
-                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">自动注释结果</th>
-                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">修改为（输入或从知识库选择）</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="(cellType, cluster) in (activeStep.result.stats.annotation_dict as Record<string, string>)"
-                          :key="cluster"
-                          class="border-t border-slate-100 transition-colors hover:bg-slate-50/50"
-                        >
-                          <td class="px-4 py-2.5">
-                            <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
-                              {{ cluster }}
-                            </span>
-                          </td>
-                          <td class="px-4 py-2.5 text-slate-500">{{ cellType }}</td>
-                          <td class="relative px-4 py-2">
-                            <div class="relative">
-                              <input
-                                :value="editingAnnotation[cluster as string] || cellType"
-                                @input="(e: Event) => { editingAnnotation[cluster as string] = (e.target as HTMLInputElement).value; annotationSearchQuery[cluster as string] = (e.target as HTMLInputElement).value; annotationDropdownOpen[cluster as string] = true; }"
-                                @focus="annotationDropdownOpen[cluster as string] = true"
-                                @blur="closeDropdownLater(cluster as string)"
-                                type="text"
-                                class="h-8 w-full rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
-                                placeholder="输入细胞类型..."
-                              />
-                              <ChevronRight
-                                class="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-slate-300"
-                              />
-                              <!-- Autocomplete 下拉 -->
-                              <div
-                                v-if="annotationDropdownOpen[cluster as string] && getFilteredCandidates(cluster as string).length > 0"
-                                class="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
-                              >
-                                <button
-                                  v-for="ct in getFilteredCandidates(cluster as string)"
-                                  :key="ct.cellType"
-                                  type="button"
-                                  class="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50"
-                                  @mousedown.prevent="selectCellType(cluster as string, ct.cellType)"
-                                >
-                                  <span class="whitespace-nowrap text-sm font-medium text-slate-800">{{ ct.cellType }}</span>
-                                  <span class="truncate text-xs text-slate-400">{{ ct.positive.slice(0, 4).join(', ') }}</span>
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  <div class="mt-4 flex items-center justify-between">
-                    <p class="text-xs text-slate-400">
-                      💡 输入时会自动显示 {{ activeStep.params['organism'] === 'mouse' ? 'Mouse' : 'Human' }} 组织知识库中的候选细胞类型
-                    </p>
-                    <button
-                      type="button"
-                      @click="() => { initAnnotationEdit(); confirmAnnotation(); }"
-                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
-                      :disabled="running"
-                    >
-                      <Check class="h-4 w-4" />
-                      确认注释并重新出图
-                    </button>
-                  </div>
-                </div>
               </div>
               </div>
             </template>

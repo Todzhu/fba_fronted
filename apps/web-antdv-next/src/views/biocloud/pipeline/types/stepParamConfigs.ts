@@ -290,31 +290,6 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
         { label: 'Mouse', value: 'mouse' },
       ],
     },
-    {
-      key: 'tissue_type',
-      label: '组织类型',
-      tooltip: '选择组织类型后会自动预填该组织的常用 Marker 基因',
-      controlType: 'select',
-      defaultValue: 'pbmc',
-      options: [
-        { label: 'PBMC（外周血）', value: 'pbmc' },
-        { label: '肺组织', value: 'lung' },
-        { label: '肝组织', value: 'liver' },
-        { label: '脑组织', value: 'brain' },
-        { label: '肿瘤组织', value: 'tumor' },
-        { label: '肠组织', value: 'gut' },
-        { label: '肾组织', value: 'kidney' },
-        { label: '皮肤组织', value: 'skin' },
-        { label: '其他', value: 'other' },
-      ],
-    },
-    {
-      key: 'marker_genes',
-      label: 'Marker 基因',
-      tooltip: '用于辅助判断细胞类型的标志基因，逗号分隔。选择组织类型后自动预填',
-      controlType: 'text',
-      defaultValue: 'CD3D,CD3E,CD4,CD8A,CD8B,MS4A1,CD79A,CD14,LYZ,FCGR3A,NKG7,GNLY,PPBP,FCER1A',
-    },
   ],
 
   // ========== 步骤5：亚群分析 ==========

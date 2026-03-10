@@ -237,6 +237,22 @@ export async function getStepLogs(
   }
 }
 
+/**
+ * 生成按细胞类型分组的 Dotplot 图
+ * @param pipelineId 流程 ID
+ * @param markerDict 细胞类型→Marker基因列表映射
+ * @returns {url: 图片相对路径}
+ */
+export async function generateDotplot(
+  pipelineId: string,
+  markerDict: Record<string, string[]>,
+): Promise<{ url: string }> {
+  return await requestClient.post<{ url: string }>(
+    `/api/v1/pipelines/${pipelineId}/dotplot`,
+    { marker_dict: markerDict },
+  );
+}
+
 // ========== 用户数据文件 API ==========
 
 /** 文件节点（树形结构） */
