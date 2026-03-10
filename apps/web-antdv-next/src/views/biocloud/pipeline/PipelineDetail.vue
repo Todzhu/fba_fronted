@@ -42,6 +42,7 @@ import {
 
 import { STEP_DESCRIPTIONS, STEP_LABELS } from './types/pipeline';
 import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
+import { TISSUE_MARKER_PRESETS } from './types/tissueMarkerPresets';
 import { STEP_HELP_CONTENT } from './types/stepHelpContent';
 
 const route = useRoute();
@@ -277,6 +278,11 @@ const ungroupedParams = computed(() => {
 const setParam = (key: string, value: unknown) => {
   if (!activeStep.value) return;
   activeStep.value.params[key] = value;
+  // 组织类型联动预填 Marker 基因
+  if (key === 'tissue_type' && typeof value === 'string') {
+    const preset = TISSUE_MARKER_PRESETS[value] || '';
+    if (preset) activeStep.value.params['marker_genes'] = preset;
+  }
 };
 
 // 步进调整数字参数
@@ -294,6 +300,38 @@ const adjustParam = (
   if (min !== undefined) next = Math.max(next, min);
   if (max !== undefined) next = Math.min(next, max);
   activeStep.value.params[key] = next;
+};
+
+// ===== 细胞注释映射表编辑 =====
+const editingAnnotation = ref<Record<string, string>>({});
+
+// 初始化注释映射表
+const initAnnotationEdit = () => {
+  if (!activeStep.value?.result?.stats?.annotation_dict) return;
+  editingAnnotation.value = { ...(activeStep.value.result.stats.annotation_dict as Record<string, string>) };
+};
+
+// 确认注释并重新出图
+const confirmAnnotation = async () => {
+  if (!pipeline.value || !activeStep.value) return;
+  // 将编辑后的映射写入 params.cell_type
+  activeStep.value.params['cell_type'] = { ...editingAnnotation.value };
+  running.value = true;
+  try {
+    await runStepApi(
+      pipeline.value.id,
+      activeStepIndex.value,
+      activeStep.value.params,
+    );
+    activeStep.value.result = undefined;
+    activeStep.value.status = 'running';
+    stepLogsMap.value[activeStepIndex.value] = [];
+    startLogPolling(activeStepIndex.value);
+    startPolling(activeStepIndex.value);
+  } catch (error) {
+    console.error('确认注释失败:', error);
+    running.value = false;
+  }
 };
 
 // 步骤是否可点击
@@ -1018,6 +1056,57 @@ onUnmounted(() => {
                       </div>
                     </div>
                   </div>
+
+                  <!-- 细胞注释映射表（仅 annotation 步骤显示） -->
+                  <div
+                    v-if="activeStep.stepType === 'annotation' && activeStep.result?.stats?.annotation_dict"
+                    class="mt-6"
+                  >
+                    <h4 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <Tag class="h-4 w-4 text-blue-500" />
+                      细胞类型注释
+                    </h4>
+                    <div class="overflow-hidden rounded-lg border border-slate-200">
+                      <table class="w-full text-sm">
+                        <thead>
+                          <tr class="bg-slate-50">
+                            <th class="px-4 py-2.5 text-left font-medium text-slate-600">Cluster</th>
+                            <th class="px-4 py-2.5 text-left font-medium text-slate-600">自动注释结果</th>
+                            <th class="px-4 py-2.5 text-left font-medium text-slate-600">修改为</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="(cellType, cluster) in (activeStep.result.stats.annotation_dict as Record<string, string>)"
+                            :key="cluster"
+                            class="border-t border-slate-100"
+                          >
+                            <td class="px-4 py-2 font-medium text-slate-800">{{ cluster }}</td>
+                            <td class="px-4 py-2 text-slate-600">{{ cellType }}</td>
+                            <td class="px-4 py-2">
+                              <input
+                                :value="editingAnnotation[cluster as string] || cellType"
+                                @input="(e: Event) => { editingAnnotation[cluster as string] = (e.target as HTMLInputElement).value }"
+                                type="text"
+                                class="h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              />
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        @click="() => { initAnnotationEdit(); confirmAnnotation(); }"
+                        class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+                        :disabled="running"
+                      >
+                        <Check class="h-4 w-4" />
+                        确认注释并重新出图
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
@@ -1100,6 +1189,14 @@ onUnmounted(() => {
                                 :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"
                               ></span>
                             </button>
+                            <input
+                              v-else-if="cfg.controlType === 'text'"
+                              :value="activeStep.params[cfg.key]"
+                              @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
+                              type="text"
+                              class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              placeholder="逗号分隔，如 CD3D,CD8A,MS4A1"
+                            />
                           </div>
                         </template>
                       </div>
@@ -1136,6 +1233,14 @@ onUnmounted(() => {
                             >
                               <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"></span>
                             </button>
+                            <input
+                              v-else-if="cfg.controlType === 'text'"
+                              :value="activeStep.params[cfg.key]"
+                              @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
+                              type="text"
+                              class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              placeholder="逗号分隔，如 CD3D,CD8A,MS4A1"
+                            />
                           </div>
                         </template>
                       </div>
@@ -1174,6 +1279,14 @@ onUnmounted(() => {
                           >
                             <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"></span>
                           </button>
+                          <input
+                            v-else-if="cfg.controlType === 'text'"
+                            :value="activeStep.params[cfg.key]"
+                            @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
+                            type="text"
+                            class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            placeholder="逗号分隔，如 CD3D,CD8A,MS4A1"
+                          />
                         </div>
                       </template>
                     </div>

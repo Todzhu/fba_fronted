@@ -5,7 +5,7 @@
 import type { StepType } from './pipeline';
 
 // 参数控件类型
-export type ParamControlType = 'number' | 'select' | 'switch';
+export type ParamControlType = 'number' | 'select' | 'switch' | 'text';
 
 // 下拉选项
 export interface SelectOption {
@@ -220,31 +220,51 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
   annotation: [
     {
       key: 'annotation_method',
-      label: '注释方法',
-      tooltip: '细胞类型注释的方法',
+      label: '注释方式',
+      tooltip: '选择细胞类型注释策略',
       controlType: 'select',
-      defaultValue: 'marker_genes',
+      defaultValue: 'panglaodb',
       options: [
-        { label: 'Marker 基因', value: 'marker_genes' },
-        { label: 'SingleR 自动注释', value: 'singler' },
-        { label: 'CellTypist', value: 'celltypist' },
+        { label: 'PanglaoDB 自动注释', value: 'panglaodb' },
+        { label: 'CellTypist 自动注释', value: 'celltypist' },
+        { label: '纯手动注释', value: 'manual' },
+      ],
+    },
+    {
+      key: 'organism',
+      label: '物种',
+      tooltip: '样本来源物种，影响基因名匹配和参考数据库',
+      controlType: 'select',
+      defaultValue: 'human',
+      options: [
+        { label: 'Human', value: 'human' },
+        { label: 'Mouse', value: 'mouse' },
+      ],
+    },
+    {
+      key: 'tissue_type',
+      label: '组织类型',
+      tooltip: '选择组织类型后会自动预填该组织的常用 Marker 基因',
+      controlType: 'select',
+      defaultValue: 'pbmc',
+      options: [
+        { label: 'PBMC（外周血）', value: 'pbmc' },
+        { label: '肺组织', value: 'lung' },
+        { label: '肝组织', value: 'liver' },
+        { label: '脑组织', value: 'brain' },
+        { label: '肿瘤组织', value: 'tumor' },
+        { label: '肠组织', value: 'gut' },
+        { label: '肾组织', value: 'kidney' },
+        { label: '皮肤组织', value: 'skin' },
+        { label: '其他', value: 'other' },
       ],
     },
     {
       key: 'marker_genes',
       label: 'Marker 基因',
-      tooltip: '用逗号分隔的 Marker 基因列表，用于辅助细胞类型判别',
-      controlType: 'select',
-      defaultValue: 'CD3D,CD4,CD8A,MS4A1,CD14,FCGR3A,NKG7,PPBP',
-      options: [], // 允许自由输入
-    },
-    {
-      key: 'show_gene_scores',
-      label: '显示基因评分',
-      tooltip: '是否在结果中显示各基因的评分热图',
-      controlType: 'switch',
-      defaultValue: true,
-      advanced: true,
+      tooltip: '用于辅助判断细胞类型的标志基因，逗号分隔。选择组织类型后自动预填',
+      controlType: 'text',
+      defaultValue: 'CD3D,CD3E,CD4,CD8A,CD8B,MS4A1,CD79A,CD14,LYZ,FCGR3A,NKG7,GNLY,PPBP,FCER1A',
     },
   ],
 
