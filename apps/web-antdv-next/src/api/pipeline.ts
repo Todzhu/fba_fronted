@@ -35,7 +35,7 @@ interface ApiPipeline {
   data_path: null | string;
   species: null | string;
   pipeline_type: string;
-  sample_dict: null | Record<string, string[]>;
+  sample_dict: any;
   current_step: number;
   status: string;
   steps: ApiPipelineStep[];
@@ -109,7 +109,7 @@ export interface CreatePipelineParams {
   dataPath?: string;
   species?: string;
   pipelineType?: string;
-  sampleDict?: Record<string, string[]>;
+  sampleDict?: Record<string, unknown>;
 }
 
 /**
@@ -185,7 +185,7 @@ export async function runStep(
  */
 export async function updateSampleDict(
   pipelineId: string,
-  sampleDict: Record<string, string[]>,
+  sampleDict: Record<string, unknown>,
 ): Promise<void> {
   await requestClient.put(`/api/v1/pipelines/${pipelineId}/sample-dict`, {
     sample_dict: sampleDict,

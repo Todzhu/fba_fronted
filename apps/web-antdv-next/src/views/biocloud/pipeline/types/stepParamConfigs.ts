@@ -55,7 +55,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       label: '最高基因数',
       tooltip: '表达基因数高于此值的细胞将被过滤（用于去除双细胞）',
       controlType: 'number',
-      defaultValue: 5000,
+      defaultValue: 6000,
       min: 500,
       max: 20_000,
       step: 100,
@@ -78,7 +78,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       label: '最小 log10GenesPerUMI',
       tooltip: '基因复杂度下限，低于此值的细胞可能是空液滴或低质量细胞',
       controlType: 'number',
-      defaultValue: 0.7,
+      defaultValue: 0.8,
       min: 0,
       max: 1,
       step: 0.01,
@@ -90,7 +90,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       tooltip:
         'Scrublet 模拟双细胞的期望比例。10x Genomics 平台通常为 0.5%~8%，取决于上样细胞数',
       controlType: 'number',
-      defaultValue: 6,
+      defaultValue: 5,
       min: 0.1,
       max: 30,
       step: 0.5,
@@ -216,7 +216,56 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
     },
   ],
 
-  // ========== 步骤6：细胞注释 ==========
+  // ========== 步骤4：特征基因 ==========
+  find_marker: [
+    {
+      key: 'marker_method',
+      label: '检测方法',
+      tooltip: '差异基因检测的统计方法',
+      controlType: 'select',
+      defaultValue: 'wilcoxon',
+      options: [
+        { label: 'Wilcoxon 秩和检验', value: 'wilcoxon' },
+        { label: 't 检验', value: 't-test' },
+      ],
+      group: 'Marker 基因',
+    },
+    {
+      key: 'logfc',
+      label: 'Log2FC 阈值',
+      tooltip: '差异基因 log fold change 过滤阈值，越大越严格',
+      controlType: 'number',
+      defaultValue: 1,
+      min: 0.1,
+      max: 5,
+      step: 0.1,
+      group: 'Marker 基因',
+    },
+    {
+      key: 'fdr',
+      label: 'FDR 阈值',
+      tooltip: '校正后 P 值阈值，低于此值的基因为显著差异基因',
+      controlType: 'number',
+      defaultValue: 0.05,
+      min: 0.001,
+      max: 0.1,
+      step: 0.005,
+      group: 'Marker 基因',
+    },
+    {
+      key: 'pct',
+      label: '表达比例阈值',
+      tooltip: '基因在目标 cluster 中的表达细胞比例需超过此值',
+      controlType: 'number',
+      defaultValue: 0.25,
+      min: 0,
+      max: 1,
+      step: 0.05,
+      group: 'Marker 基因',
+    },
+  ],
+
+  // ========== 步骤5：细胞注释 ==========
   annotation: [
     {
       key: 'annotation_method',

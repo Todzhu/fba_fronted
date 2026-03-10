@@ -162,6 +162,24 @@ function generateMockResult(
         completedAt: now,
       };
     }
+    case 'find_marker': {
+      return {
+        stats: {
+          n_clusters: 8,
+          marker_method: (params.marker_method as string) || 'wilcoxon',
+        },
+        charts: {},
+        completedAt: now,
+      };
+    }
+
+    case 'sub_annotation': {
+      return {
+        stats: {},
+        charts: {},
+        completedAt: now,
+      };
+    }
   }
 }
 
@@ -218,6 +236,17 @@ function seedMockData() {
         history: [],
       },
       {
+        stepType: 'find_marker',
+        status: 'pending',
+        params: {
+          marker_method: 'wilcoxon',
+          logfc: 1,
+          fdr: 0.05,
+          pct: 0.25,
+        },
+        history: [],
+      },
+      {
         stepType: 'annotation',
         status: 'pending',
         params: {
@@ -225,6 +254,12 @@ function seedMockData() {
           marker_genes: 'CD3D,CD4,CD8A,MS4A1,CD14,FCGR3A,NKG7,PPBP',
           show_gene_scores: true,
         },
+        history: [],
+      },
+      {
+        stepType: 'sub_annotation',
+        status: 'pending',
+        params: {},
         history: [],
       },
     ],

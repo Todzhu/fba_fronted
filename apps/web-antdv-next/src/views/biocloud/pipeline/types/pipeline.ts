@@ -1,6 +1,6 @@
 /**
  * 单细胞分析流程类型定义
- * 5 步分析流程：数据读取 → 质控过滤 → 降维聚类 → 细胞注释 → 亚群分析
+ * 6 步分析流程：数据读取 → 质控过滤 → 降维聚类 → 特征基因 → 细胞注释 → 亚群分析
  */
 
 // 步骤类型
@@ -8,6 +8,7 @@ export type StepType =
   | 'annotation' // 细胞注释
   | 'data_load' // 数据读取
   | 'dim_cluster' // 降维聚类（含预处理）
+  | 'find_marker' // 特征基因
   | 'qc_filter' // 质控过滤
   | 'sub_annotation'; // 亚群分析
 
@@ -39,7 +40,7 @@ export interface Pipeline {
   description?: string;
   dataPath?: string; // 创建时选择的数据文件夹路径
   species?: string; // 样本物种
-  sampleDict?: Record<string, string[]>; // 样本分组映射
+  sampleDict?: Record<string, { folder: string; name: string }[]>; // 样本分组映射
   currentStep: number;
   steps: StepConfig[];
   createdAt: string;
@@ -51,6 +52,7 @@ export const STEP_ORDER: StepType[] = [
   'data_load',
   'qc_filter',
   'dim_cluster',
+  'find_marker',
   'annotation',
   'sub_annotation',
 ];
@@ -60,6 +62,7 @@ export const STEP_LABELS: Record<string, string> = {
   data_load: '数据读取',
   qc_filter: '质控过滤',
   dim_cluster: '降维聚类',
+  find_marker: '特征基因',
   annotation: '细胞注释',
   sub_annotation: '亚群分析',
 };
@@ -69,6 +72,7 @@ export const STEP_DESCRIPTIONS: Record<string, string> = {
   data_load: '导入原始数据文件或选择示例数据集',
   qc_filter: '过滤低质量细胞和基因',
   dim_cluster: '归一化、降维可视化与无监督聚类',
+  find_marker: '差异基因分析，找到各 Cluster 特征基因',
   annotation: '根据 Marker 基因进行细胞类型注释',
   sub_annotation: '选定亚群重新降维聚类与亚型注释',
 };
@@ -78,6 +82,7 @@ export const STEP_ICONS: Record<string, string> = {
   data_load: 'database',
   qc_filter: 'filter',
   dim_cluster: 'scatter-chart',
+  find_marker: 'dna',
   annotation: 'tag',
   sub_annotation: 'zoom-in',
 };

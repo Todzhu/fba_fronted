@@ -98,8 +98,33 @@ export const STEP_HELP_CONTENT: Record<StepType, StepHelp> = {
         </div>`,
             },
             {
-                title: '� 结果怎么看',
-                content: '① 高变基因图 — 确认筛选的基因分布合理<br>② PCA 方差比图 — 肘部拐点指示合适的主成分数<br>③ UMAP 图（按样本/分组着色）— 批次校正效果<br>④ UMAP 图（按聚类着色）— 细胞群分离是否清晰<br>⑤ Marker 基因热图/气泡图 — 每个 cluster 的特异性基因',
+                title: '📈 结果怎么看',
+                content: '① 高变基因图 — 确认筛选的基因分布合理<br>② PCA 方差比图 — 肘部拐点指示合适的主成分数<br>③ UMAP 图（按样本/分组着色）— 批次校正效果<br>④ UMAP 图（按聚类着色）— 细胞群分离是否清晰<br>⑤ Cluster 细胞比例柱状图 — 各 cluster 在不同样本中的分布',
+            },
+        ],
+    },
+
+    find_marker: {
+        summary: '对聚类后的数据进行差异基因分析，找到各 Cluster 的标记基因（Marker genes）。',
+        sections: [
+            {
+                title: '🎯 这一步做什么',
+                content: '使用统计检验方法（Wilcoxon 或 t-test）比较每个 cluster 与其他所有 cluster 的基因表达差异，找出各 cluster 特异性高表达的基因（Marker 基因）。',
+            },
+            {
+                title: '🔧 参数说明',
+                content: `<div class="space-y-3">
+          <ul class="ml-4 space-y-1.5 text-slate-600">
+            <li><b>检测方法</b> — Wilcoxon 秩和检验（推荐，非参数方法）或 t 检验</li>
+            <li><b>Log2FC 阈值</b> — 差异倍数过滤，通常 ≥ 1（即 2 倍差异）</li>
+            <li><b>FDR 阈值</b> — 校正后 P 值，通常 < 0.05</li>
+            <li><b>表达比例阈值</b> — 基因在目标 cluster 中表达的细胞比例，通常 ≥ 0.25</li>
+          </ul>
+        </div>`,
+            },
+            {
+                title: '📈 结果怎么看',
+                content: '① Marker 基因排名图 — 各 cluster Top25 差异基因<br>② DotPlot — 每个 cluster Top3 基因的表达量和百分比<br>③ Heatmap — 每个 cluster Top10 基因的表达热图<br>④ 差异基因表 — 用于后续细胞注释',
             },
         ],
     },

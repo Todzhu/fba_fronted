@@ -44,6 +44,7 @@ import { STEP_DESCRIPTIONS, STEP_LABELS } from './types/pipeline';
 import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
 import { TISSUE_MARKER_PRESETS } from './types/tissueMarkerPresets';
 import { STEP_HELP_CONTENT } from './types/stepHelpContent';
+import { getCellTypesForTissue } from './types/cellTypeMarkers';
 
 const route = useRoute();
 const router = useRouter();
@@ -67,6 +68,7 @@ const stepIcons: Record<string, typeof Database> = {
   data_load: Database,
   qc_filter: Filter,
   dim_cluster: ScatterChart,
+  find_marker: Dna,
   annotation: Tag,
   sub_annotation: ZoomIn,
 };
@@ -94,15 +96,15 @@ const loadSamplesFromPipeline = async () => {
     const folderNames = samples.map((s) => s.folderName);
 
     // 如果 pipeline 已有保存的 sampleDict，用它来恢复用户修改
+    // sampleDict 格式: {"P1": [{"folder": "C1", "name": "Control1"}], "P2": [...]}
     const savedDict = pipeline.value.sampleDict;
     if (savedDict && Object.keys(savedDict).length > 0) {
-      // 从 sampleDict 反向构建 sampleRows
-      // sampleDict 格式: {"NC": ["NC1", "NC2"], "T": ["T1", "T2"]}
       const rows: SampleRow[] = [];
-      for (const [group, sampleNames] of Object.entries(savedDict)) {
-        for (const name of sampleNames as string[]) {
-          // 查找对应的文件夹名（sample 列）
-          const folder = folderNames.find((f) => f === name) || name;
+      for (const [group, items] of Object.entries(savedDict)) {
+        for (const item of items as any[]) {
+          // 兼容新格式 {folder, name} 和旧格式 string
+          const folder = typeof item === 'string' ? item : item.folder;
+          const name = typeof item === 'string' ? item : item.name;
           rows.push({
             sample: folder,
             sampleName: name,
@@ -131,12 +133,16 @@ const loadSamplesFromPipeline = async () => {
 };
 
 // 从 sampleRows 构建 sample_dict 格式
-const buildSampleDict = (): Record<string, string[]> => {
-  const dict: Record<string, string[]> = {};
+// 格式: {"P1": [{"folder": "C1", "name": "Control1"}], "P2": [{"folder": "C2", "name": "Case1"}]}
+const buildSampleDict = (): Record<string, { folder: string; name: string }[]> => {
+  const dict: Record<string, { folder: string; name: string }[]> = {};
   for (const row of sampleRows.value) {
-    const group = row.group || 'default';
+    const group = row.group || row.sample;
     if (!dict[group]) dict[group] = [];
-    dict[group].push(row.sampleName || row.sample);
+    dict[group].push({
+      folder: row.sample,
+      name: row.sampleName || row.sample,
+    });
   }
   return dict;
 };
@@ -230,6 +236,17 @@ const isDataLoadStep = computed(() => {
   return activeStep.value?.stepType === 'data_load';
 });
 
+// 是否是注释步骤
+const isAnnotationStep = computed(() => {
+  return activeStep.value?.stepType === 'annotation';
+});
+
+// 降维聚类步骤（注释步骤需要引用其UMAP图）
+const dimReduceStep = computed(() => {
+  if (!pipeline.value) return null;
+  return pipeline.value.steps.find(s => s.stepType === 'dim_cluster') ?? null;
+});
+
 // ========== 参数表单逻辑 ==========
 
 // 当前步骤的参数配置列表
@@ -238,20 +255,7 @@ const currentStepParamConfigs = computed<ParamFieldConfig[]>(() => {
   return STEP_PARAM_CONFIGS[activeStep.value.stepType] || [];
 });
 
-// 从数据读取步骤获取 QC 推荐阈值
-const qcSuggestions = computed<Record<string, unknown> | null>(() => {
-  if (!pipeline.value) return null;
-  const dataLoadStep = pipeline.value.steps[0];
-  if (!dataLoadStep?.result?.stats) return null;
-  const suggestions = (dataLoadStep.result.stats as Record<string, unknown>)['qc_suggestions'];
-  return (suggestions as Record<string, unknown>) || null;
-});
 
-// 格式化推荐值：数组显示为区间，单值直接显示
-const formatSuggestion = (val: unknown): string => {
-  if (Array.isArray(val)) return `${val[0]}~${val[1]}`;
-  return String(val);
-};
 
 // 当前步骤参数的分组列表（去重，保留顺序）
 const paramGroups = computed<string[]>(() => {
@@ -303,7 +307,51 @@ const adjustParam = (
 };
 
 // ===== 细胞注释映射表编辑 =====
+// 分析结果 Tab（图表 / 数据表）
+const activeResultTab = ref<'charts' | 'tables'>('charts');
+// 辅助图折叠状态
+const showAuxCharts = ref(false);
+
 const editingAnnotation = ref<Record<string, string>>({});
+const annotationSearchQuery = ref<Record<string, string>>({}); // 每个cluster的搜索关键词
+const annotationDropdownOpen = ref<Record<string, boolean>>({}); // 每个cluster的下拉是否打开
+
+// 当前组织的候选细胞类型（从知识库获取）
+const candidateCellTypes = computed(() => {
+  if (!activeStep.value) return [];
+  const organism = activeStep.value.params['organism'] as string || 'human';
+  const tissueType = activeStep.value.params['tissue_type'] as string || 'pbmc';
+  // 将参数值映射到知识库的 key
+  const speciesMap: Record<string, 'Human' | 'Mouse'> = { human: 'Human', mouse: 'Mouse' };
+  const tissueMap: Record<string, string> = {
+    pbmc: 'Immune', lung: 'Lung', liver: 'Liver', brain: 'Brain',
+    tumor: 'Immune', gut: 'GI_tract', kidney: 'Kidney', skin: 'Skin', other: 'Immune',
+  };
+  const sp = speciesMap[organism] || 'Human';
+  const ts = tissueMap[tissueType] || 'Immune';
+  return getCellTypesForTissue(sp, ts);
+});
+
+// 过滤后的候选细胞类型（根据cluster的搜索关键词）
+const getFilteredCandidates = (cluster: string) => {
+  const query = (annotationSearchQuery.value[cluster] || '').toLowerCase();
+  if (!query) return candidateCellTypes.value;
+  return candidateCellTypes.value.filter(
+    (ct: { cellType: string; positive: string[] }) => ct.cellType.toLowerCase().includes(query)
+  );
+};
+
+// 选择候选细胞类型
+const selectCellType = (cluster: string, cellType: string) => {
+  editingAnnotation.value[cluster] = cellType;
+  annotationDropdownOpen.value[cluster] = false;
+  annotationSearchQuery.value[cluster] = '';
+};
+
+// blur时延迟关闭下拉（让mousedown事件先执行）
+const closeDropdownLater = (cluster: string) => {
+  globalThis.setTimeout(() => { annotationDropdownOpen.value[cluster] = false }, 200);
+};
 
 // 初始化注释映射表
 const initAnnotationEdit = () => {
@@ -576,8 +624,9 @@ const STEP_OUTPUT_DIRS: Record<string, string> = {
   data_load: 'step_0_data_load',
   qc_filter: 'step_1_qc_filter',
   dim_cluster: 'step_2_dim_cluster',
-  annotation: 'step_3_annotation',
-  sub_annotation: 'step_4_sub_annotation',
+  find_marker: 'step_3_find_marker',
+  annotation: 'step_4_annotation',
+  sub_annotation: 'step_5_sub_annotation',
 };
 
 // 构建图表/表格的完整访问 URL
@@ -591,6 +640,18 @@ const getChartUrl = (relPath: string): string => {
     STEP_OUTPUT_DIRS[activeStep.value.stepType] ||
     `step_${activeStepIndex.value}`;
   // 将 Windows 反斜杠替换为正斜杠
+  const normalizedPath = relPath.replaceAll('\\\\', '/').replaceAll('\\', '/');
+  // 加时间戳防止浏览器缓存旧图
+  return `/static/pipelines/${userId}/pipelines/${pipelineId}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
+};
+
+// 构建指定步骤类型的图表 URL（用于跨步骤引用图表，如注释步骤引用降维图）
+const getStepChartUrl = (relPath: string, stepType: string): string => {
+  if (!pipeline.value) return relPath;
+  if (relPath.startsWith('http') || relPath.startsWith('/')) return relPath;
+  const userId = pipeline.value.userId;
+  const pipelineId = pipeline.value.id;
+  const stepDir = STEP_OUTPUT_DIRS[stepType] || stepType;
   const normalizedPath = relPath.replaceAll('\\\\', '/').replaceAll('\\', '/');
   return `/static/pipelines/${userId}/pipelines/${pipelineId}/${stepDir}/${normalizedPath}`;
 };
@@ -622,26 +683,7 @@ watch(
       }
     }
 
-    // 切换到 qc_filter 步骤时，自动填充 MAD 推荐值
-    if (
-      pipeline.value?.steps[idx]?.stepType === 'qc_filter' &&
-      qcSuggestions.value
-    ) {
-      const step = pipeline.value.steps[idx];
-      const suggestions = qcSuggestions.value;
-      const configs = STEP_PARAM_CONFIGS['qc_filter'];
-      for (const cfg of configs) {
-        const suggestedVal = suggestions[cfg.key];
-        if (
-          suggestedVal !== undefined &&
-          (step.params[cfg.key] === undefined ||
-            step.params[cfg.key] === cfg.defaultValue)
-        ) {
-          // 区间取宽松值（5×MAD，数组第 2 项）
-          step.params[cfg.key] = Array.isArray(suggestedVal) ? suggestedVal[1] : suggestedVal;
-        }
-      }
-    }
+
     if (
       pipeline.value?.steps[idx]?.stepType === 'data_load' &&
       sampleRows.value.length === 0
@@ -998,36 +1040,34 @@ onUnmounted(() => {
                 v-if="activeStep.result"
                 class="overflow-hidden rounded-xl border border-slate-200 bg-white"
               >
-                <div class="border-b border-slate-100 px-8 py-5">
+                <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
                   <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
                     <ScatterChart class="h-5 w-5 text-emerald-500" />
                     运行结果
                   </h3>
-                </div>
-
-                <div class="px-8 py-5">
+                  <!-- 统计指标（标题栏右侧） -->
                   <div
                     v-if="
                       activeStep.result.stats &&
-                      Object.keys(getSimpleStats(activeStep.result.stats))
-                        .length > 0
+                      Object.keys(getSimpleStats(activeStep.result.stats)).length > 0
                     "
-                    class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4"
+                    class="flex flex-wrap items-center gap-x-4 gap-y-1"
                   >
-                    <div
+                    <template
                       v-for="(item, sIdx) in getSortedStats(activeStep.result.stats)"
                       :key="item.key"
-                      class="rounded-lg border border-slate-200 bg-white px-5 py-4"
-                      :style="{ borderLeftWidth: '3px', borderLeftColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"
                     >
-                      <div class="text-xs font-semibold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">
-                        {{ STAT_LABELS[item.key] || item.key }}
-                      </div>
-                      <div class="mt-2 text-2xl font-black text-slate-900">
-                        {{ formatStatValue(item.value) }}
-                      </div>
-                    </div>
+                      <span class="inline-flex items-center gap-1.5 text-sm">
+                        <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"></span>
+                        <span class="text-slate-400">{{ STAT_LABELS[item.key] || item.key }}</span>
+                        <span class="font-bold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">{{ formatStatValue(item.value) }}</span>
+                      </span>
+                      <span v-if="sIdx < getSortedStats(activeStep.result.stats).length - 1" class="text-slate-200">|</span>
+                    </template>
                   </div>
+                </div>
+
+                <div class="px-8 py-5">
 
                   <!-- 图表展示 -->
                   <div
@@ -1037,9 +1077,9 @@ onUnmounted(() => {
                     "
                   >
                     <div
-                      v-for="(chartUrl, idx) in activeStep.result.charts"
+                      v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.endsWith('orig_violin.png'))"
                       :key="idx"
-                      class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                      class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
                       @click="openLightbox(getChartUrl(chartUrl))"
                     >
                       <img
@@ -1055,6 +1095,10 @@ onUnmounted(() => {
                         </div>
                       </div>
                     </div>
+                    <!-- 图注 -->
+                    <p class="mt-2 mb-4 text-center text-sm font-medium text-slate-800">
+                      图. 各样本质控指标分布（基因数、UMI 总数、线粒体比例、基因复杂度）
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1062,6 +1106,71 @@ onUnmounted(() => {
 
             <!-- ========== 通用步骤UI：参数 + 结果独立卡片 ========== -->
             <template v-else>
+
+              <!-- ===== 🔬 注释步骤专属：UMAP 参考图 + Cluster 概览 ===== -->
+              <div
+                v-if="isAnnotationStep && dimReduceStep?.result"
+                class="!-mt-px overflow-hidden rounded-none border border-b-0 border-slate-200 bg-white"
+              >
+                <!-- 标题栏 -->
+                <div class="flex items-center gap-2 border-b border-slate-100 px-8 py-4">
+                  <ScatterChart class="h-5 w-5 text-blue-500" />
+                  <h3 class="text-base font-bold text-slate-800">聚类参考</h3>
+                  <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+                    来自降维聚类结果
+                  </span>
+                </div>
+
+                <div class="px-8 py-5">
+                  <!-- 统计指标卡片 -->
+                  <div
+                    v-if="dimReduceStep.result.stats"
+                    class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4"
+                  >
+                    <div
+                      v-for="(item, sIdx) in getSortedStats(dimReduceStep.result.stats as Record<string, unknown>)"
+                      :key="item.key"
+                      class="rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-3"
+                    >
+                      <div class="text-xs font-medium text-slate-500">{{ STAT_LABELS[item.key] || item.key }}</div>
+                      <div class="mt-1 text-lg font-bold text-slate-800">{{ formatStatValue(item.value) }}</div>
+                    </div>
+                  </div>
+
+                  <!-- UMAP 图表（后端 PNG） -->
+                  <div
+                    v-if="dimReduceStep.result.charts && dimReduceStep.result.charts.length > 0"
+                    class="grid grid-cols-1 gap-3 lg:grid-cols-2"
+                  >
+                    <div
+                      v-for="(chartUrl, idx) in (dimReduceStep.result.charts as string[]).slice(0, 4)"
+                      :key="idx"
+                      class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                      @click="openLightbox(getStepChartUrl(chartUrl, 'dim_cluster'))"
+                    >
+                      <img
+                        :src="getStepChartUrl(chartUrl, 'dim_cluster')"
+                        :alt="`UMAP ${idx + 1}`"
+                        class="w-full rounded-lg"
+                        loading="lazy"
+                      />
+                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                          <ZoomIn class="h-3.5 w-3.5" />
+                          点击放大
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 无图表时的提示 -->
+                  <div v-else class="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                    <ScatterChart class="h-4 w-4" />
+                    降维聚类步骤尚未生成图表，请先完成降维聚类步骤
+                  </div>
+                </div>
+              </div>
+
               <!-- ===== 参数配置卡片 ===== -->
               <div class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white px-8 py-6">
                 <div v-if="currentStepParamConfigs.length > 0">
@@ -1090,14 +1199,6 @@ onUnmounted(() => {
                                   </div>
                                 </div>
                               </div>
-                              <!-- MAD 推荐值标签 -->
-                              <span
-                                v-if="qcSuggestions && qcSuggestions[cfg.key] !== undefined"
-                                class="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-500"
-                                :title="String(qcSuggestions['_method'] || '3~5×MAD')"
-                              >
-                                推荐 {{ formatSuggestion(qcSuggestions[cfg.key]) }}
-                              </span>
                             </div>
                             <!-- 输入控件 -->
                             <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
@@ -1260,76 +1361,248 @@ onUnmounted(() => {
 
               <!-- ===== 分析结果卡片 ===== -->
               <div v-if="activeStep.result" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <div class="border-b border-slate-100 px-8 py-5">
+                <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
                 <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
                   <ScatterChart class="h-5 w-5 text-emerald-500" />
                   分析结果
                 </h3>
-                </div>
-                <div class="p-8">
-                <!-- 统计指标 -->
+                <!-- 统计指标（标题栏右侧） -->
                 <div
                   v-if="
                     activeStep.result.stats &&
-                    Object.keys(getSimpleStats(activeStep.result.stats))
-                      .length > 0
+                    Object.keys(getSimpleStats(activeStep.result.stats)).length > 0
                   "
-                  class="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4"
+                  class="flex flex-wrap items-center gap-x-4 gap-y-1"
                 >
-                  <div
+                  <template
                     v-for="(item, sIdx) in getSortedStats(activeStep.result.stats)"
                     :key="item.key"
-                    class="rounded-lg border border-slate-200 bg-white px-5 py-4"
-                    :style="{ borderLeftWidth: '3px', borderLeftColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"
                   >
-                    <div class="text-xs font-semibold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">
-                      {{ STAT_LABELS[item.key] || item.key }}
-                    </div>
-                    <div class="mt-2 text-2xl font-black text-slate-900">
-                      {{ formatStatValue(item.value) }}
-                    </div>
-                  </div>
+                    <span class="inline-flex items-center gap-1.5 text-sm">
+                      <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"></span>
+                      <span class="text-slate-400">{{ STAT_LABELS[item.key] || item.key }}</span>
+                      <span class="font-bold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">{{ formatStatValue(item.value) }}</span>
+                    </span>
+                    <span v-if="sIdx < getSortedStats(activeStep.result.stats).length - 1" class="text-slate-200">|</span>
+                  </template>
+                </div>
+                </div>
+                <div class="px-8 pt-4 pb-6">
+
+                <!-- Tab 切换栏 -->
+                <div
+                  v-if="(activeStep.result.charts && activeStep.result.charts.length > 0) || (activeStep.result.tables && activeStep.result.tables.length > 0)"
+                  class="mb-3 flex gap-1 rounded-lg bg-slate-100 p-1"
+                >
+                  <button
+                    type="button"
+                    class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
+                    :class="activeResultTab === 'charts' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    @click="activeResultTab = 'charts'"
+                  >
+                    <ScatterChart class="h-4 w-4" />
+                    图表
+                  </button>
+                  <button
+                    type="button"
+                    class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
+                    :class="activeResultTab === 'tables' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    @click="activeResultTab = 'tables'"
+                  >
+                    <FileText class="h-4 w-4" />
+                    数据表
+                  </button>
                 </div>
 
-                <!-- 图表展示 -->
+                <!-- 图表展示 Tab -->
                 <div
-                  v-if="
-                    activeStep.result.charts &&
-                    activeStep.result.charts.length > 0
-                  "
+                  v-if="activeResultTab === 'charts' && activeStep.result.charts && activeStep.result.charts.length > 0"
                 >
-                  <div
-                    v-for="(chartUrl, idx) in activeStep.result.charts"
-                    :key="idx"
-                    class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                    @click="openLightbox(getChartUrl(chartUrl))"
-                  >
-                    <img
-                      :src="getChartUrl(chartUrl)"
-                      :alt="`分析图表 ${idx + 1}`"
-                      class="w-full rounded-lg"
-                      loading="lazy"
-                    />
-                    <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                      <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                        <ZoomIn class="h-3.5 w-3.5" />
-                        点击放大
+                  <template v-if="activeStep.stepType === 'qc_filter'">
+                    <!-- 质控过滤：只展示 filtered_violin 和 scrublet -->
+                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.endsWith('filtered_violin.png') || u.includes('scrublet'))" :key="idx">
+                      <div
+                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                        @click="openLightbox(getChartUrl(chartUrl))"
+                      >
+                        <img :src="getChartUrl(chartUrl)" :alt="`分析图表 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
+                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                            <ZoomIn class="h-3.5 w-3.5" />
+                            点击放大
+                          </div>
+                        </div>
+                      </div>
+                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">
+                        {{ chartUrl.includes('filtered_violin') ? '图. 过滤后各样本质控指标分布（基因数、UMI 总数、线粒体比例、基因复杂度）' : '图. Scrublet 双细胞检测得分分布' }}
+                      </p>
+                    </template>
+                  </template>
+                  <template v-else-if="activeStep.stepType === 'dim_cluster'">
+                    <!-- 降维聚类：UMAP 并排 + barplot + 辅助图折叠 -->
+
+                    <!-- 核心图：2 张 UMAP 并排 -->
+                    <div class="mb-4 grid grid-cols-2 gap-3">
+                      <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('umap_sample') || u.includes('umap_cluster'))" :key="idx">
+                        <div>
+                          <div
+                            class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                            @click="openLightbox(getChartUrl(chartUrl))"
+                          >
+                            <img :src="getChartUrl(chartUrl)" :alt="chartUrl.includes('sample') ? 'Sample UMAP' : 'Cluster UMAP'" class="w-full rounded-lg" loading="lazy" />
+                            <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                              <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                                <ZoomIn class="h-3.5 w-3.5" />
+                                点击放大
+                              </div>
+                            </div>
+                          </div>
+                          <p class="mt-1 text-center text-sm font-medium text-slate-800">
+                            {{ chartUrl.includes('sample') ? '图. Sample UMAP' : '图. Cluster UMAP' }}
+                          </p>
+                        </div>
+                      </template>
+                    </div>
+
+                    <!-- 核心图：barplot 全宽 -->
+                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('cluster_proportion_barplot'))" :key="'bar'+idx">
+                      <div
+                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                        @click="openLightbox(getChartUrl(chartUrl))"
+                      >
+                        <img :src="getChartUrl(chartUrl)" alt="Cluster Proportion" class="w-full rounded-lg" loading="lazy" />
+                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                            <ZoomIn class="h-3.5 w-3.5" />
+                            点击放大
+                          </div>
+                        </div>
+                      </div>
+                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">图. 各样本 Cluster 细胞比例</p>
+                    </template>
+
+                    <!-- 辅助图折叠区 -->
+                    <div
+                      v-if="activeStep.result.charts.filter((u: string) => !u.includes('umap_sample') && !u.includes('umap_cluster') && !u.includes('cluster_proportion_barplot')).length > 0"
+                    >
+                      <button
+                        type="button"
+                        class="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
+                        @click="showAuxCharts = !showAuxCharts"
+                      >
+                        <ChevronRight class="h-4 w-4 transition-transform" :class="showAuxCharts ? 'rotate-90' : ''" />
+                        {{ showAuxCharts ? '收起辅助图' : '查看辅助图（高变基因、PCA 方差比等）' }}
+                      </button>
+                      <div v-show="showAuxCharts" class="grid grid-cols-2 gap-3">
+                        <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => !u.includes('umap_sample') && !u.includes('umap_cluster') && !u.includes('cluster_proportion_barplot'))" :key="'aux'+idx">
+                          <div
+                            class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                            @click="openLightbox(getChartUrl(chartUrl))"
+                          >
+                            <img :src="getChartUrl(chartUrl)" :alt="`辅助图 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
+                            <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                              <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                                <ZoomIn class="h-3.5 w-3.5" />
+                                点击放大
+                              </div>
+                            </div>
+                          </div>
+                        </template>
                       </div>
                     </div>
-                  </div>
+                  </template>
+
+                  <template v-else-if="activeStep.stepType === 'find_marker'">
+                    <!-- 特征基因：dotplot + heatmap 核心展示，rank_genes_groups 折叠 -->
+
+                    <!-- 核心图：dotplot -->
+                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('dotplot'))" :key="'dot'+idx">
+                      <div
+                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                        @click="openLightbox(getChartUrl(chartUrl))"
+                      >
+                        <img :src="getChartUrl(chartUrl)" alt="DotPlot" class="w-full rounded-lg" loading="lazy" />
+                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                            <ZoomIn class="h-3.5 w-3.5" />
+                            点击放大
+                          </div>
+                        </div>
+                      </div>
+                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">图. 各 Cluster Top3 Marker 基因气泡图</p>
+                    </template>
+
+                    <!-- 核心图：heatmap -->
+                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('heatmap'))" :key="'hm'+idx">
+                      <div
+                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                        @click="openLightbox(getChartUrl(chartUrl))"
+                      >
+                        <img :src="getChartUrl(chartUrl)" alt="Heatmap" class="w-full rounded-lg" loading="lazy" />
+                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                            <ZoomIn class="h-3.5 w-3.5" />
+                            点击放大
+                          </div>
+                        </div>
+                      </div>
+                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">图. 各 Cluster Top10 Marker 基因热图</p>
+                    </template>
+
+                    <!-- 辅助图折叠区 -->
+                    <div
+                      v-if="activeStep.result.charts.filter((u: string) => !u.includes('dotplot') && !u.includes('heatmap')).length > 0"
+                    >
+                      <button
+                        type="button"
+                        class="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
+                        @click="showAuxCharts = !showAuxCharts"
+                      >
+                        <ChevronRight class="h-4 w-4 transition-transform" :class="showAuxCharts ? 'rotate-90' : ''" />
+                        {{ showAuxCharts ? '收起辅助图' : '查看辅助图（Marker 基因排名等）' }}
+                      </button>
+                      <div v-show="showAuxCharts">
+                        <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => !u.includes('dotplot') && !u.includes('heatmap'))" :key="'aux'+idx">
+                          <div
+                            class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                            @click="openLightbox(getChartUrl(chartUrl))"
+                          >
+                            <img :src="getChartUrl(chartUrl)" :alt="`辅助图 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
+                            <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                              <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                                <ZoomIn class="h-3.5 w-3.5" />
+                                点击放大
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+
+                  <template v-else>
+                    <!-- 其他步骤：展示全部图表 -->
+                    <div
+                      v-for="(chartUrl, idx) in activeStep.result.charts"
+                      :key="idx"
+                      class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                      @click="openLightbox(getChartUrl(chartUrl))"
+                    >
+                      <img :src="getChartUrl(chartUrl)" :alt="`分析图表 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
+                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                          <ZoomIn class="h-3.5 w-3.5" />
+                          点击放大
+                        </div>
+                      </div>
+                    </div>
+                  </template>
                 </div>
 
-                <!-- 表格下载 -->
+                <!-- 数据表 Tab -->
                 <div
-                  v-if="
-                    activeStep.result.tables &&
-                    activeStep.result.tables.length > 0
-                  "
-                  class="mt-4"
+                  v-if="activeResultTab === 'tables' && activeStep.result.tables && activeStep.result.tables.length > 0"
                 >
-                  <h4 class="mb-3 text-sm font-bold text-slate-700">
-                    数据表格
-                  </h4>
                   <div class="space-y-2">
                     <a
                       v-for="(tableUrl, idx) in activeStep.result.tables"
@@ -1349,40 +1622,77 @@ onUnmounted(() => {
                   v-if="activeStep.stepType === 'annotation' && activeStep.result?.stats?.annotation_dict"
                   class="mt-6"
                 >
-                  <h4 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
-                    <Tag class="h-4 w-4 text-blue-500" />
-                    细胞类型注释
-                  </h4>
+                  <div class="mb-4 flex items-center justify-between">
+                    <h4 class="flex items-center gap-2 text-sm font-bold text-slate-700">
+                      <Tag class="h-4 w-4 text-blue-500" />
+                      细胞类型注释
+                    </h4>
+                    <span class="text-xs text-slate-400">
+                      已注释 {{ Object.keys(editingAnnotation).length }} 个 Cluster
+                    </span>
+                  </div>
+
                   <div class="overflow-hidden rounded-lg border border-slate-200">
                     <table class="w-full text-sm">
                       <thead>
                         <tr class="bg-slate-50">
-                          <th class="px-4 py-2.5 text-left font-medium text-slate-600">Cluster</th>
-                          <th class="px-4 py-2.5 text-left font-medium text-slate-600">自动注释结果</th>
-                          <th class="px-4 py-2.5 text-left font-medium text-slate-600">修改为</th>
+                          <th class="w-24 px-4 py-2.5 text-left font-semibold text-slate-600">Cluster</th>
+                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">自动注释结果</th>
+                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">修改为（输入或从知识库选择）</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr
                           v-for="(cellType, cluster) in (activeStep.result.stats.annotation_dict as Record<string, string>)"
                           :key="cluster"
-                          class="border-t border-slate-100"
+                          class="border-t border-slate-100 transition-colors hover:bg-slate-50/50"
                         >
-                          <td class="px-4 py-2 font-medium text-slate-800">{{ cluster }}</td>
-                          <td class="px-4 py-2 text-slate-600">{{ cellType }}</td>
-                          <td class="px-4 py-2">
-                            <input
-                              :value="editingAnnotation[cluster as string] || cellType"
-                              @input="(e: Event) => { editingAnnotation[cluster as string] = (e.target as HTMLInputElement).value }"
-                              type="text"
-                              class="h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                            />
+                          <td class="px-4 py-2.5">
+                            <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">
+                              {{ cluster }}
+                            </span>
+                          </td>
+                          <td class="px-4 py-2.5 text-slate-500">{{ cellType }}</td>
+                          <td class="relative px-4 py-2">
+                            <div class="relative">
+                              <input
+                                :value="editingAnnotation[cluster as string] || cellType"
+                                @input="(e: Event) => { editingAnnotation[cluster as string] = (e.target as HTMLInputElement).value; annotationSearchQuery[cluster as string] = (e.target as HTMLInputElement).value; annotationDropdownOpen[cluster as string] = true; }"
+                                @focus="annotationDropdownOpen[cluster as string] = true"
+                                @blur="closeDropdownLater(cluster as string)"
+                                type="text"
+                                class="h-8 w-full rounded-md border border-slate-200 bg-white px-3 pr-8 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
+                                placeholder="输入细胞类型..."
+                              />
+                              <ChevronRight
+                                class="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 rotate-90 text-slate-300"
+                              />
+                              <!-- Autocomplete 下拉 -->
+                              <div
+                                v-if="annotationDropdownOpen[cluster as string] && getFilteredCandidates(cluster as string).length > 0"
+                                class="absolute left-0 top-full z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                              >
+                                <button
+                                  v-for="ct in getFilteredCandidates(cluster as string)"
+                                  :key="ct.cellType"
+                                  type="button"
+                                  class="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-blue-50"
+                                  @mousedown.prevent="selectCellType(cluster as string, ct.cellType)"
+                                >
+                                  <span class="whitespace-nowrap text-sm font-medium text-slate-800">{{ ct.cellType }}</span>
+                                  <span class="truncate text-xs text-slate-400">{{ ct.positive.slice(0, 4).join(', ') }}</span>
+                                </button>
+                              </div>
+                            </div>
                           </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
-                  <div class="mt-4 flex justify-end">
+                  <div class="mt-4 flex items-center justify-between">
+                    <p class="text-xs text-slate-400">
+                      💡 输入时会自动显示 {{ activeStep.params['organism'] === 'mouse' ? 'Mouse' : 'Human' }} 组织知识库中的候选细胞类型
+                    </p>
                     <button
                       type="button"
                       @click="() => { initAnnotationEdit(); confirmAnnotation(); }"
