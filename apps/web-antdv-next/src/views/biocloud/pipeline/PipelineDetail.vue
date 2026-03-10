@@ -1056,57 +1056,6 @@ onUnmounted(() => {
                       </div>
                     </div>
                   </div>
-
-                  <!-- 细胞注释映射表（仅 annotation 步骤显示） -->
-                  <div
-                    v-if="activeStep.stepType === 'annotation' && activeStep.result?.stats?.annotation_dict"
-                    class="mt-6"
-                  >
-                    <h4 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
-                      <Tag class="h-4 w-4 text-blue-500" />
-                      细胞类型注释
-                    </h4>
-                    <div class="overflow-hidden rounded-lg border border-slate-200">
-                      <table class="w-full text-sm">
-                        <thead>
-                          <tr class="bg-slate-50">
-                            <th class="px-4 py-2.5 text-left font-medium text-slate-600">Cluster</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-slate-600">自动注释结果</th>
-                            <th class="px-4 py-2.5 text-left font-medium text-slate-600">修改为</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr
-                            v-for="(cellType, cluster) in (activeStep.result.stats.annotation_dict as Record<string, string>)"
-                            :key="cluster"
-                            class="border-t border-slate-100"
-                          >
-                            <td class="px-4 py-2 font-medium text-slate-800">{{ cluster }}</td>
-                            <td class="px-4 py-2 text-slate-600">{{ cellType }}</td>
-                            <td class="px-4 py-2">
-                              <input
-                                :value="editingAnnotation[cluster as string] || cellType"
-                                @input="(e: Event) => { editingAnnotation[cluster as string] = (e.target as HTMLInputElement).value }"
-                                type="text"
-                                class="h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                              />
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div class="mt-4 flex justify-end">
-                      <button
-                        type="button"
-                        @click="() => { initAnnotationEdit(); confirmAnnotation(); }"
-                        class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
-                        :disabled="running"
-                      >
-                        <Check class="h-4 w-4" />
-                        确认注释并重新出图
-                      </button>
-                    </div>
-                  </div>
                 </div>
               </div>
             </template>
@@ -1392,6 +1341,57 @@ onUnmounted(() => {
                       <FileText class="h-4 w-4" />
                       {{ tableUrl.split('/').pop() }}
                     </a>
+                  </div>
+                </div>
+
+                <!-- 细胞注释映射表（仅 annotation 步骤显示） -->
+                <div
+                  v-if="activeStep.stepType === 'annotation' && activeStep.result?.stats?.annotation_dict"
+                  class="mt-6"
+                >
+                  <h4 class="mb-3 flex items-center gap-2 text-sm font-bold text-slate-700">
+                    <Tag class="h-4 w-4 text-blue-500" />
+                    细胞类型注释
+                  </h4>
+                  <div class="overflow-hidden rounded-lg border border-slate-200">
+                    <table class="w-full text-sm">
+                      <thead>
+                        <tr class="bg-slate-50">
+                          <th class="px-4 py-2.5 text-left font-medium text-slate-600">Cluster</th>
+                          <th class="px-4 py-2.5 text-left font-medium text-slate-600">自动注释结果</th>
+                          <th class="px-4 py-2.5 text-left font-medium text-slate-600">修改为</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="(cellType, cluster) in (activeStep.result.stats.annotation_dict as Record<string, string>)"
+                          :key="cluster"
+                          class="border-t border-slate-100"
+                        >
+                          <td class="px-4 py-2 font-medium text-slate-800">{{ cluster }}</td>
+                          <td class="px-4 py-2 text-slate-600">{{ cellType }}</td>
+                          <td class="px-4 py-2">
+                            <input
+                              :value="editingAnnotation[cluster as string] || cellType"
+                              @input="(e: Event) => { editingAnnotation[cluster as string] = (e.target as HTMLInputElement).value }"
+                              type="text"
+                              class="h-8 w-full rounded border border-slate-200 bg-white px-2.5 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="mt-4 flex justify-end">
+                    <button
+                      type="button"
+                      @click="() => { initAnnotationEdit(); confirmAnnotation(); }"
+                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
+                      :disabled="running"
+                    >
+                      <Check class="h-4 w-4" />
+                      确认注释并重新出图
+                    </button>
                   </div>
                 </div>
               </div>
