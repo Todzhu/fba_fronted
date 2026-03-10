@@ -232,20 +232,6 @@ const handleToolClick = (tool: AnalysisTool) => {
               </div>
             </div>
 
-            <!-- 分类标签 -->
-            <div
-              class="absolute left-3 top-3 rounded-full border border-white/20 bg-white/80 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur-md"
-            >
-              {{ tool.omics_category }}
-            </div>
-
-            <!-- 功能分类标签 -->
-            <div
-              v-if="tool.func_category"
-              class="absolute right-3 top-3 rounded-full border border-blue-100 bg-blue-50/90 px-2.5 py-1 text-xs font-medium text-blue-600 backdrop-blur-md"
-            >
-              {{ tool.func_category }}
-            </div>
 
             <!-- 登录锁定遮罩 -->
             <div
@@ -265,6 +251,19 @@ const handleToolClick = (tool: AnalysisTool) => {
             >
               {{ tool.title }}
             </h3>
+
+            <!-- 分类标签 -->
+            <div class="mb-3 flex flex-wrap gap-1.5">
+              <span class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
+                {{ tool.omics_category }}
+              </span>
+              <span
+                v-if="tool.func_category"
+                class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-600"
+              >
+                {{ tool.func_category }}
+              </span>
+            </div>
 
             <!-- 描述 -->
             <p

@@ -247,30 +247,28 @@ onMounted(() => {
             <!-- 工具名称 -->
             <h3 class="tool-title">{{ tool.title }}</h3>
 
-            <!-- 分类标签 -->
-            <div class="tool-tags">
-              <span
-                class="tool-tag"
-                :style="getCategoryStyle(tool.omics_category)"
-              >
-                {{ tool.omics_category }}
-              </span>
-              <span
-                v-if="tool.func_category"
-                class="tool-tag"
-                :style="getCategoryStyle(tool.func_category)"
-              >
-                {{ tool.func_category }}
-              </span>
-            </div>
-
             <!-- 描述 -->
             <p class="tool-description">
               {{ tool.description }}
             </p>
 
-            <!-- 底部统计 -->
+            <!-- 底部：标签 + 统计 -->
             <div class="tool-footer">
+              <div class="tool-tags">
+                <span
+                  class="tool-tag"
+                  :style="getCategoryStyle(tool.omics_category)"
+                >
+                  {{ tool.omics_category }}
+                </span>
+                <span
+                  v-if="tool.func_category"
+                  class="tool-tag"
+                  :style="getCategoryStyle(tool.func_category)"
+                >
+                  {{ tool.func_category }}
+                </span>
+              </div>
               <div class="tool-stats">
                 <span class="tool-stat">
                   <Icon icon="mdi:eye-outline" class="text-sm" />
@@ -408,8 +406,7 @@ onMounted(() => {
 .tool-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
 }
 
 .tool-tag {
