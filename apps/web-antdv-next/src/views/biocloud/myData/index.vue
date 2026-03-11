@@ -27,9 +27,11 @@ import FilePreviewModal from './components/FilePreviewModal.vue';
 import FileTable from './components/FileTable.vue';
 import FileToolbar from './components/FileToolbar.vue';
 import FileUploadModal from './components/FileUploadModal.vue';
+import ImportWizard from './components/ImportWizard.vue';
 import MoveModal from './components/MoveModal.vue';
 import NewFolderModal from './components/NewFolderModal.vue';
 import RenameModal from './components/RenameModal.vue';
+import StorageSidebar from './components/StorageSidebar.vue';
 
 // 前端 FileItem 类型
 interface FileItem {
@@ -52,6 +54,7 @@ const searchKeyword = ref('');
 const allFiles = ref<FileItem[]>([]);
 const selectedFiles = ref<FileItem[]>([]);
 const viewMode = ref('list');
+const activeTab = ref<'files' | 'import'>('files');
 const newFolderModalOpen = ref(false);
 const uploadModalOpen = ref(false);
 const uploading = ref(false);
@@ -454,162 +457,180 @@ const handlePreview = (file: FileItem) => {
 
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
-    <!-- Header Section -->
+    <!-- Header Section（与 MyTasks 一致） -->
     <div
-      class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
+      class="border-b border-slate-200 bg-white px-4 pt-10 sm:px-6 lg:px-8"
     >
       <div class="mx-auto max-w-7xl">
-        <!-- Breadcrumb + Title + 存储用量 -->
-        <div class="mb-2 flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <IconifyIcon
-              v-if="currentFolderId !== null"
-              icon="ant-design:arrow-left-outlined"
-              class="cursor-pointer text-xl text-slate-500 transition-colors hover:text-blue-600"
-              @click="handleNavUp"
-            />
-            <Breadcrumb separator=">">
-              <Breadcrumb.Item
-                v-for="(item, index) in breadcrumbs"
-                :key="item.id ?? 'root'"
-              >
-                <span
-                  class="cursor-pointer transition-all duration-200 hover:text-blue-600"
-                  :class="{
-                    'text-3xl font-bold text-slate-900':
-                      index === breadcrumbs.length - 1,
-                    'text-xl font-medium text-slate-500':
-                      index !== breadcrumbs.length - 1,
-                  }"
-                  @click="handleBreadcrumbClick(item, index)"
-                >
-                  {{ item.name }}
-                </span>
-              </Breadcrumb.Item>
-            </Breadcrumb>
-          </div>
-          <!-- 存储用量（标题右侧） -->
-          <div v-if="isLoggedIn" class="flex items-center gap-3">
-            <IconifyIcon icon="ant-design:cloud-outlined" class="text-lg text-slate-400" />
-            <div class="w-40 h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                class="h-full rounded-full transition-all duration-500"
-                :class="storagePercent > 90 ? 'bg-red-500' : storagePercent > 70 ? 'bg-amber-500' : 'bg-blue-500'"
-                :style="{ width: `${Math.max(storagePercent, 1)}%` }"
-              />
-            </div>
-            <span class="text-sm font-semibold whitespace-nowrap" :class="storagePercent > 90 ? 'text-red-600' : 'text-slate-600'">
-              {{ storageUsedStr }} / {{ storageLimitStr }}
-            </span>
-          </div>
-        </div>
+        <h1 class="mb-2 text-3xl font-bold text-slate-900">我的数据</h1>
         <p class="max-w-2xl text-slate-500">
           管理您的个人数据文件，支持上传、下载和文件夹管理。
         </p>
 
-        <!-- Toolbar -->
-        <div class="mt-8">
-          <FileToolbar
-            :selected-count="selectedFiles.length"
-            @search="handleSearch"
-            @view-change="handleViewChange"
-            @upload="handleUpload"
-            @new-folder="handleNewFolder"
-            @batch-delete="handleBatchDelete"
-          />
-        </div>
-      </div>
-    </div>
-
-    <!-- File List Content -->
-    <div
-      class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8"
-      @dragover="handleDragOver"
-      @dragleave="handleDragLeave"
-      @drop="handleDrop"
-    >
-      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" :class="isDragging ? 'ring-2 ring-blue-400 border-blue-300' : ''">
-        <!-- 拖拽上传遮罩 -->
-        <Transition name="fade">
-          <div
-            v-if="isDragging"
-            class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-blue-50/90 backdrop-blur-sm"
+        <!-- Tab 切换栏（下划线风格，与 MyTasks 一致） -->
+        <div class="mt-6 flex items-center gap-1">
+          <button
+            class="tab-btn"
+            :class="{ active: activeTab === 'files' }"
+            @click="activeTab = 'files'"
           >
-            <IconifyIcon icon="ant-design:cloud-upload-outlined" class="text-5xl text-blue-400 mb-3" />
-            <p class="text-lg font-semibold text-blue-600">松开即可上传</p>
-            <p class="text-sm text-blue-400">文件将上传到当前文件夹</p>
-          </div>
-        </Transition>
-
-        <!-- 空状态 -->
-        <div v-if="!loading && files.length === 0" class="flex flex-col items-center justify-center py-20">
-          <IconifyIcon icon="ant-design:inbox-outlined" class="text-6xl text-slate-200 mb-4" />
-          <p class="text-base font-medium text-slate-400">这里还没有文件</p>
-          <p class="text-sm text-slate-300 mt-1">拖拽文件到此处或点击上方「上传」按钮</p>
+            <IconifyIcon icon="ant-design:folder-outlined" class="text-base" />
+            我的文件
+            <div v-if="activeTab === 'files'" class="tab-indicator" />
+          </button>
+          <button
+            class="tab-btn"
+            :class="{ active: activeTab === 'import' }"
+            @click="activeTab = 'import'"
+          >
+            <IconifyIcon icon="ant-design:import-outlined" class="text-base" />
+            导入数据
+            <div v-if="activeTab === 'import'" class="tab-indicator" />
+          </button>
         </div>
-
-        <!-- 文件列表 -->
-        <template v-else>
-          <FileTable
-            v-if="viewMode === 'list'"
-            :files="files"
-            :loading="loading"
-            @selection-change="handleSelectionChange"
-            @download="handleDownload"
-            @delete="handleDelete"
-            @enter="handleEnterFolder"
-            @rename="handleRename"
-            @move="handleMove"
-            @preview="handlePreview"
-          />
-          <FileGrid
-            v-else
-            :files="files"
-            @selection-change="handleSelectionChange"
-            @download="handleDownload"
-            @delete="handleDelete"
-            @enter="handleEnterFolder"
-            @preview="handlePreview"
-          />
-        </template>
       </div>
     </div>
 
-    <!-- New Folder Modal -->
+    <!-- Content Area -->
+    <div class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
+      <div class="content-layout">
+        <!-- 左侧边栏 -->
+        <StorageSidebar
+          :storage-used-str="storageUsedStr"
+          :storage-limit-str="storageLimitStr"
+          :storage-percent="storagePercent"
+        />
+
+        <!-- 右侧主区域 -->
+        <main class="main-area">
+          <!-- 我的文件 Tab -->
+          <div v-if="activeTab === 'files'" class="files-section">
+            <!-- 面包屑导航（仅子文件夹时显示） -->
+            <div v-if="currentFolderId !== null" class="flex items-center gap-3">
+              <IconifyIcon
+                icon="ant-design:arrow-left-outlined"
+                class="cursor-pointer text-xl text-slate-500 transition-colors hover:text-blue-600"
+                @click="handleNavUp"
+              />
+              <Breadcrumb separator=">">
+                <Breadcrumb.Item
+                  v-for="(item, index) in breadcrumbs"
+                  :key="item.id ?? 'root'"
+                >
+                  <span
+                    class="cursor-pointer transition-all duration-200 hover:text-blue-600"
+                    :class="{
+                      'text-lg font-bold text-slate-900':
+                        index === breadcrumbs.length - 1,
+                      'text-sm font-medium text-slate-500':
+                        index !== breadcrumbs.length - 1,
+                    }"
+                    @click="handleBreadcrumbClick(item, index)"
+                  >
+                    {{ item.name }}
+                  </span>
+                </Breadcrumb.Item>
+              </Breadcrumb>
+            </div>
+
+            <!-- Toolbar -->
+            <FileToolbar
+              :selected-count="selectedFiles.length"
+              @search="handleSearch"
+              @view-change="handleViewChange"
+              @upload="handleUpload"
+              @new-folder="handleNewFolder"
+              @batch-delete="handleBatchDelete"
+            />
+
+            <!-- File List -->
+            <div
+              class="file-list-wrap"
+              :class="isDragging ? 'ring-2 ring-blue-400 border-blue-300' : ''"
+              @dragover="handleDragOver"
+              @dragleave="handleDragLeave"
+              @drop="handleDrop"
+            >
+              <!-- 拖拽上传遮罩 -->
+              <Transition name="fade">
+                <div
+                  v-if="isDragging"
+                  class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-blue-50/90 backdrop-blur-sm"
+                >
+                  <IconifyIcon icon="ant-design:cloud-upload-outlined" class="text-5xl text-blue-400 mb-3" />
+                  <p class="text-lg font-semibold text-blue-600">松开即可上传</p>
+                  <p class="text-sm text-blue-400">文件将上传到当前文件夹</p>
+                </div>
+              </Transition>
+
+              <!-- 空状态 -->
+              <div v-if="!loading && files.length === 0" class="flex flex-col items-center justify-center py-20">
+                <IconifyIcon icon="ant-design:inbox-outlined" class="text-6xl text-slate-200 mb-4" />
+                <p class="text-base font-medium text-slate-400">这里还没有文件</p>
+                <p class="text-sm text-slate-300 mt-1">拖拽文件到此处或点击上方「上传」按钮</p>
+              </div>
+
+              <!-- 文件列表 -->
+              <template v-else>
+                <FileTable
+                  v-if="viewMode === 'list'"
+                  :files="files"
+                  :loading="loading"
+                  @selection-change="handleSelectionChange"
+                  @download="handleDownload"
+                  @delete="handleDelete"
+                  @enter="handleEnterFolder"
+                  @rename="handleRename"
+                  @move="handleMove"
+                  @preview="handlePreview"
+                />
+                <FileGrid
+                  v-else
+                  :files="files"
+                  @selection-change="handleSelectionChange"
+                  @download="handleDownload"
+                  @delete="handleDelete"
+                  @enter="handleEnterFolder"
+                  @preview="handlePreview"
+                />
+              </template>
+            </div>
+          </div>
+
+          <!-- 导入数据 Tab -->
+          <ImportWizard
+            v-if="activeTab === 'import'"
+            @upload="handleUploadFiles"
+          />
+        </main>
+      </div>
+    </div>
+
+    <!-- Modals -->
     <NewFolderModal
       v-model:open="newFolderModalOpen"
       @create="handleCreateFolder"
     />
-
-    <!-- File Upload Modal -->
     <FileUploadModal
       v-model:open="uploadModalOpen"
       :loading="uploading"
       :progress="uploadProgress"
       @upload="handleUploadFiles"
     />
-
-    <!-- Rename Modal -->
     <RenameModal
       v-model:open="renameModalOpen"
       :name="currentRenameFile?.name || ''"
       @ok="handleRenameSubmit"
     />
-
-    <!-- Move Modal -->
     <MoveModal
       v-model:open="moveModalOpen"
       :tree-data="folderTreeData"
       @ok="handleMoveSubmit"
     />
-
-    <!-- Preview Modal -->
     <FilePreviewModal
       v-model:open="previewModalOpen"
       :file="currentPreviewFile"
     />
-
-    <!-- 登录弹窗 -->
     <AuthModal
       :is-open="showAuthModal"
       redirect-path="/data"
@@ -619,6 +640,73 @@ const handlePreview = (file: FileItem) => {
 </template>
 
 <style scoped>
+/* Content Layout */
+.content-layout {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Tab Bar（下划线风格，与 MyTasks 一致） */
+.tab-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.tab-btn:hover {
+  color: #1e293b;
+}
+
+.tab-btn.active {
+  color: #2563eb;
+}
+
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: #2563eb;
+}
+
+/* Files Section */
+.files-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.file-list-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: white;
+}
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease;
