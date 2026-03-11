@@ -33,10 +33,10 @@ export async function getMyDataFiles(params?: {
   // 过滤掉 undefined 值，防止发送无效参数
   const cleanParams = params
     ? Object.fromEntries(
-        Object.entries(params).filter(
-          ([_, v]) => v !== undefined && v !== null,
-        ),
-      )
+      Object.entries(params).filter(
+        ([_, v]) => v !== undefined && v !== null,
+      ),
+    )
     : undefined;
   return requestClient.get<FileListResponse>(`${BASE_URL}/files`, {
     params: cleanParams,
@@ -134,5 +134,20 @@ export interface FolderTreeNode extends FileItem {
  * 获取用户文件夹树（用于文件选择器）
  */
 export async function getUserFolderTree(): Promise<FolderTreeNode[]> {
-  return requestClient.get<FolderTreeNode[]>(`${BASE_URL}/tree`);
+  return requestClient.get<FolderTreeNode[]>(`${BASE_URL}/folder-tree`);
+}
+
+// ========== 存储统计 ==========
+
+export interface StorageStats {
+  file_count: number;
+  folder_count: number;
+  total_size: number;
+}
+
+/**
+ * 获取当前用户的存储统计
+ */
+export async function getStorageStats(): Promise<StorageStats> {
+  return requestClient.get<StorageStats>(`${BASE_URL}/storage-stats`);
 }

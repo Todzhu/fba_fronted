@@ -253,6 +253,25 @@ export async function generateDotplot(
   );
 }
 
+/**
+ * 保存注释后的 h5ad 到「我的数据」
+ * @param pipelineId 流程 ID
+ * @param folderId 目标文件夹ID（null=根目录）
+ */
+export async function saveH5adToMyData(
+  pipelineId: number,
+  folderId?: null | number,
+  filename?: string,
+): Promise<{ name: string; size: number }> {
+  const body: Record<string, any> = {};
+  if (folderId != null) body.folder_id = folderId;
+  if (filename) body.filename = filename;
+  return await requestClient.post<{ name: string; size: number }>(
+    `/api/v1/pipelines/${pipelineId}/save-h5ad`,
+    body,
+  );
+}
+
 // ========== 用户数据文件 API ==========
 
 /** 文件节点（树形结构） */

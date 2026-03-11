@@ -7,7 +7,7 @@
 import type { Pipeline, StepConfig } from './types/pipeline';
 import type { ParamFieldConfig } from './types/stepParamConfigs';
 
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
@@ -31,6 +31,7 @@ import {
   X,
   ZoomIn,
 } from 'lucide-vue-next';
+import { message } from 'ant-design-vue';
 
 import {
   generateDotplot as generateDotplotApi,
@@ -38,10 +39,10 @@ import {
   getFilesInFolder,
   getStepLogs,
   runStep as runStepApi,
+  saveH5adToMyData as saveH5adApi,
   updateSampleDict,
 } from '#/api/pipeline';
-import { Plus, Trash2 } from 'lucide-vue-next';
-import { useVbenVxeGrid } from '#/adapter/vxe-table';
+import { ChevronDown, Download, Save, Trash2 } from 'lucide-vue-next';
 
 import { STEP_DESCRIPTIONS, STEP_LABELS } from './types/pipeline';
 import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
@@ -313,7 +314,14 @@ const selectedTissueType = ref('pbmc');
 const markerTableRows = ref<MarkerRow[]>([]);
 const dotplotUrl = ref('');
 const dotplotLoading = ref(false);
+const showMarkerTable = ref(false); // Marker 表折叠状态
+const showSaveDropdown = ref(false); // 保存 h5ad 下拉菜单
+const savingH5ad = ref(false); // 保存中状态
 
+// Marker 表中的细胞类型候选列表（供 Cluster 映射下拉使用）
+const candidateCellTypes = computed(() =>
+  markerTableRows.value.map((r) => r.cellType).filter(Boolean),
+);
 // 从知识库加载组织类型的 Marker 预设
 const loadMarkerPreset = (tissue: string) => {
   selectedTissueType.value = tissue;
@@ -406,44 +414,13 @@ const clusterList = computed<string[]>(() => {
 interface ClusterRow { cluster: string; cellType: string; }
 const clusterTableData = ref<ClusterRow[]>([]);
 
-// useVbenVxeGrid Cluster 映射表格
-const [ClusterGrid, clusterGridApi] = useVbenVxeGrid({
-  gridOptions: {
-    border: true,
-    size: 'small',
-    maxHeight: 400,
-    rowConfig: { isHover: true, keyField: 'cluster' },
-    editConfig: { trigger: 'click', mode: 'cell' },
-    columns: [
-      { field: 'cluster', title: 'Cluster', width: 100, align: 'center' },
-      {
-        field: 'cellType',
-        title: '自定义细胞类型名称',
-        editRender: { name: 'input', attrs: { placeholder: '输入细胞类型...' } },
-      },
-    ],
-    pagerConfig: { enabled: false },
-    toolbarConfig: { enabled: false },
-    proxyConfig: {
-      autoLoad: false,
-      ajax: {
-        query: async () => clusterTableData.value,
-      },
-    },
-  },
-});
-
-// 初始化映射表（空值或已有注释结果）
+// 初始化映射表
 const initClusterMap = () => {
   const existingDict = activeStep.value?.result?.stats?.annotation_dict as Record<string, string> | undefined;
   clusterTableData.value = clusterList.value.map(c => ({
     cluster: c,
     cellType: existingDict?.[c] || '',
   }));
-  // 通过 proxy 的 query 刷新 Grid 数据（需要延迟等组件挂载）
-  nextTick(() => {
-    clusterGridApi?.query();
-  });
 };
 
 // 提交 Cluster→CellType 注释并运行后端
@@ -488,6 +465,72 @@ const submitClusterAnnotation = async () => {
   } catch (error) {
     console.error('提交注释失败:', error);
     running.value = false;
+  }
+};
+// 下载 h5ad 到本地
+const handleDownloadH5ad = () => {
+  if (!pipeline.value) return;
+  const url = `/static/pipelines/${pipeline.value.userId}/pipelines/${pipeline.value.id}/step_4_annotation/adata_annotated.h5ad`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${pipeline.value.name}_annotated.h5ad`;
+  a.click();
+};
+
+// ---- 保存到「我的数据」Modal ----
+const showSaveModal = ref(false);
+const saveFileName = ref('');
+const saveTargetFolderId = ref<null | number>(null);
+const saveTargetFolderName = ref('根目录');
+const folderTree = ref<any[]>([]);
+const loadingFolders = ref(false);
+const showFolderPicker = ref(false);
+
+// 打开保存弹窗
+const handleSaveToMyData = async () => {
+  if (!pipeline.value) return;
+  saveFileName.value = `${pipeline.value.name}_annotated`;
+  saveTargetFolderId.value = null;
+  saveTargetFolderName.value = '根目录';
+  showSaveDropdown.value = false;
+  showSaveModal.value = true;
+  // 加载文件夹树
+  loadingFolders.value = true;
+  try {
+    const { getUserFolderTree } = await import('#/api/my-data');
+    const tree = await getUserFolderTree();
+    // 后端返回 [{ key:'root', title:'我的数据', children: [...] }]，解包取 children
+    folderTree.value = tree?.[0]?.children ?? tree;
+  } catch {
+    folderTree.value = [];
+  } finally {
+    loadingFolders.value = false;
+  }
+};
+
+// 选择文件夹
+const selectFolder = (id: null | number, name: string) => {
+  saveTargetFolderId.value = id;
+  saveTargetFolderName.value = name;
+  showFolderPicker.value = false;
+};
+
+// 确认保存
+const confirmSaveToMyData = async () => {
+  if (!pipeline.value) return;
+  savingH5ad.value = true;
+  try {
+    const res = await saveH5adApi(
+      Number(pipeline.value.id),
+      saveTargetFolderId.value,
+      saveFileName.value,
+    );
+    showSaveModal.value = false;
+    message.success(`已保存到「${saveTargetFolderName.value}」: ${res.name}`);
+  } catch (err: any) {
+    message.error(`保存失败: ${err?.message || '未知错误'}`);
+  } finally {
+    savingH5ad.value = false;
   }
 };
 
@@ -957,7 +1000,7 @@ onUnmounted(() => {
         <div class="min-w-0 flex-1 space-y-4">
           <template v-if="activeStep">
             <!-- 步骤头部卡片 -->
-            <div class="overflow-hidden rounded-t-xl rounded-b-none border border-slate-200 bg-white">
+            <div class="rounded-t-xl rounded-b-none border border-slate-200 bg-white">
             <div class="px-8 py-6">
               <div class="flex items-center justify-between">
                 <div>
@@ -1015,8 +1058,44 @@ onUnmounted(() => {
                     日志
                   </button>
 
-                  <!-- 运行按钮（始终存在） -->
+                  <!-- 注释步骤：保存 h5ad 按钮 -->
+                  <template v-if="isAnnotationStep && activeStep.status === 'completed'">
+                    <div class="relative">
+                      <button
+                        @click="showSaveDropdown = !showSaveDropdown"
+                        :disabled="savingH5ad"
+                        class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Loader2 v-if="savingH5ad" class="h-4 w-4 animate-spin" />
+                        <Save v-else class="h-4 w-4" />
+                        {{ savingH5ad ? '保存中...' : '保存 h5ad' }}
+                      </button>
+                      <!-- 下拉菜单 -->
+                      <div
+                        v-if="showSaveDropdown && !savingH5ad"
+                        class="absolute right-0 top-full z-50 mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+                      >
+                        <button
+                          @click="handleDownloadH5ad(); showSaveDropdown = false"
+                          class="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <Download class="h-4 w-4 text-blue-500" />
+                          下载到本地
+                        </button>
+                        <button
+                          @click="handleSaveToMyData(); showSaveDropdown = false"
+                          class="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+                        >
+                          <Folder class="h-4 w-4 text-emerald-500" />
+                          保存到我的数据
+                        </button>
+                      </div>
+                    </div>
+                  </template>
+
+                  <!-- 非注释步骤：运行按钮 -->
                   <button
+                    v-else
                     @click="handleRunStep"
                     :disabled="running"
                     class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1265,73 +1344,89 @@ onUnmounted(() => {
                     <span class="text-xs text-slate-400">选择后自动加载对应组织的细胞类型和 Marker 基因</span>
                   </div>
 
-                  <!-- Marker 可编辑表格 -->
-                  <div v-if="markerTableRows.length > 0" class="overflow-hidden rounded-lg border border-slate-200">
-                    <table class="w-full text-sm">
-                      <thead>
-                        <tr class="bg-slate-50">
-                          <th class="w-48 px-4 py-2.5 text-left font-semibold text-slate-600">细胞类型</th>
-                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">Marker 基因（逗号分隔）</th>
-                          <th class="w-16 px-4 py-2.5 text-center font-semibold text-slate-600">操作</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="(row, idx) in markerTableRows"
-                          :key="idx"
-                          class="border-t border-slate-100 transition-colors hover:bg-slate-50/50"
-                        >
-                          <td class="px-4 py-2">
-                            <input
-                              v-model="row.cellType"
-                              type="text"
-                              class="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
-                              placeholder="细胞类型名称"
-                            />
-                          </td>
-                          <td class="px-4 py-2">
-                            <input
-                              v-model="row.markers"
-                              type="text"
-                              class="h-8 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
-                              placeholder="CD3D, CD3E, CD4..."
-                            />
-                          </td>
-                          <td class="px-4 py-2 text-center">
-                            <button
-                              type="button"
-                              class="cursor-pointer rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                              @click="removeMarkerRow(idx)"
-                            >
-                              <Trash2 class="h-3.5 w-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <!-- Marker 紧凑摘要（默认显示） -->
+                  <div v-if="markerTableRows.length > 0 && !showMarkerTable" class="mb-4">
+                    <div class="flex flex-wrap gap-2">
+                      <span
+                        v-for="(row, idx) in markerTableRows"
+                        :key="idx"
+                        class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs"
+                      >
+                        <span class="font-semibold text-slate-700">{{ row.cellType }}</span>
+                        <span class="text-slate-400">{{ row.markers.split(',').length }} genes</span>
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      @click="showMarkerTable = true"
+                      class="mt-2 cursor-pointer text-xs font-medium text-blue-500 hover:text-blue-700"
+                    >
+                      ✏️ 展开编辑 Marker 表
+                    </button>
+                  </div>
+
+                  <!-- Marker 可编辑表格（展开时显示） -->
+                  <div v-else-if="markerTableRows.length > 0" class="mb-4">
+                    <div class="max-h-[320px] overflow-y-auto overflow-hidden rounded-lg border border-slate-200">
+                      <table class="w-full text-sm">
+                        <thead class="sticky top-0 z-10">
+                          <tr class="bg-slate-50">
+                            <th class="w-40 px-3 py-2 text-left font-semibold text-slate-600">细胞类型</th>
+                            <th class="px-3 py-2 text-left font-semibold text-slate-600">Marker 基因</th>
+                            <th class="w-12 px-3 py-2 text-center font-semibold text-slate-600"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr
+                            v-for="(row, idx) in markerTableRows"
+                            :key="idx"
+                            class="border-t border-slate-100 hover:bg-slate-50/50"
+                          >
+                            <td class="px-3 py-1.5">
+                              <input v-model="row.cellType" type="text"
+                                class="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs focus:border-blue-400 focus:outline-none"
+                                placeholder="细胞类型" />
+                            </td>
+                            <td class="px-3 py-1.5">
+                              <input v-model="row.markers" type="text"
+                                class="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs focus:border-blue-400 focus:outline-none"
+                                placeholder="CD3D, CD3E, CD4..." />
+                            </td>
+                            <td class="px-3 py-1.5 text-center">
+                              <button type="button" @click="removeMarkerRow(idx)"
+                                class="cursor-pointer rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
+                                <Trash2 class="h-3 w-3" />
+                              </button>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div class="mt-2 flex items-center gap-3">
+                      <button type="button" @click="addMarkerRow"
+                        class="cursor-pointer text-xs font-medium text-blue-500 hover:text-blue-700">
+                        + 添加类型
+                      </button>
+                      <button type="button" @click="showMarkerTable = false"
+                        class="cursor-pointer text-xs font-medium text-slate-400 hover:text-slate-600">
+                        收起
+                      </button>
+                    </div>
                   </div>
 
                   <!-- 无数据提示 -->
-                  <div v-else class="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                  <div v-else class="mb-4 flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
                     <Tag class="h-4 w-4" />
-                    请先选择组织类型以加载预设 Marker 基因，或手动添加
+                    请先选择组织类型以加载预设 Marker 基因
                   </div>
 
-                  <!-- 底部操作栏 -->
-                  <div class="mt-4 flex items-center justify-between">
-                    <button
-                      type="button"
-                      @click="addMarkerRow"
-                      class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:border-blue-400 hover:text-blue-600"
-                    >
-                      <Plus class="h-3.5 w-3.5" />
-                      添加细胞类型
-                    </button>
+                  <!-- 生成 Dotplot 按钮 -->
+                  <div class="flex items-center gap-3">
                     <button
                       type="button"
                       @click="handleGenerateDotplot"
                       :disabled="dotplotLoading || markerTableRows.length === 0"
-                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Loader2 v-if="dotplotLoading" class="h-4 w-4 animate-spin" />
                       <ScatterChart v-else class="h-4 w-4" />
@@ -1378,7 +1473,50 @@ onUnmounted(() => {
                     </span>
                   </div>
 
-                  <ClusterGrid />
+                  <div class="max-h-[400px] overflow-y-auto overflow-hidden rounded-lg border border-slate-200">
+                    <table class="w-full text-sm">
+                      <thead class="sticky top-0 z-10">
+                        <tr class="bg-slate-50">
+                          <th class="w-24 px-4 py-2.5 text-center font-semibold text-slate-600">Cluster</th>
+                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">细胞类型（从 Marker 表选择或手动输入）</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr
+                          v-for="row in clusterTableData"
+                          :key="row.cluster"
+                          class="border-t border-slate-100 hover:bg-slate-50/50"
+                        >
+                          <td class="px-4 py-2 text-center">
+                            <span class="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
+                              {{ row.cluster }}
+                            </span>
+                          </td>
+                          <td class="px-4 py-2">
+                            <div class="flex items-center gap-2">
+                              <!-- 下拉选择器（候选来自 Marker 表） -->
+                              <select
+                                v-if="candidateCellTypes.length > 0"
+                                :value="row.cellType"
+                                @change="(e: Event) => row.cellType = (e.target as HTMLSelectElement).value"
+                                class="h-8 w-48 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
+                              >
+                                <option value="">选择...</option>
+                                <option v-for="ct in candidateCellTypes" :key="ct" :value="ct">{{ ct }}</option>
+                              </select>
+                              <!-- 输入框（可覆盖或直接输入） -->
+                              <input
+                                v-model="row.cellType"
+                                type="text"
+                                class="h-8 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
+                                placeholder="或手动输入细胞类型..."
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
 
                   <div class="mt-4 flex items-center justify-between">
                     <p class="text-xs text-slate-400">
@@ -1807,6 +1945,64 @@ onUnmounted(() => {
                     </div>
                   </template>
 
+                  <!-- 注释步骤：带图例说明的结果展示 -->
+                  <template v-else-if="isAnnotationStep">
+                    <!-- CellType + Cluster 对照 UMAP 并排 -->
+                    <div class="mb-6 grid grid-cols-2 gap-4">
+                      <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('umap_dimplot_celltype') || u.includes('umap_cluster_celltype'))" :key="'ct'+idx">
+                        <div
+                          class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                          @click="openLightbox(getChartUrl(chartUrl))"
+                        >
+                          <img :src="getChartUrl(chartUrl)" :alt="chartUrl.includes('dimplot') ? 'CellType UMAP' : 'Cluster UMAP'" class="w-full rounded-lg" loading="lazy" />
+                          <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                            <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                              <ZoomIn class="h-3.5 w-3.5" />
+                              点击放大
+                            </div>
+                          </div>
+                          <p class="mt-2 text-center text-xs text-slate-500">
+                            {{ chartUrl.includes('dimplot') ? '图. 细胞类型注释 UMAP' : '图. Cluster 聚类 UMAP' }}
+                          </p>
+                        </div>
+                      </template>
+                    </div>
+
+                    <!-- 分组 UMAP -->
+                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('umap_split_group'))" :key="'grp'+idx">
+                      <div
+                        class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                        @click="openLightbox(getChartUrl(chartUrl))"
+                      >
+                        <img :src="getChartUrl(chartUrl)" alt="分组 UMAP" class="w-full rounded-lg" loading="lazy" />
+                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                            <ZoomIn class="h-3.5 w-3.5" />
+                            点击放大
+                          </div>
+                        </div>
+                        <p class="mt-2 text-center text-xs text-slate-500">图. 按实验组分组的细胞类型 UMAP</p>
+                      </div>
+                    </template>
+
+                    <!-- CellType 比例柱状图 -->
+                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('celltype_proportion_barplot'))" :key="'bar'+idx">
+                      <div
+                        class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                        @click="openLightbox(getChartUrl(chartUrl))"
+                      >
+                        <img :src="getChartUrl(chartUrl)" alt="CellType Proportion" class="w-full rounded-lg" loading="lazy" />
+                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                            <ZoomIn class="h-3.5 w-3.5" />
+                            点击放大
+                          </div>
+                        </div>
+                        <p class="mt-2 text-center text-xs text-slate-500">图. 各样本细胞类型比例分布（Connected Barplot）</p>
+                      </div>
+                    </template>
+                  </template>
+
                   <template v-else>
                     <!-- 其他步骤：展示全部图表 -->
                     <div
@@ -1957,6 +2153,110 @@ onUnmounted(() => {
                 <div class="text-sm leading-relaxed text-slate-600" v-html="section.content"></div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- ========== 保存到我的数据 Modal ========== -->
+    <Transition name="fade">
+      <div
+        v-if="showSaveModal"
+        class="fixed inset-0 z-[55] flex items-center justify-center"
+        @click.self="showSaveModal = false"
+      >
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+          <h3 class="mb-4 text-lg font-bold text-slate-900">保存到我的数据</h3>
+
+          <!-- 文件名 -->
+          <div class="mb-4">
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">文件名</label>
+            <div class="flex items-center gap-0">
+              <input
+                v-model="saveFileName"
+                class="flex-1 rounded-l-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                placeholder="输入文件名"
+              />
+              <span class="rounded-r-lg border border-l-0 border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500">.h5ad</span>
+            </div>
+          </div>
+
+          <!-- 目标文件夹 -->
+          <div class="mb-5">
+            <label class="mb-1.5 block text-sm font-medium text-slate-700">保存位置</label>
+            <button
+              @click="showFolderPicker = !showFolderPicker"
+              class="flex w-full cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50"
+            >
+              <Folder class="h-4 w-4 text-emerald-500" />
+              <span class="flex-1">{{ saveTargetFolderName }}</span>
+              <ChevronDown class="h-4 w-4 text-slate-400 transition-transform" :class="{ 'rotate-180': showFolderPicker }" />
+            </button>
+
+            <!-- 文件夹树 -->
+            <div
+              v-if="showFolderPicker"
+              class="mt-1 max-h-48 overflow-y-auto rounded-lg border border-slate-200 bg-white"
+            >
+              <div v-if="loadingFolders" class="flex items-center justify-center py-4">
+                <Loader2 class="h-4 w-4 animate-spin text-slate-400" />
+                <span class="ml-2 text-sm text-slate-500">加载中...</span>
+              </div>
+              <template v-else>
+                <!-- 根目录 -->
+                <button
+                  @click="selectFolder(null, '根目录')"
+                  class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm hover:bg-blue-50"
+                  :class="saveTargetFolderId === null ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'"
+                >
+                  <Folder class="h-4 w-4 text-slate-400" />
+                  根目录（我的数据）
+                </button>
+                <!-- 文件夹列表 -->
+                <template v-for="folder in folderTree" :key="folder.key">
+                  <button
+                    @click="selectFolder(Number(folder.key), folder.title)"
+                    class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 pl-6 text-left text-sm hover:bg-blue-50"
+                    :class="saveTargetFolderId === Number(folder.key) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'"
+                  >
+                    <Folder class="h-4 w-4 text-amber-500" />
+                    {{ folder.title }}
+                  </button>
+                  <template v-if="folder.children?.length">
+                    <button
+                      v-for="sub in folder.children"
+                      :key="sub.key"
+                      @click="selectFolder(Number(sub.key), sub.title)"
+                      class="flex w-full cursor-pointer items-center gap-2 px-3 py-2 pl-10 text-left text-sm hover:bg-blue-50"
+                      :class="saveTargetFolderId === Number(sub.key) ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-700'"
+                    >
+                      <Folder class="h-4 w-4 text-amber-400" />
+                      {{ sub.title }}
+                    </button>
+                  </template>
+                </template>
+              </template>
+            </div>
+          </div>
+
+          <!-- 按钮 -->
+          <div class="flex justify-end gap-3">
+            <button
+              @click="showSaveModal = false"
+              class="cursor-pointer rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              取消
+            </button>
+            <button
+              @click="confirmSaveToMyData"
+              :disabled="savingH5ad || !saveFileName.trim()"
+              class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Loader2 v-if="savingH5ad" class="h-4 w-4 animate-spin" />
+              <Save v-else class="h-4 w-4" />
+              {{ savingH5ad ? '保存中...' : '确认保存' }}
+            </button>
           </div>
         </div>
       </div>

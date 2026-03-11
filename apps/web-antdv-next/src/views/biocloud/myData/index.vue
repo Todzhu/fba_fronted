@@ -16,6 +16,7 @@ import {
   deleteMyDataFile,
   downloadMyDataFile,
   getMyDataFiles,
+  getStorageStats,
   moveMyDataFile,
   renameMyDataFile,
   uploadMyDataFile,
@@ -67,6 +68,24 @@ const accessStore = useAccessStore();
 const isLoggedIn = computed(() => !!accessStore.accessToken);
 const showAuthModal = ref(false);
 
+// 存储用量统计
+const STORAGE_LIMIT = 10 * 1024 * 1024 * 1024; // 10GB
+const storageUsed = ref(0);
+const fileCount = ref(0);
+const folderCount = ref(0);
+const storagePercent = computed(() => Math.min((storageUsed.value / STORAGE_LIMIT) * 100, 100));
+const storageUsedStr = computed(() => formatFileSize(storageUsed.value));
+const storageLimitStr = computed(() => '10 GB');
+
+const fetchStorageStats = async () => {
+  try {
+    const stats = await getStorageStats();
+    storageUsed.value = stats.total_size;
+    fileCount.value = stats.file_count;
+    folderCount.value = stats.folder_count;
+  } catch { /* ignore */ }
+};
+
 // Computed
 const files = computed(() => allFiles.value);
 
@@ -103,28 +122,18 @@ const formatDateTime = (dateStr: string): string => {
 const determineIcon = (filename: string): string => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   const map: Record<string, string> = {
-    png: 'image',
-    jpg: 'image',
-    jpeg: 'image',
-    gif: 'image',
+    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', svg: 'image',
     pdf: 'pdf',
-    xlsx: 'excel',
-    xls: 'excel',
-    csv: 'excel',
-    docx: 'word',
-    doc: 'word',
-    md: 'markdown',
-    zip: 'archive',
-    rar: 'archive',
-    '7z': 'archive',
-    mp3: 'audio',
-    wav: 'audio',
-    mp4: 'video',
-    mov: 'video',
-    js: 'code',
-    ts: 'code',
-    json: 'code',
-    py: 'code',
+    xlsx: 'excel', xls: 'excel', csv: 'excel', tsv: 'excel',
+    docx: 'word', doc: 'word',
+    md: 'markdown', txt: 'markdown',
+    zip: 'archive', rar: 'archive', '7z': 'archive', gz: 'archive', tar: 'archive',
+    mp3: 'audio', wav: 'audio',
+    mp4: 'video', mov: 'video',
+    js: 'code', ts: 'code', json: 'code', py: 'code', r: 'code', rmd: 'code',
+    h5ad: 'data', h5: 'data', hdf5: 'data', loom: 'data',
+    rds: 'rdata', rda: 'rdata',
+    fasta: 'bio', fastq: 'bio', bam: 'bio', vcf: 'bio', bed: 'bio', gtf: 'bio', gff: 'bio',
   };
   return map[ext] || 'file';
 };
@@ -172,7 +181,33 @@ watch(isLoggedIn, (loggedIn) => {
 
 onMounted(() => {
   fetchFiles();
+  fetchStorageStats();
 });
+
+// 拖拽上传
+const isDragging = ref(false);
+let dragLeaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+const handleDragOver = (e: DragEvent) => {
+  e.preventDefault();
+  if (dragLeaveTimer) clearTimeout(dragLeaveTimer);
+  isDragging.value = true;
+};
+
+const handleDragLeave = () => {
+  dragLeaveTimer = setTimeout(() => {
+    isDragging.value = false;
+  }, 100);
+};
+
+const handleDrop = (e: DragEvent) => {
+  e.preventDefault();
+  isDragging.value = false;
+  const droppedFiles = e.dataTransfer?.files;
+  if (droppedFiles?.length) {
+    handleUploadFiles(Array.from(droppedFiles));
+  }
+};
 
 // Handlers
 const handleSearch = (value: string) => {
@@ -232,6 +267,7 @@ const handleUploadFiles = async (filesToUpload: File[]) => {
   }
 
   fetchFiles();
+  fetchStorageStats();
 };
 
 const handleNewFolder = () => {
@@ -423,33 +459,49 @@ const handlePreview = (file: FileItem) => {
       class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
     >
       <div class="mx-auto max-w-7xl">
-        <!-- Breadcrumb + Title -->
-        <div class="mb-2 flex items-center gap-3">
-          <IconifyIcon
-            v-if="currentFolderId !== null"
-            icon="ant-design:arrow-left-outlined"
-            class="cursor-pointer text-xl text-slate-500 transition-colors hover:text-blue-600"
-            @click="handleNavUp"
-          />
-          <Breadcrumb separator=">">
-            <Breadcrumb.Item
-              v-for="(item, index) in breadcrumbs"
-              :key="item.id ?? 'root'"
-            >
-              <span
-                class="cursor-pointer transition-all duration-200 hover:text-blue-600"
-                :class="{
-                  'text-3xl font-bold text-slate-900':
-                    index === breadcrumbs.length - 1,
-                  'text-xl font-medium text-slate-500':
-                    index !== breadcrumbs.length - 1,
-                }"
-                @click="handleBreadcrumbClick(item, index)"
+        <!-- Breadcrumb + Title + 存储用量 -->
+        <div class="mb-2 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <IconifyIcon
+              v-if="currentFolderId !== null"
+              icon="ant-design:arrow-left-outlined"
+              class="cursor-pointer text-xl text-slate-500 transition-colors hover:text-blue-600"
+              @click="handleNavUp"
+            />
+            <Breadcrumb separator=">">
+              <Breadcrumb.Item
+                v-for="(item, index) in breadcrumbs"
+                :key="item.id ?? 'root'"
               >
-                {{ item.name }}
-              </span>
-            </Breadcrumb.Item>
-          </Breadcrumb>
+                <span
+                  class="cursor-pointer transition-all duration-200 hover:text-blue-600"
+                  :class="{
+                    'text-3xl font-bold text-slate-900':
+                      index === breadcrumbs.length - 1,
+                    'text-xl font-medium text-slate-500':
+                      index !== breadcrumbs.length - 1,
+                  }"
+                  @click="handleBreadcrumbClick(item, index)"
+                >
+                  {{ item.name }}
+                </span>
+              </Breadcrumb.Item>
+            </Breadcrumb>
+          </div>
+          <!-- 存储用量（标题右侧） -->
+          <div v-if="isLoggedIn" class="flex items-center gap-3">
+            <IconifyIcon icon="ant-design:cloud-outlined" class="text-lg text-slate-400" />
+            <div class="w-40 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div
+                class="h-full rounded-full transition-all duration-500"
+                :class="storagePercent > 90 ? 'bg-red-500' : storagePercent > 70 ? 'bg-amber-500' : 'bg-blue-500'"
+                :style="{ width: `${Math.max(storagePercent, 1)}%` }"
+              />
+            </div>
+            <span class="text-sm font-semibold whitespace-nowrap" :class="storagePercent > 90 ? 'text-red-600' : 'text-slate-600'">
+              {{ storageUsedStr }} / {{ storageLimitStr }}
+            </span>
+          </div>
         </div>
         <p class="max-w-2xl text-slate-500">
           管理您的个人数据文件，支持上传、下载和文件夹管理。
@@ -470,29 +522,56 @@ const handlePreview = (file: FileItem) => {
     </div>
 
     <!-- File List Content -->
-    <div class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <FileTable
-          v-if="viewMode === 'list'"
-          :files="files"
-          :loading="loading"
-          @selection-change="handleSelectionChange"
-          @download="handleDownload"
-          @delete="handleDelete"
-          @enter="handleEnterFolder"
-          @rename="handleRename"
-          @move="handleMove"
-          @preview="handlePreview"
-        />
-        <FileGrid
-          v-else
-          :files="files"
-          @selection-change="handleSelectionChange"
-          @download="handleDownload"
-          @delete="handleDelete"
-          @enter="handleEnterFolder"
-          @preview="handlePreview"
-        />
+    <div
+      class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
+      <div class="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm" :class="isDragging ? 'ring-2 ring-blue-400 border-blue-300' : ''">
+        <!-- 拖拽上传遮罩 -->
+        <Transition name="fade">
+          <div
+            v-if="isDragging"
+            class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-blue-50/90 backdrop-blur-sm"
+          >
+            <IconifyIcon icon="ant-design:cloud-upload-outlined" class="text-5xl text-blue-400 mb-3" />
+            <p class="text-lg font-semibold text-blue-600">松开即可上传</p>
+            <p class="text-sm text-blue-400">文件将上传到当前文件夹</p>
+          </div>
+        </Transition>
+
+        <!-- 空状态 -->
+        <div v-if="!loading && files.length === 0" class="flex flex-col items-center justify-center py-20">
+          <IconifyIcon icon="ant-design:inbox-outlined" class="text-6xl text-slate-200 mb-4" />
+          <p class="text-base font-medium text-slate-400">这里还没有文件</p>
+          <p class="text-sm text-slate-300 mt-1">拖拽文件到此处或点击上方「上传」按钮</p>
+        </div>
+
+        <!-- 文件列表 -->
+        <template v-else>
+          <FileTable
+            v-if="viewMode === 'list'"
+            :files="files"
+            :loading="loading"
+            @selection-change="handleSelectionChange"
+            @download="handleDownload"
+            @delete="handleDelete"
+            @enter="handleEnterFolder"
+            @rename="handleRename"
+            @move="handleMove"
+            @preview="handlePreview"
+          />
+          <FileGrid
+            v-else
+            :files="files"
+            @selection-change="handleSelectionChange"
+            @download="handleDownload"
+            @delete="handleDelete"
+            @enter="handleEnterFolder"
+            @preview="handlePreview"
+          />
+        </template>
       </div>
     </div>
 
@@ -539,3 +618,13 @@ const handlePreview = (file: FileItem) => {
   </div>
 </template>
 
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>

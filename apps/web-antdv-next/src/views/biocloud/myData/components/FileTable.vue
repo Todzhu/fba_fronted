@@ -55,6 +55,9 @@ const getFileIcon = (type: string, icon?: string) => {
     case 'audio': return 'ant-design:sound-outlined';
     case 'video': return 'ant-design:video-camera-outlined';
     case 'code': return 'ant-design:code-outlined';
+    case 'data': return 'ant-design:database-outlined';
+    case 'rdata': return 'ant-design:experiment-outlined';
+    case 'bio': return 'ant-design:deployment-unit-outlined';
     default: return 'ant-design:file-outlined';
   }
 };
@@ -70,6 +73,9 @@ const getIconColor = (icon?: string) => {
     case 'audio': return '#faad14';
     case 'video': return '#722ed1';
     case 'code': return '#13c2c2';
+    case 'data': return '#10b981';
+    case 'rdata': return '#8b5cf6';
+    case 'bio': return '#0ea5e9';
     default: return '#8c8c8c';
   }
 }
