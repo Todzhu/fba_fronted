@@ -27,6 +27,16 @@ const routes: RouteRecordRaw[] = [
       },
       // Placeholder routes for future implementation
       {
+        path: 'tool/cell-communication',
+        name: 'CellCommunication',
+        component: () =>
+          import('#/views/biocloud/cloudTools/cellComm/index.vue'),
+        meta: {
+          title: '细胞通讯分析 - BioCloud',
+          ignoreAccess: true,
+        },
+      },
+      {
         path: 'tool/:id',
         name: 'ToolUsage',
         component: () => import('#/views/biocloud/cloudTools/detail.vue'),

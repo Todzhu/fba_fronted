@@ -55,6 +55,9 @@ const allFiles = ref<FileItem[]>([]);
 const selectedFiles = ref<FileItem[]>([]);
 const viewMode = ref('list');
 const activeTab = ref<'files' | 'import'>('files');
+const currentPage = ref(1);
+const pageSize = ref(10);
+const totalFiles = ref(0);
 const newFolderModalOpen = ref(false);
 const uploadModalOpen = ref(false);
 const uploading = ref(false);
@@ -150,7 +153,10 @@ const fetchFiles = async () => {
   }
   loading.value = true;
   try {
-    const params: { keyword?: string; parent_id?: number } = {};
+    const params: { keyword?: string; page?: number; page_size?: number; parent_id?: number } = {
+      page: currentPage.value,
+      page_size: pageSize.value,
+    };
     if (searchKeyword.value.trim()) {
       params.keyword = searchKeyword.value.trim();
     } else if (currentFolderId.value !== null) {
@@ -159,6 +165,7 @@ const fetchFiles = async () => {
     // 不传 parent_id 时，后端默认返回根目录
     const res = await getMyDataFiles(params);
     allFiles.value = res.items.map((item) => transformFileItem(item));
+    totalFiles.value = res.total;
     // 清空选中状态，防止删除文件后选中栏残留
     selectedFiles.value = [];
   } catch (error: any) {
@@ -215,7 +222,14 @@ const handleDrop = (e: DragEvent) => {
 // Handlers
 const handleSearch = (value: string) => {
   searchKeyword.value = value;
+  currentPage.value = 1;
   selectedFiles.value = [];
+  fetchFiles();
+};
+
+const handlePageChange = (page: number, size: number) => {
+  currentPage.value = page;
+  pageSize.value = size;
   fetchFiles();
 };
 
@@ -424,6 +438,7 @@ const folderTreeData = computed(() => {
 const handleEnterFolder = (folder: FileItem) => {
   currentFolderId.value = Number(folder.id);
   breadcrumbs.value.push({ id: Number(folder.id), name: folder.name });
+  currentPage.value = 1;
   selectedFiles.value = [];
   searchKeyword.value = '';
   fetchFiles();
@@ -435,6 +450,7 @@ const handleBreadcrumbClick = (
 ) => {
   currentFolderId.value = item.id;
   breadcrumbs.value = breadcrumbs.value.slice(0, index + 1);
+  currentPage.value = 1;
   selectedFiles.value = [];
   searchKeyword.value = '';
   fetchFiles();
@@ -576,6 +592,9 @@ const handlePreview = (file: FileItem) => {
                   v-if="viewMode === 'list'"
                   :files="files"
                   :loading="loading"
+                  :current-page="currentPage"
+                  :page-size="pageSize"
+                  :total="totalFiles"
                   @selection-change="handleSelectionChange"
                   @download="handleDownload"
                   @delete="handleDelete"
@@ -583,6 +602,7 @@ const handlePreview = (file: FileItem) => {
                   @rename="handleRename"
                   @move="handleMove"
                   @preview="handlePreview"
+                  @page-change="handlePageChange"
                 />
                 <FileGrid
                   v-else

@@ -209,63 +209,7 @@ const capabilities = [
   },
 ];
 
-// ========== 热门工具（画廊式） ==========
-const galleryTools = [
-  {
-    name: '火山图',
-    category: '蛋白组学',
-    image: '/images/tools/previews/volcano-plot-preview.png',
-    color: 'text-orange-400',
-    bgGradient: 'from-orange-500/20 to-amber-500/10',
-    borderColor: 'border-orange-500/20',
-    views: 4885,
-  },
-  {
-    name: '主成分分析',
-    category: '转录组学',
-    image: '/images/tools/previews/pca-analysis-preview.png',
-    color: 'text-blue-400',
-    bgGradient: 'from-blue-500/20 to-indigo-500/10',
-    borderColor: 'border-blue-500/20',
-    views: 9803,
-  },
-  {
-    name: 'Ro/e 分析',
-    category: '单细胞',
-    image: '/images/tools/previews/roe-analysis-preview.png',
-    color: 'text-emerald-400',
-    bgGradient: 'from-emerald-500/20 to-teal-500/10',
-    borderColor: 'border-emerald-500/20',
-    views: 1200,
-  },
-  {
-    name: 'Heatmap 热图',
-    category: '转录组学',
-    image: '/images/tools/previews/heatmap-preview.png',
-    color: 'text-purple-400',
-    bgGradient: 'from-purple-500/20 to-violet-500/10',
-    borderColor: 'border-purple-500/20',
-    views: 7755,
-  },
-  {
-    name: '差异基因火山图',
-    category: '单细胞',
-    image: '/images/tools/previews/deg-volcano-preview.png',
-    color: 'text-rose-400',
-    bgGradient: 'from-rose-500/20 to-pink-500/10',
-    borderColor: 'border-rose-500/20',
-    views: 575,
-  },
-  {
-    name: 'Monocle2 拟时序',
-    category: '单细胞',
-    image: '/images/tools/previews/monocle-trajectory-preview.png',
-    color: 'text-cyan-400',
-    bgGradient: 'from-cyan-500/20 to-sky-500/10',
-    borderColor: 'border-cyan-500/20',
-    views: 4733,
-  },
-];
+
 
 // ========== 媒体/教程内容 ==========
 const mediaContent = [
@@ -292,12 +236,7 @@ const mediaContent = [
 const goToTools = () => router.push('/tools');
 const goToFeature = (path: string) => router.push(path);
 
-// 格式化浏览量
-const formatViews = (views: number): string => {
-  if (views >= 10_000) return `${(views / 10_000).toFixed(1)}W`;
-  if (views >= 1000) return `${(views / 1000).toFixed(1)}K`;
-  return String(views);
-};
+
 </script>
 
 <template>
@@ -665,103 +604,11 @@ const formatViews = (views: number): string => {
       </div>
     </section>
 
-    <!-- ========== 热门工具画廊（浅色主题） ========== -->
-    <section
-      class="relative overflow-hidden bg-gradient-to-b from-slate-50/80 via-white to-blue-50/40 py-24"
-    >
-      <!-- 柔和装饰光源 -->
-      <div
-        class="pointer-events-none absolute left-1/4 top-0 h-[400px] w-[400px] rounded-full bg-blue-100/40 blur-[120px]"
-      ></div>
-      <div
-        class="pointer-events-none absolute bottom-0 right-1/4 h-[350px] w-[350px] rounded-full bg-purple-100/30 blur-[120px]"
-      ></div>
 
-      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <!-- 标题 -->
-        <div class="mb-16 text-center">
-          <span
-            class="mb-3 inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-4 py-1.5 text-sm font-semibold text-purple-600"
-          >
-            <FlaskConical class="h-3.5 w-3.5" />
-            工具集锦
-          </span>
-          <h2 class="mt-5 text-3xl font-bold text-slate-900 sm:text-4xl">
-            热门分析工具
-          </h2>
-          <p class="mx-auto mt-4 max-w-2xl text-base text-slate-500">
-            覆盖转录组、单细胞、蛋白组学等多领域，一键生成出版级图表。
-          </p>
-        </div>
-
-        <!-- 工具网格 -->
-        <div class="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3">
-          <div
-            v-for="tool in galleryTools"
-            :key="tool.name"
-            @click="goToTools"
-            class="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-200/50"
-          >
-            <!-- 工具预览区 -->
-            <div
-              class="relative h-40 overflow-hidden sm:h-48"
-            >
-              <!-- 底色渐变层 -->
-              <div
-                class="absolute inset-0 bg-gradient-to-br"
-                :class="tool.bgGradient"
-              ></div>
-              <!-- 分析结果预览图 -->
-              <img
-                :src="tool.image"
-                :alt="tool.name"
-                class="absolute inset-0 h-full w-full object-cover opacity-90 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100"
-              />
-              <!-- 渐变叠加层，增强底部文字可读性 -->
-              <div
-                class="absolute inset-0 bg-gradient-to-t from-slate-900/50 via-transparent to-transparent"
-              ></div>
-
-              <!-- 分类标签 -->
-              <div
-                class="absolute left-3 top-3 z-10 rounded-full border border-white/20 bg-white/15 px-3 py-1 text-xs font-semibold backdrop-blur-md"
-                :class="tool.color"
-              >
-                {{ tool.category }}
-              </div>
-            </div>
-
-            <!-- 底部信息 -->
-            <div class="flex items-center justify-between px-4 py-4">
-              <h3
-                class="text-sm font-bold text-slate-800 transition-colors group-hover:text-blue-600 sm:text-base"
-              >
-                {{ tool.name }}
-              </h3>
-              <div class="flex items-center gap-1 text-xs text-slate-400">
-                <Users class="h-3.5 w-3.5" />
-                {{ formatViews(tool.views) }}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 查看更多 -->
-        <div class="mt-14 text-center">
-          <button
-            @click="goToTools"
-            class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-3 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-300 hover:border-blue-300 hover:text-blue-600 hover:shadow-md"
-          >
-            查看全部工具
-            <ArrowRight class="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </section>
 
     <!-- ========== 教程媒体内容 ========== -->
     <section
-      class="bg-gradient-to-b from-slate-50/60 via-white to-slate-50/40 py-24"
+      class="bg-gradient-to-b from-slate-50/60 via-white to-slate-50/40 pb-24"
     >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <!-- 标题 -->

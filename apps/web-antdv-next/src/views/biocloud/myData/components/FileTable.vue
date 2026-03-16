@@ -8,10 +8,18 @@ import type { Key } from 'ant-design-vue/es/table/interface';
 interface Props {
   files: FileItem[];
   loading?: boolean;
+  currentPage?: number;
+  pageSize?: number;
+  total?: number;
 }
 
-const props = defineProps<Props>();
-const emit = defineEmits(['selection-change', 'download', 'delete', 'enter', 'rename', 'move', 'preview']);
+const props = withDefaults(defineProps<Props>(), {
+  loading: false,
+  currentPage: 1,
+  pageSize: 10,
+  total: 0,
+});
+const emit = defineEmits(['selection-change', 'download', 'delete', 'enter', 'rename', 'move', 'preview', 'page-change']);
 
 const columns = [
   {
@@ -80,6 +88,17 @@ const getIconColor = (icon?: string) => {
   }
 }
 
+// 服务端分页配置
+const paginationConfig = computed(() => ({
+  current: props.currentPage,
+  pageSize: props.pageSize,
+  total: props.total,
+  showSizeChanger: false,
+  onChange: (page: number, size: number) => {
+    emit('page-change', page, size);
+  },
+}));
+
 const rowSelection = computed(() => ({
   onChange: (_selectedRowKeys: Key[], selectedRows: FileItem[]) => {
     emit('selection-change', selectedRows);
@@ -94,7 +113,7 @@ const rowSelection = computed(() => ({
     :loading="loading"
     :row-selection="rowSelection"
     :scroll="{ x: 1000 }"
-    :pagination="{ pageSize: 10 }"
+    :pagination="paginationConfig"
     row-key="id"
     class="file-table"
   >
