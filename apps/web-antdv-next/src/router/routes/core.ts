@@ -116,6 +116,15 @@ const coreRoutes: RouteRecordRaw[] = [
           hideInMenu: true,
         },
       },
+      {
+        name: 'AnalysisTasksCore',
+        path: 'tasks',
+        component: () => import('#/views/biocloud/cloudTools/tasks/index.vue'),
+        meta: {
+          title: '任务中心',
+          hideInMenu: true,
+        },
+      },
     ],
   },
 ];

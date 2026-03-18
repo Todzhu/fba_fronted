@@ -314,12 +314,16 @@ const submitAnalysis = async () => {
     taskId.value = String(response.task_id);
     message.destroy();
 
-    // 长时间任务：跳转到任务中心
+      // 长时间任务：跳转到任务中心
     if (response.is_long_running) {
       message.success('任务已提交，请在任务中心查看进度');
       analyzing.value = false;
+      // 根据当前路由判断跳转目标：用户端跳 /tasks，后台管理端跳 /analysis/tasks
+      const tasksPath = route.path.startsWith('/analysis/')
+        ? '/analysis/tasks'
+        : '/tasks';
       router.push({
-        path: '/analysis/tasks',
+        path: tasksPath,
         query: { highlight: String(response.task_id) },
       });
       return;
