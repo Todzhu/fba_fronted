@@ -165,6 +165,7 @@ const updateField = (key: string, value: unknown) => {
 // 确定渲染的组件类型
 const getWidgetType = (prop: SchemaPropertyWithKey): string => {
   if (prop.widget) return prop.widget;
+  if (prop.widget === 'multi-select') return 'multi-select';
   if (prop.enum) return 'select';
   if (prop.type === 'boolean') return 'switch';
   if (prop.type === 'integer' || prop.type === 'number') return 'slider';
@@ -291,6 +292,28 @@ const handleSubmit = () => {
                   :value="(modelValue[prop.key] as string) ?? prop.default"
                   class="select-input"
                   @change="(val) => updateField(prop.key, val)"
+                >
+                  <Select.Option
+                    v-for="opt in prop.enum"
+                    :key="opt"
+                    :value="opt"
+                  >
+                    {{ opt }}
+                  </Select.Option>
+                </Select>
+              </template>
+
+              <!-- 多选下拉（值以逗号分隔字符串存储，兼容 R 脚本） -->
+              <template
+                v-else-if="getWidgetType(prop) === 'multi-select'"
+              >
+                <Select
+                  :value="typeof modelValue[prop.key] === 'string' && modelValue[prop.key] ? (modelValue[prop.key] as string).split(',') : (Array.isArray(modelValue[prop.key]) ? modelValue[prop.key] : [])"
+                  class="select-input"
+                  mode="multiple"
+                  :max-tag-count="3"
+                  placeholder="请选择（可多选）"
+                  @change="(val) => updateField(prop.key, Array.isArray(val) ? val.join(',') : val)"
                 >
                   <Select.Option
                     v-for="opt in prop.enum"

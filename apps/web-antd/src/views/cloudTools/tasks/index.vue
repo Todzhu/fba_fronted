@@ -134,6 +134,11 @@ const viewTask = (task: TaskStatusResponse) => {
   });
 };
 
+// 进入任务详情页
+const goToTaskDetail = (task: TaskStatusResponse) => {
+  router.push({ name: 'TaskDetail', params: { taskId: String(task.id) } });
+};
+
 // 删除单个任务
 const handleDelete = async (task: TaskStatusResponse) => {
   try {
@@ -319,11 +324,12 @@ onUnmounted(() => {
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'task_name'">
-            <Typography.Text
-              :content="record.task_name || `任务 #${record.id}`"
-              :editable="{ onChange: (val: string) => handleTaskNameChange(record.id, val) }"
-              class="task-name"
-            />
+            <a
+              class="task-name-link"
+              @click="goToTaskDetail(record as TaskStatusResponse)"
+            >
+              {{ record.task_name || `任务 #${record.id}` }}
+            </a>
           </template>
 
           <template v-else-if="column.key === 'tool_name'">
@@ -574,6 +580,21 @@ onUnmounted(() => {
   color: #6b7280;
   background: #f9fafb;
   border-radius: 8px;
+}
+
+.task-name-link {
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--primary-color);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.task-name-link:hover {
+  text-decoration: underline;
 }
 
 .log-meta p {

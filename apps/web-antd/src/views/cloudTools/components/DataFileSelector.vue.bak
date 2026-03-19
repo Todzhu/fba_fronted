@@ -9,7 +9,7 @@
  * - 示例数据按 key 匹配加载
  */
 import { previewRdsFile } from '#/api/analysis-tools';
-import { uploadFile, uploadTempFile } from '#/api/user-file';
+import { uploadFile } from '#/api/user-file';
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
@@ -177,7 +177,6 @@ const rdsMetaColumns = [
 
 // 触发 RDS 预览
 const triggerRdsPreview = async (fileUrl: string) => {
-  console.log('[RDS] triggerRdsPreview called with:', fileUrl);
   rdsPreviewLoading.value = true;
   rdsPreview.value = null;
   try {
@@ -185,22 +184,16 @@ const triggerRdsPreview = async (fileUrl: string) => {
     const resp = await baseRequestClient.post(
       '/api/v1/sys/analysis-tools/tools/preview-rds',
       { file_url: fileUrl },
-      { timeout: 600000 },
     );
-    console.log('[RDS] raw resp:', JSON.stringify(resp?.data).substring(0, 300));
-    console.log('[RDS] resp.status:', resp?.status);
     const json = resp.data || resp;
     // 从 {code, data, msg} 中提取 data
     const previewData = json?.data ?? json;
-    console.log('[RDS] previewData keys:', previewData ? Object.keys(previewData) : 'null');
     if (previewData && previewData.n_cells !== undefined) {
       rdsPreview.value = previewData;
-      console.log('[RDS] preview SET:', previewData.n_cells, 'cells');
-    } else {
-      console.warn('[RDS] previewData missing n_cells, full resp:', JSON.stringify(json).substring(0, 500));
     }
+    console.log('[RDS] preview loaded:', previewData?.n_cells, 'cells');
   } catch (e: any) {
-    console.error('[RDS] preview failed:', e?.message || e, e?.response?.status, e?.response?.data);
+    console.error('[RDS] preview failed:', e?.message || e);
   }
   rdsPreviewLoading.value = false;
 };
@@ -282,7 +275,7 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.fileUrl = example.url;
       console.log(`Loaded binary example for ${key}: ${displayName}`);
       // 如果是 RDS 文件，先加载预览再标记为完成
-      if ((urlFileName.toLowerCase().endsWith('.rds') || urlFileName.toLowerCase().endsWith('.h5ad') || example.url?.toLowerCase().includes('.rds') || example.url?.toLowerCase().includes('.h5ad')) && example.url) {
+      if ((urlFileName.toLowerCase().endsWith('.rds') || example.url?.toLowerCase().includes('.rds')) && example.url) {
         await triggerRdsPreview(example.url);
       }
       updateFileId(key, Date.now());
@@ -401,7 +394,7 @@ const handleBinaryImportForKey = async (key: string, file: File) => {
 
   const fileData = fileDataMap.value[key]!;
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const isRds = ext === 'rds' || ext === 'rdata' || ext === 'rda' || ext === 'h5ad';
+  const isRds = ext === 'rds' || ext === 'rdata' || ext === 'rda';
   
   // 如果是 RDS 文件，先设 loading 防止绿色卡片提前显示
   if (isRds) {
@@ -418,12 +411,12 @@ const handleBinaryImportForKey = async (key: string, file: File) => {
   if (isRds) {
     try {
       message.loading({ content: '正在上传并解析文件...', key: 'fileUploadPreview', duration: 0 });
-      const res = await uploadTempFile(file);
-      console.log('uploadTempFile response:', JSON.stringify(res));
-      // uploadTempFile 返回 temp_path，直接传给后端
-      const tempPath = (res as any)?.temp_path;
-      if (tempPath) {
-        const fileUrl = tempPath;
+      const res = await uploadFile(file);
+      console.log('uploadFile response:', JSON.stringify(res));
+      // uploadFile 返回 UserFile 对象，用 id 构造下载 URL 供后端读取
+      const fileId = (res as any)?.id;
+      if (fileId) {
+        const fileUrl = `/api/v1/sys/my-data/download/${fileId}`;
         fileData.fileUrl = fileUrl;
         await triggerRdsPreview(fileUrl);
         message.success({ content: `${file.name} 已加载`, key: 'fileUploadPreview' });
@@ -577,7 +570,7 @@ const handlePlatformFileSelect = async (file: any) => {
   
   const key = currentSelectorKey.value;
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const isRds = ext === 'rds' || ext === 'rdata' || ext === 'rda' || ext === 'h5ad';
+  const isRds = ext === 'rds' || ext === 'rdata' || ext === 'rda';
   
   // 如果是 RDS 文件，先设 loading 防止绿色卡片提前显示
   if (isRds) {
@@ -597,7 +590,7 @@ const handlePlatformFileSelect = async (file: any) => {
   }
   
   // 如果是 RDS 文件，用 file.id 构造下载 URL 触发 metadata 预览
-  if ((ext === 'rds' || ext === 'rdata' || ext === 'rda' || ext === 'h5ad') && file.id) {
+  if ((ext === 'rds' || ext === 'rdata' || ext === 'rda') && file.id) {
     const fileUrl = `/api/v1/sys/my-data/download/${file.id}`;
     fileDataMap.value[key]!.fileUrl = fileUrl;
     message.loading({ content: '正在解析文件元数据...', key: 'platformFilePreview', duration: 0 });
@@ -640,7 +633,7 @@ const getFileIds = (): Record<string, number> => {
    return ids;
 }
 
-defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, getFileIds, rdsPreview });
+defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, getFileIds });
 
 </script>
 

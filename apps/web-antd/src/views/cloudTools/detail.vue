@@ -191,7 +191,7 @@ const dynamicParamSchema = computed(() => {
   const schema = structuredClone(toRaw(tool.value.param_schema));
 
   if (schema.properties) {
-    for (const prop of Object.values(schema.properties) as any) {
+    for (const [propKey, prop] of Object.entries(schema.properties) as any) {
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
@@ -202,6 +202,38 @@ const dynamicParamSchema = computed(() => {
         if (headers.length > 0) {
           prop.type = 'string';
           prop.enum = headers;
+        }
+      }
+
+      // === metadata 联动：根据 RDS/H5AD 预览数据动态注入选项 ===
+      const preview = dataFileSelectorRef.value?.rdsPreview;
+      if (preview?.columns && preview.columns.length > 0) {
+        const key = propKey as string;
+        // celltype_col: 从 metadata 的 category 列中选择
+        if (key === 'celltype_col') {
+          const categoryCols = preview.columns
+            .filter((col: any) => col.type === 'category')
+            .map((col: any) => col.name);
+          if (categoryCols.length > 0) {
+            prop.type = 'string';
+            prop.enum = categoryCols;
+            prop.widget = 'select';
+          }
+        }
+        // celltype: 根据 celltype_col 选中的列，填充该列的唯一值
+        if (key === 'celltype') {
+          const selectedCol = formParams.value['celltype_col'] as string;
+          if (selectedCol) {
+            const colMeta = preview.columns.find((col: any) => col.name === selectedCol);
+            if (colMeta?.examples) {
+              const examples = Array.isArray(colMeta.examples) ? colMeta.examples : [];
+              if (examples.length > 0) {
+                prop.type = 'string';
+                prop.enum = examples;
+                prop.widget = 'multi-select';
+              }
+            }
+          }
         }
       }
     }

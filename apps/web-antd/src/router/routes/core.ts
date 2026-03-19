@@ -135,6 +135,16 @@ const coreRoutes: RouteRecordRaw[] = [
           hideInMenu: true,
         },
       },
+      {
+        name: 'TaskDetail',
+        path: 'tasks/:taskId',
+        component: () => import('#/views/cloudTools/tasks/TaskDetail.vue'),
+        meta: {
+          title: '任务详情',
+          hideInMenu: true,
+          maxNumOfOpenTab: 1,
+        },
+      },
     ],
   },
 ];

@@ -362,3 +362,22 @@ export async function previewRdsFile(fileUrl: string) {
     }>;
   }>('/api/v1/sys/analysis-tools/tools/preview-rds', { file_url: fileUrl });
 }
+
+
+/**
+ * 任务结果文件信息
+ */
+export interface TaskFile {
+    name: string;
+    size: number;
+    type: 'image' | 'table' | 'pdf' | 'binary';
+}
+
+/**
+ * 获取任务结果文件列表
+ */
+export async function getTaskFiles(taskId: number) {
+    return requestClient.get<TaskFile[]>(
+        `/api/v1/sys/analysis-tools/tasks/${taskId}/result-files`,
+    );
+}
