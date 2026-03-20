@@ -108,6 +108,7 @@ interface ParamItem {
   step?: number;
   group: string; // 分组，默认 "通用参数"
   format?: string;
+  depends_on?: string; // 依赖的参数 key（用于 metadata_value_select 联动）
 }
 const paramItems = ref<ParamItem[]>([]);
 
@@ -123,6 +124,8 @@ const typeWidgetOptions = [
       { value: 'palette_select', label: '调色板选择器' },
       { value: 'color', label: '颜色选择器' },
       { value: 'column_select', label: '列选择器' },
+      { value: 'metadata_column_select', label: 'Metadata列选择（自动联动）' },
+      { value: 'metadata_value_select', label: 'Metadata值选择（依赖联动）' },
     ],
   },
   {
@@ -233,6 +236,7 @@ watch(
           step: p.step,
           group: p.group || '通用参数',
           format: p.format,
+          depends_on: p.depends_on,
         };
       });
     } else {
@@ -485,6 +489,7 @@ const handleSave = async () => {
     if (p.minimum !== undefined) prop.minimum = p.minimum;
     if (p.maximum !== undefined) prop.maximum = p.maximum;
     if (p.step !== undefined) prop.step = p.step;
+    if (p.depends_on) prop.depends_on = p.depends_on;
     properties[p.key] = prop;
     order.push(p.key); // 按顺序添加 key
   }
@@ -1143,27 +1148,29 @@ const handleImportConfig = async (file: File) => {
 
               <Form.Item label="示例文件" class="form-item">
                 <div class="file-upload-row">
+                  <Input
+                    v-model:value="item.url"
+                    class="file-url-input"
+                    placeholder="相对路径，如 scRNA/scTenifoldKnk/data/demo.rds"
+                  />
                   <Upload
                     :before-upload="
                       (file: File) => handleExampleUpload(index, file)
                     "
                     :show-upload-list="false"
-                    accept=".csv,.txt,.xlsx,.xls,.tsv"
+                    accept=".csv,.txt,.xlsx,.xls,.tsv,.rds,.h5ad,.rda"
                   >
-                    <Button :loading="item.uploading">
+                    <Button :loading="item.uploading" size="small">
                       {{
                         item.uploading
                           ? '上传中...'
-                          : item.fileName || '选择文件'
+                          : '上传'
                       }}
                     </Button>
                   </Upload>
-                  <Input
-                    v-model:value="item.url"
-                    class="file-url-input"
-                    placeholder="文件存储路径"
-                    :readonly="false"
-                  />
+                </div>
+                <div v-if="item.url" class="path-hint">
+                  完整 API 路径: {{ item.url.startsWith('/api/') ? item.url : `/api/v1/sys/analysis-tools/tools/data/${item.url}` }}
                 </div>
               </Form.Item>
 
@@ -1433,5 +1440,12 @@ const handleImportConfig = async (file: File) => {
   margin-left: 12px;
   font-size: 12px;
   color: #64748b;
+}
+
+.path-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  color: #94a3b8;
 }
 </style>

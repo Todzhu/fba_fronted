@@ -39,6 +39,8 @@ interface SchemaProperty {
   step?: number;
   group?: string; // 分组名称
   required?: boolean; // 支持属性内部的 required 标记
+  depends_on?: string; // 依赖的参数 key（用于 metadata_value_select 等联动）
+  fileKey?: string; // 绑定的输入文件 key（用于 column_select）
 }
 
 interface SchemaPropertyWithKey extends SchemaProperty {
@@ -164,6 +166,14 @@ const updateField = (key: string, value: unknown) => {
 
 // 确定渲染的组件类型
 const getWidgetType = (prop: SchemaPropertyWithKey): string => {
+  // metadata 联动 widget：有选项时降级为 select/multi-select，无选项时降级为 text
+  if (prop.widget === 'metadata_column_select') {
+    return prop.enum && prop.enum.length > 0 ? 'select' : 'text';
+  }
+  if (prop.widget === 'metadata_value_select') {
+    return prop.enum && prop.enum.length > 0 ? 'multi-select' : 'text';
+  }
+
   if (prop.widget) return prop.widget;
   if (prop.widget === 'multi-select') return 'multi-select';
   if (prop.enum) return 'select';

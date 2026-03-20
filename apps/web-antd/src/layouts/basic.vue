@@ -17,6 +17,7 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 
 import { router } from '#/router';
+import { getTaskCenterPath } from '#/utils/route-helpers';
 import { useAuthStore } from '#/store';
 import LoginForm from '#/views/_core/authentication/login.vue';
 import {
@@ -177,7 +178,7 @@ async function handleNoticeRead(item: NotificationItem) {
   if (item.relatedId) {
     messageModalApi.close();
     // 使用 replace 替换当前路由，避免创建重复标签
-    router.replace('/analysis/tasks');
+    router.replace(getTaskCenterPath(router));
   }
 }
 

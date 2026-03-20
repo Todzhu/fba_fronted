@@ -8,6 +8,8 @@ import type {
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
+import { getTaskCenterPath } from '#/utils/route-helpers';
+
 import {
   WorkbenchHeader,
   WorkbenchProject,
@@ -82,7 +84,7 @@ const projectItems: WorkbenchProjectItem[] = [
   },
 ];
 
-const quickNavItems: WorkbenchQuickNavItem[] = [
+const quickNavItems = computed<WorkbenchQuickNavItem[]>(() => [
   {
     color: '#1677ff',
     icon: 'mdi:toolbox-outline',
@@ -99,7 +101,7 @@ const quickNavItems: WorkbenchQuickNavItem[] = [
     color: '#fa8c16',
     icon: 'mdi:clipboard-list-outline',
     title: '任务中心',
-    url: '/analysis/tasks',
+    url: getTaskCenterPath(router),
   },
   {
     color: '#722ed1',
@@ -119,7 +121,7 @@ const quickNavItems: WorkbenchQuickNavItem[] = [
     title: '个人中心',
     url: '/profile',
   },
-];
+]);
 
 const trendItems = ref<WorkbenchTrendItem[]>([]);
 const taskStats = ref({ total: 0, completed: 0, running: 0, failed: 0 });

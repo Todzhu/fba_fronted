@@ -12,6 +12,8 @@ import { onMounted, ref, watch } from 'vue';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import { useAccessStore } from '@vben/stores';
 
+import { useAppConfig } from '@vben/hooks';
+
 // @ts-ignore
 import { Icon } from '@iconify/vue';
 import {
@@ -25,6 +27,8 @@ import {
 } from 'ant-design-vue';
 
 import { getTaskFileUrl } from '#/api/analysis-tools';
+
+const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
 
 interface OutputItem {
   key: string;
@@ -74,54 +78,56 @@ const fetchOutputData = async () => {
       const url = buildFileUrl(output.path);
       if (!url) continue;
 
-      // 使用 store 获取 Token
-      const accessStore = useAccessStore();
-      const token = accessStore.accessToken;
-
-      const headers: HeadersInit = {};
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch(url, { headers });
-
-      if (!response.ok) {
-        console.error(
-          `Fetch failed for ${url}: ${response.status} ${response.statusText}`,
-        );
-        if (response.status === 401) {
-          fetchErrors.value[output.key] = '认证失败，请重新登录';
-        } else if (response.status === 404) {
-          fetchErrors.value[output.key] = '结果文件不存在，分析可能失败';
-        } else {
-          fetchErrors.value[output.key] = `加载失败 (${response.status})`;
+      try {
+        // 获取认证 Token
+        const accessStore = useAccessStore();
+        const token = accessStore.accessToken;
+        const headers: HeadersInit = {};
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
         }
-        continue;
-      }
 
-      switch (output.type) {
-        case 'echarts': {
-          outputData.value[output.key] = await response.json();
+        // 拼接完整 URL（确保走 Vite 代理）
+        const fullUrl = `${apiURL}${url}`;
 
-          break;
-        }
-        case 'image': {
-          const blob = await response.blob();
-          const existingUrl = imageBlobUrls.value[output.key];
-          if (existingUrl) {
-            URL.revokeObjectURL(existingUrl);
+        const response = await fetch(fullUrl, { headers });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            fetchErrors.value[output.key] = '认证失败，请重新登录';
+          } else if (response.status === 404) {
+            fetchErrors.value[output.key] = '结果文件不存在';
+          } else {
+            fetchErrors.value[output.key] = `加载失败 (${response.status})`;
           }
-          imageBlobUrls.value[output.key] = URL.createObjectURL(blob);
-
-          break;
+          console.error(`Fetch failed: ${fullUrl} → ${response.status}`);
+          continue;
         }
-        case 'table': {
-          const text = await response.text();
-          outputData.value[output.key] = parseCSV(text || '');
 
-          break;
+        switch (output.type) {
+          case 'echarts': {
+            outputData.value[output.key] = await response.json();
+            break;
+          }
+          case 'image': {
+            const blob = await response.blob();
+            const existingUrl = imageBlobUrls.value[output.key];
+            if (existingUrl) {
+              URL.revokeObjectURL(existingUrl);
+            }
+            imageBlobUrls.value[output.key] = URL.createObjectURL(blob);
+            break;
+          }
+          case 'table': {
+            const text = await response.text();
+            outputData.value[output.key] = parseCSV(text || '');
+            break;
+          }
+          // No default
         }
-        // No default
+      } catch (error: any) {
+        fetchErrors.value[output.key] = `加载失败 (${error?.message || '未知错误'})`;
+        console.error(`Fetch error for ${output.path}:`, error);
       }
     }
 
@@ -137,21 +143,48 @@ const fetchOutputData = async () => {
   }
 };
 
-// 解析 CSV
+// 解析 CSV（自动检测分隔符：逗号或 tab）
 const parseCSV = (text: string): { columns: any[]; data: any[] } => {
   const lines = text.trim().split('\n');
   if (lines.length === 0) return { columns: [], data: [] };
 
-  const headers = lines[0]!.split('\t');
+  // 自动检测分隔符：如果第一行逗号比 tab 多，则用逗号
+  const firstLine = lines[0]!;
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  const delimiter = commaCount > tabCount ? ',' : '\t';
+
+  // 解析一行（处理引号包裹的字段）
+  const parseLine = (line: string): string[] => {
+    const fields: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]!;
+      if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === delimiter && !inQuotes) {
+        fields.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+    fields.push(current.trim());
+    return fields;
+  };
+
+  const headers = parseLine(firstLine);
   const columns = headers.map((h) => ({
     title: h,
     dataIndex: h,
     key: h,
     ellipsis: true,
+    width: 150,
   }));
 
-  const data = lines.slice(1).map((line, idx) => {
-    const values = line.split('\t');
+  const data = lines.slice(1).filter(l => l.trim()).map((line, idx) => {
+    const values = parseLine(line);
     const row: Record<string, number | string> = { key: idx };
     headers.forEach((h, i) => {
       row[h] = values[i] ?? '';

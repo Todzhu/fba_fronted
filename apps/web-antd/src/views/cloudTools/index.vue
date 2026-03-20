@@ -47,6 +47,8 @@ const categoryColors: Record<
   蛋白组学: { bg: '#dbeafe', border: '#3b82f6', text: '#1d4ed8' },
   代谢组学: { bg: '#fce7f3', border: '#ec4899', text: '#be185d' },
   基因组学: { bg: '#e0e7ff', border: '#6366f1', text: '#4338ca' },
+  单细胞: { bg: '#fdf2f8', border: '#e879a0', text: '#9d174d' },
+  空间组学: { bg: '#fef9c3', border: '#eab308', text: '#a16207' },
   // 功能分类颜色
   可视化: { bg: '#d1fae5', border: '#10b981', text: '#047857' },
   富集分析: { bg: '#ede9fe', border: '#8b5cf6', text: '#6d28d9' },
@@ -54,6 +56,12 @@ const categoryColors: Record<
   差异分析: { bg: '#fecaca', border: '#ef4444', text: '#b91c1c' },
   网络分析: { bg: '#a5f3fc', border: '#06b6d4', text: '#0e7490' },
   降维分析: { bg: '#bbf7d0', border: '#22c55e', text: '#15803d' },
+  基因调控: { bg: '#e0e7ff', border: '#818cf8', text: '#4338ca' },
+  虚拟敲除: { bg: '#fce7f3', border: '#f472b6', text: '#be185d' },
+  基因敲除: { bg: '#fce7f3', border: '#f472b6', text: '#be185d' },
+  聚类分析: { bg: '#cffafe', border: '#22d3ee', text: '#0e7490' },
+  轨迹分析: { bg: '#fef3c7', border: '#fbbf24', text: '#92400e' },
+  细胞通讯: { bg: '#dbeafe', border: '#60a5fa', text: '#1e40af' },
 };
 
 // 获取分类颜色样式
@@ -230,7 +238,7 @@ onMounted(() => {
             <img
               v-if="tool.icon && tool.icon.includes('/')"
               :src="getFullImageUrl(tool.icon)"
-              class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              class="preview-img"
               alt="预览图"
             />
             <div v-else class="tool-preview-fallback">
@@ -329,6 +337,7 @@ onMounted(() => {
 .tool-card {
   display: flex;
   overflow: hidden;
+  cursor: pointer;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 16px;
@@ -358,12 +367,26 @@ onMounted(() => {
 
 /* 左侧预览图区域 */
 .tool-preview {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
   width: 140px;
-  min-height: 140px;
   overflow: hidden;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: #fff;
+  border-right: 1px solid #f0f0f0;
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left;
+  transition: transform 0.3s;
+}
+
+.tool-card:hover .preview-img {
+  transform: scale(1.05);
 }
 
 .dark .tool-preview {
@@ -390,14 +413,11 @@ onMounted(() => {
 
 /* 标题 */
 .tool-title {
-  margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 16px;
+  margin-bottom: 4px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
   color: #1f2937;
-  white-space: nowrap;
 }
 
 .dark .tool-title {

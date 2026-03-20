@@ -55,6 +55,7 @@ const routes: RouteRecordRaw[] = [
           icon: 'mdi:clipboard-list-outline',
           title: '任务中心',
           fullPathKey: false,  // 忽略 query 参数，避免标签重复
+          alwaysAccessible: true,  // 无需数据库菜单记录即可访问
         },
       },
       {
@@ -64,6 +65,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '任务详情',
           hideInMenu: true,
+          alwaysAccessible: true,
         },
       },
 

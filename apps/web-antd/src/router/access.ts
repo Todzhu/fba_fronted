@@ -49,7 +49,8 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
         if (parentInAccessible) {
           // 遍历子路由，添加隐藏的详情页
           route.children.forEach((child: any) => {
-            if (child.meta?.hideInMenu && !parentInAccessible.children?.find((c: any) => c.name === child.name)) {
+            const shouldAdd = child.meta?.hideInMenu || child.meta?.alwaysAccessible;
+            if (shouldAdd && !parentInAccessible.children?.find((c: any) => c.name === child.name)) {
               // 这个隐藏路由不在 accessibleRoutes 中，手动添加
               if (!parentInAccessible.children) {
                 parentInAccessible.children = [];

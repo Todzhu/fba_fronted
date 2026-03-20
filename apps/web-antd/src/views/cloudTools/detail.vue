@@ -34,6 +34,7 @@ import {
   getTaskStatus,
 } from '#/api/analysis-tools';
 
+import { getTaskCenterPath } from '#/utils/route-helpers';
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
 import ResultRenderer from './components/ResultRenderer.vue';
@@ -191,7 +192,7 @@ const dynamicParamSchema = computed(() => {
   const schema = structuredClone(toRaw(tool.value.param_schema));
 
   if (schema.properties) {
-    for (const [propKey, prop] of Object.entries(schema.properties) as any) {
+    for (const [, prop] of Object.entries(schema.properties) as any) {
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
@@ -205,12 +206,11 @@ const dynamicParamSchema = computed(() => {
         }
       }
 
-      // === metadata 联动：根据 RDS/H5AD 预览数据动态注入选项 ===
+      // === 通用 metadata 联动：根据 widget 类型自动注入选项 ===
       const preview = dataFileSelectorRef.value?.rdsPreview;
       if (preview?.columns && preview.columns.length > 0) {
-        const key = propKey as string;
-        // celltype_col: 从 metadata 的 category 列中选择
-        if (key === 'celltype_col') {
+        // metadata_column_select: 从 metadata 的 category 列注入下拉选项
+        if (prop.widget === 'metadata_column_select') {
           const categoryCols = preview.columns
             .filter((col: any) => col.type === 'category')
             .map((col: any) => col.name);
@@ -220,9 +220,9 @@ const dynamicParamSchema = computed(() => {
             prop.widget = 'select';
           }
         }
-        // celltype: 根据 celltype_col 选中的列，填充该列的唯一值
-        if (key === 'celltype') {
-          const selectedCol = formParams.value['celltype_col'] as string;
+        // metadata_value_select: 依赖另一参数选中的列，填充该列唯一值
+        if (prop.widget === 'metadata_value_select' && prop.depends_on) {
+          const selectedCol = formParams.value[prop.depends_on] as string;
           if (selectedCol) {
             const colMeta = preview.columns.find((col: any) => col.name === selectedCol);
             if (colMeta?.examples) {
@@ -351,7 +351,7 @@ const submitAnalysis = async () => {
     if (response.is_long_running) {
       message.success('任务已提交，请在任务中心查看进度');
       analyzing.value = false;
-      router.push('/analysis/tasks');
+      router.push(getTaskCenterPath(router));
       return;
     }
 
