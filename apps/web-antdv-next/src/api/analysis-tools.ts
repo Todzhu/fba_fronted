@@ -348,3 +348,37 @@ export async function updateTaskName(taskId: number, taskName: string) {
     `/api/v1/sys/analysis-tools/tasks/${taskId}?task_name=${encodeURIComponent(taskName)}`,
   );
 }
+
+// ========== 文件元数据检查 API ==========
+
+export interface ColumnSummary {
+  column: string;
+  type: 'categorical' | 'logical' | 'numeric';
+  unique?: number;
+  values?: string[];
+  min?: number;
+  max?: number;
+  mean?: number;
+  na_count?: number;
+  truncated?: boolean;
+}
+
+export interface InspectFileResponse {
+  columns: string[];
+  n_cells: number;
+  summary: ColumnSummary[];
+}
+
+/**
+ * 解析文件元数据（.rds/.h5ad）
+ */
+export async function inspectFile(params: {
+  file_id?: number;
+  file_url?: string;
+}) {
+  return requestClient.post<InspectFileResponse>(
+    '/api/v1/sys/analysis-tools/inspect-file',
+    params,
+  );
+}
+

@@ -86,3 +86,19 @@ export async function updateTaskName(taskId: number, taskName: string) {
     params: { task_name: taskName },
   });
 }
+
+/**
+ * 获取任务运行日志
+ * @param offset 读取偏移量（字节），用于增量读取
+ */
+export interface TaskLogResponse {
+  content: string;
+  offset: number;
+  status: string;
+}
+
+export async function getTaskLog(taskId: number, offset = 0) {
+  return requestClient.get<TaskLogResponse>(`${BASE_URL}/tasks/${taskId}/log`, {
+    params: { offset },
+  });
+}

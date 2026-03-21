@@ -112,7 +112,7 @@ const rowSelection = computed(() => ({
     :data-source="files"
     :loading="loading"
     :row-selection="rowSelection"
-    :scroll="{ x: 1000 }"
+    :scroll="{ x: 'max-content' }"
     :pagination="paginationConfig"
     row-key="id"
     class="file-table"
@@ -152,10 +152,10 @@ const rowSelection = computed(() => ({
       </template>
       
       <template v-if="column.key === 'action'">
-        <div class="flex justify-center items-center gap-1">
+        <div class="flex justify-center items-center gap-1.5">
             <Tooltip title="下载">
               <div 
-                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 cursor-pointer transition-colors text-slate-400 hover:text-blue-600"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md cursor-pointer"
                 @click.stop="emit('download', record)"
               >
                 <IconifyIcon icon="ant-design:download-outlined" class="text-base" />
@@ -164,7 +164,7 @@ const rowSelection = computed(() => ({
             
             <Tooltip title="删除">
               <div 
-                class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 cursor-pointer transition-colors text-slate-400 hover:text-red-500"
+                class="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-slate-400 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-rose-500 hover:text-white hover:shadow-md cursor-pointer"
                 @click.stop="emit('delete', record)"
               >
                 <IconifyIcon icon="ant-design:delete-outlined" class="text-base" />
@@ -173,7 +173,7 @@ const rowSelection = computed(() => ({
 
             <Dropdown trigger="click">
                 <div 
-                    class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 cursor-pointer transition-colors text-slate-400 hover:text-slate-700"
+                    class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:text-white hover:shadow-md cursor-pointer"
                     @click.stop
                 >
                     <IconifyIcon icon="ant-design:more-outlined" class="text-base font-bold" />
@@ -222,50 +222,84 @@ const rowSelection = computed(() => ({
 </template>
 
 <style scoped>
-/* 表头样式美化 */
+/* 表头彻底去框并增留白，削弱字重 */
 :deep(.ant-table-thead > tr > th) {
-  font-weight: 600;
+  font-weight: 500;
   font-size: 13px;
-  color: #64748b;
-  background: #f8fafc !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-  padding: 14px 16px !important;
-  letter-spacing: 0.02em;
+  color: #94a3b8;
+  background: #ffffff !important;
+  border-bottom: none !important;
+  padding: 12px 12px 12px 20px !important;
+  letter-spacing: 0.05em;
   text-transform: none;
 }
 
-/* 表格行样式 */
+/* 消灭 Ant Design 默认的表头列分割竖线 */
+:deep(.ant-table-thead > tr > th::before) {
+  display: none !important;
+}
+
+/* 极大退化排序激活小图标的视觉干扰 */
+:deep(.ant-table-column-sorter) {
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+:deep(.ant-table-column-sorters:hover .ant-table-column-sorter) {
+  opacity: 1;
+}
+
+/* 表格行紧凑级距与移除实线 */
 :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px !important;
-  border-bottom: 1px solid #f1f5f9 !important;
+  padding: 12px 12px 12px 20px !important;
+  border-bottom: none !important;
   transition: background-color 0.15s;
 }
 
-/* hover 行高亮 */
-:deep(.ant-table-tbody > tr:hover > td) {
-  background: #f8fafc !important;
+/* 取消整体表格的自带边距和包裹边框 */
+:deep(.ant-table), :deep(.ant-table-container) {
+  border: none !important;
+  background: transparent !important;
 }
 
-/* 选中行样式 */
-:deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
+/* 斑马线条纹颜色 (Striped rows: 偶数行浅底) */
+:deep(.ant-table-tbody > tr:nth-child(even) > td) {
+  background-color: #f8fafc !important;
+}
+/* 奇数行基础底色（维持无边框体系下的对比） */
+:deep(.ant-table-tbody > tr:nth-child(odd) > td) {
+  background-color: #ffffff !important;
+}
+
+/* hover 行高亮：覆盖上面的条纹基础色 */
+:deep(.ant-table-tbody > tr:hover > td) {
+  background-color: #f1f5f9 !important;
+}
+
+/* 选中行样式：绝对最高优先级 */
+:deep(.ant-table-tbody > tr.ant-table-row-selected > td),
+:deep(.ant-table-tbody > tr.ant-table-row-selected:hover > td) {
   background: #eff6ff !important;
 }
 
-/* 分页器样式微调 */
+/* 分页器样式微调，剔除冗杂间隔并融合底部 */
 :deep(.ant-pagination) {
-  padding: 16px !important;
+  padding: 18px 20px 20px 20px !important;
   margin: 0 !important;
 }
 
 :deep(.ant-pagination .ant-pagination-item-active) {
   border-color: #3b82f6 !important;
+  background-color: transparent !important;
 }
 
 :deep(.ant-pagination .ant-pagination-item-active a) {
   color: #3b82f6 !important;
 }
 
-/* 复选框颜色统一 */
+/* 复选框颜色统一并削减黑粗原生活力 */
+:deep(.ant-checkbox-inner) {
+  border-color: #cbd5e1 !important;
+}
 :deep(.ant-checkbox-checked .ant-checkbox-inner) {
   background-color: #3b82f6 !important;
   border-color: #3b82f6 !important;

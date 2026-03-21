@@ -3,7 +3,7 @@ import type { TaskItem } from '#/api/myTasks';
 import type { Pipeline } from '#/views/biocloud/pipeline/types/pipeline';
 
 // 我的任务页面 - 任务管理（含云工具任务 + 流程分析任务）
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import {
@@ -23,12 +23,15 @@ import {
   Search,
   Trash2,
   X,
+  ExternalLink,
+  FolderOpen,
 } from 'lucide-vue-next';
 
 import {
   batchDeleteTasks,
   deleteTask,
   getMyTasks,
+  getTaskLog,
   updateTaskName,
 } from '#/api/myTasks';
 
@@ -171,11 +174,8 @@ const toggleSelectAll = () => {
 
 // ========== Navigation ==========
 const goToTaskResult = (task: TaskItem) => {
-  // 跳转到工具详情页，带上任务 ID
-  router.push({
-    path: `/tool/${task.tool_id}`,
-    query: { task_id: task.id, task_name: task.task_name },
-  });
+  // 跳转到任务详情页（结果文件浏览器）
+  router.push({ name: 'TaskDetail', params: { taskId: String(task.id) } });
 };
 
 // ========== Delete ==========
@@ -195,21 +195,87 @@ const handleBatchDelete = () => {
   showDeleteModal.value = true;
 };
 
-// 查看日志
-const showLogModal = ref(false);
+// 查看日志抽屉
+const showLogDrawer = ref(false);
 const logTask = ref<null | TaskItem>(null);
+const logContent = ref('');
+const logOffset = ref(0);
+const logLoading = ref(false);
+let logPollTimer: ReturnType<typeof setInterval> | null = null;
+const logContainerRef = ref<HTMLElement | null>(null);
 
-const handleViewLog = (task: TaskItem) => {
+// 打开日志抽屉
+const handleViewLog = async (task: TaskItem) => {
   logTask.value = task;
-  showLogModal.value = true;
+  logContent.value = '';
+  logOffset.value = 0;
+  showLogDrawer.value = true;
+  await fetchTaskLog(task.id, true);
+  startLogPolling(task);
 };
 
-// 提取任务UUID
-const getTaskUUID = (outputDir: null | string) => {
-  if (!outputDir) return '-';
-  // 将反斜杠转换为正斜杠，然后取最后一段
-  return outputDir.split('\\').pop()?.split('/').pop() || outputDir;
+// 获取任务日志
+const fetchTaskLog = async (taskId: number, fullRefresh = false) => {
+  logLoading.value = true;
+  try {
+    const offset = fullRefresh ? 0 : logOffset.value;
+    const res = await getTaskLog(taskId, offset);
+    if (fullRefresh) {
+      logContent.value = res.content;
+    } else if (res.content) {
+      logContent.value += res.content;
+    }
+    logOffset.value = res.offset;
+    // 更新任务状态
+    if (logTask.value && res.status) {
+      logTask.value = { ...logTask.value, status: res.status as TaskItem['status'] };
+    }
+    // 自动滚动到底部
+    nextTick(() => {
+      if (logContainerRef.value) {
+        logContainerRef.value.scrollTop = logContainerRef.value.scrollHeight;
+      }
+    });
+    // 任务完成/失败时停止轮询
+    if (res.status === 'completed' || res.status === 'failed') {
+      stopLogPolling();
+    }
+  } catch (error) {
+    console.error('获取日志失败:', error);
+  } finally {
+    logLoading.value = false;
+  }
 };
+
+// 启动日志轮询
+const startLogPolling = (task: TaskItem) => {
+  stopLogPolling();
+  if (task.status === 'running' || task.status === 'pending') {
+    logPollTimer = setInterval(() => {
+      if (logTask.value) {
+        fetchTaskLog(logTask.value.id);
+      }
+    }, 3000);
+  }
+};
+
+// 停止日志轮询
+const stopLogPolling = () => {
+  if (logPollTimer) {
+    clearInterval(logPollTimer);
+    logPollTimer = null;
+  }
+};
+
+// 关闭抽屉时停止轮询
+watch(showLogDrawer, (val) => {
+  if (!val) stopLogPolling();
+});
+
+onBeforeUnmount(() => {
+  stopLogPolling();
+});
+
 
 const confirmDelete = async () => {
   if (!deleteTarget.value) return;
@@ -314,12 +380,7 @@ const isAllCompleted = (p: Pipeline): boolean => {
   return getCompletedSteps(p) === p.steps.length;
 };
 
-const speciesLabels: Record<string, string> = {
-  human: '人类',
-  mouse: '小鼠',
-  rat: '大鼠',
-  other: '其他',
-};
+
 
 const formatRelativeTime = (dateStr: string): string => {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -340,58 +401,25 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
-    <!-- Header Section -->
-    <div
-      class="border-b border-slate-200 bg-white px-4 pt-10 sm:px-6 lg:px-8"
-    >
-      <div class="mx-auto max-w-7xl">
-        <h1 class="mb-2 text-3xl font-bold text-slate-900">我的任务</h1>
-        <p class="max-w-2xl text-slate-500">
-          查看和管理您提交的分析任务，追踪任务执行状态。
-        </p>
-
-        <!-- Tab 切换栏 -->
-        <div class="mt-6 flex items-center gap-1">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            @click="activeTab = tab.key"
-            class="relative flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors"
-            :class="[
-              activeTab === tab.key
-                ? 'text-blue-600'
-                : 'text-slate-500 hover:text-slate-800',
-            ]"
-          >
-            <component :is="tab.icon" class="h-4 w-4" />
-            {{ tab.label }}
-            <!-- 数量徽章 -->
-            <span
-              v-if="tab.key === 'tools' && total > 0"
-              class="rounded-full px-2 py-0.5 text-xs font-semibold"
-              :class="activeTab === tab.key ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'"
-            >
-              {{ total }}
-            </span>
-            <span
-              v-if="tab.key === 'pipeline' && myPipelines.length > 0"
-              class="rounded-full px-2 py-0.5 text-xs font-semibold"
-              :class="activeTab === tab.key ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'"
-            >
-              {{ myPipelines.length }}
-            </span>
-            <!-- 底部高亮线 -->
-            <div
-              v-if="activeTab === tab.key"
-              class="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-blue-600"
-            ></div>
-          </button>
+    <!-- Compact Banner Header -->
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-6">
+      <div class="flex items-center justify-between rounded-2xl bg-white border border-slate-200/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] px-6 py-4">
+        <div class="flex items-center gap-5">
+          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-inner ring-1 ring-black/5">
+            <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+          </div>
+          <div class="flex flex-col justify-center">
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">我的任务</h1>
+            <p class="mt-0.5 text-[13px] font-medium text-slate-500">
+              查看和管理您提交的分析任务，追踪任务执行状态。
+            </p>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- ========== 云工具任务 Tab ========== -->
-    <div v-if="activeTab === 'tools'" class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
+    <!-- ========== 统一任务面板（工具与流程合流） ========== -->
+    <div class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
       <!-- 工具栏 -->
       <div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center">
         <!-- 搜索 -->
@@ -469,15 +497,10 @@ onMounted(() => {
         <p class="mt-1 text-slate-500">运行分析工具后，任务将显示在这里</p>
       </div>
 
-      <!-- Task Table -->
-      <div
-        v-else
-        class="overflow-hidden rounded-xl border border-slate-200 bg-white"
-      >
-        <!-- Table Header -->
-        <div
-          class="grid grid-cols-12 gap-4 border-b border-slate-200 bg-slate-50 px-6 py-3 text-sm font-medium text-slate-500"
-        >
+      <!-- Task List -->
+      <div v-else class="space-y-3">
+        <!-- List Header -->
+        <div class="grid grid-cols-12 gap-4 px-6 py-2 text-sm font-medium text-slate-500">
           <div class="col-span-1 flex items-center">
             <input
               type="checkbox"
@@ -490,17 +513,136 @@ onMounted(() => {
             />
           </div>
           <div class="col-span-4">任务名称</div>
-          <div class="col-span-2">工具</div>
-          <div class="col-span-2">状态</div>
+          <div class="col-span-2">分析工具</div>
+          <div class="col-span-2">任务状态</div>
           <div class="col-span-2">创建时间</div>
           <div class="col-span-1 text-right">操作</div>
         </div>
 
-        <!-- Table Body -->
+        <!-- List Body -->
+        <!-- 1. 流程分析任务卡片 (置顶) -->
+        <div
+          v-for="p in myPipelines.filter(mp => !searchQuery.trim() || mp.name.toLowerCase().includes(searchQuery.toLowerCase()))"
+          :key="'pipe-' + p.id"
+          class="group relative grid grid-cols-12 items-center gap-4 rounded-xl border border-slate-200 bg-white px-6 py-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+        >
+          <!-- 左翼：专属身份徽章（替换掉了空白的勾选位） -->
+          <div class="col-span-1 border-r border-slate-100 py-2 flex items-center justify-center h-full pr-1.5 pl-0.5">
+             <span class="flex h-6 items-center justify-center rounded bg-indigo-50/80 px-2 text-[11px] font-bold tracking-widest text-indigo-500 shadow-sm border border-indigo-100/50 cursor-default" title="大型组合分析流程（不可独立勾选删除）">
+               流程
+             </span>
+          </div>
+
+          <!-- Task Name -->
+          <div class="col-span-4 pl-4">
+            <div class="flex items-center gap-3">
+              <!-- 图标使用翡翠绿与普通蓝色工具区分，但不改行背景以保统一 -->
+              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-500 transition-colors group-hover:bg-emerald-100">
+                <Microscope class="h-4 w-4" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <div 
+                  class="group/name flex cursor-pointer items-center gap-1.5"
+                  @click="router.push(`/pipeline/${p.id}`)"
+                  title="点击查看多组学流程结果"
+                >
+                  <p class="truncate text-[15px] font-semibold text-slate-800 transition-colors group-hover/name:text-blue-600">
+                    {{ p.name }}
+                  </p>
+                  <ExternalLink class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover/name:text-blue-500" />
+                </div>
+                <p class="mt-1 truncate text-xs text-slate-400 font-mono">
+                  ID: {{ p.id.split('-').pop() || p.id }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool Name -->
+          <div class="col-span-2 flex items-center">
+            <span class="truncate text-slate-600">
+              单细胞转录组分析流程
+            </span>
+          </div>
+
+          <!-- Status -->
+          <div class="col-span-2 flex flex-col justify-center">
+            <!-- 已完成 -> 显示简约标签 -->
+            <div v-if="isAllCompleted(p)" class="flex items-center gap-1.5 w-fit rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-600">
+               <CheckCircle class="h-3.5 w-3.5" />
+               <span class="text-[12px] font-medium">已完成</span>
+            </div>
+            
+            <!-- 运行中 -> 直接显示原生点状进度 -->
+            <div v-else class="flex flex-col justify-center">
+               <!-- 经典的步骤圆点重制版 -->
+               <div class="flex items-center gap-1 sm:flex pl-1">
+                  <div
+                    v-for="(step, idx) in p.steps"
+                    :key="idx"
+                    class="group/dot relative"
+                  >
+                    <div
+                      class="h-2 w-2 rounded-full transition-colors"
+                      :class="{
+                        'bg-emerald-500': step.status === 'completed',
+                        'bg-blue-500 animate-pulse': step.status === 'running',
+                        'bg-slate-200': step.status === 'pending',
+                        'bg-red-500': step.status === 'error',
+                      }"
+                    ></div>
+                    <!-- Tooltip -->
+                    <div
+                      class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover/dot:opacity-100 shadow-lg"
+                    >
+                      {{ STEP_LABELS?.[step.stepType] || step.stepType || '步骤' }}
+                      <div class="absolute left-1/2 top-full -translate-x-1/2 border-[3px] border-transparent border-t-slate-800"></div>
+                    </div>
+                  </div>
+               </div>
+            </div>
+          </div>
+
+          <!-- Created Time -->
+          <div class="col-span-2 flex items-center text-sm text-slate-500">
+            {{ formatDateTime(p.updatedAt) }}
+          </div>
+
+          <!-- Actions -->
+          <div class="col-span-1 flex items-center justify-end gap-1.5" @click.stop>
+            <button
+               v-if="!isAllCompleted(p)"
+              @click="router.push(`/pipeline/${p.id}`)"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md"
+              title="继续流程"
+            >
+              <Play class="h-4 w-4" />
+            </button>
+            <button
+               v-else
+              @click="router.push(`/pipeline/${p.id}`)"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-emerald-500 hover:text-white hover:shadow-md"
+              title="查看结果"
+            >
+              <Eye class="h-4 w-4" />
+            </button>
+            <button
+              @click.stop="handleDeletePipeline(p.id)"
+              :disabled="deletingPipelineId === p.id"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-rose-500 hover:text-white hover:shadow-md disabled:opacity-50"
+              title="删除任务"
+            >
+              <Loader2 v-if="deletingPipelineId === p.id" class="h-4 w-4 animate-spin" />
+              <Trash2 v-else class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 单点云工具分析任务卡片 -->
         <div
           v-for="task in filteredTasks"
           :key="task.id"
-          class="group grid grid-cols-12 gap-4 border-b border-slate-100 px-6 py-4 transition-colors last:border-b-0 hover:bg-slate-50"
+          class="group relative grid grid-cols-12 items-center gap-4 rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
         >
           <!-- Checkbox -->
           <div class="col-span-1 flex items-center" @click.stop>
@@ -545,21 +687,32 @@ onMounted(() => {
               </div>
               <!-- 显示模式 -->
               <div v-else class="group/name flex items-center gap-2">
-                <p
-                  class="cursor-pointer truncate font-medium text-slate-900 hover:text-blue-600"
+                <div 
                   @click="goToTaskResult(task)"
+                  class="flex cursor-pointer items-center gap-2 rounded-lg py-1 pr-2 transition-all hover:bg-blue-50/50"
+                  title="点击查看分析报告及结果"
                 >
-                  {{ task.task_name || `任务 #${task.id}` }}
-                </p>
+                  <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover/name:bg-blue-100 group-hover/name:text-blue-700 transition-colors">
+                    <FolderOpen class="h-4 w-4" />
+                  </div>
+                  <div class="flex flex-col">
+                    <div class="flex items-center gap-2">
+                      <p class="truncate font-semibold text-slate-800 transition-colors group-hover/name:text-blue-600">
+                        {{ task.task_name || `任务 #${task.id}` }}
+                      </p>
+                      <ExternalLink class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover/name:text-blue-500" />
+                    </div>
+                  </div>
+                </div>
                 <button
                   @click.stop="startEditTaskName(task)"
-                  class="rounded p-1 text-slate-400 opacity-0 transition-opacity hover:bg-slate-100 hover:text-blue-600 group-hover/name:opacity-100"
+                  class="ml-1 rounded p-1.5 text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-blue-600 group-hover/name:opacity-100"
                   title="编辑名称"
                 >
                   <Pencil class="h-3.5 w-3.5" />
                 </button>
               </div>
-              <p class="truncate text-xs text-slate-400">ID: {{ task.id }}</p>
+              <p class="mt-1 truncate text-xs text-slate-400 font-mono ml-10">ID: {{ task.id }}</p>
             </div>
           </div>
 
@@ -600,27 +753,27 @@ onMounted(() => {
 
           <!-- Actions -->
           <div
-            class="col-span-1 flex items-center justify-end gap-1"
+            class="col-span-1 flex items-center justify-end gap-1.5"
             @click.stop
           >
             <button
               @click="router.push(`/tool/${task.tool_id}?task_id=${task.id}`)"
-              class="rounded-lg p-2 text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-500"
-              title="查看"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all shadow-blue-500/10 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
+              title="查看配置与结果"
             >
               <Eye class="h-4 w-4" />
             </button>
             <button
               @click="handleViewLog(task)"
-              class="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-              title="日志"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 shadow-sm transition-all shadow-indigo-500/10 hover:-translate-y-0.5 hover:bg-indigo-500 hover:text-white hover:shadow-md hover:shadow-indigo-500/25"
+              title="查看执行日志"
             >
               <FileText class="h-4 w-4" />
             </button>
             <button
               @click="handleDelete(task)"
-              class="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-              title="删除"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-rose-500 hover:text-white hover:shadow-md"
+              title="删除任务"
             >
               <Trash2 class="h-4 w-4" />
             </button>
@@ -651,134 +804,6 @@ onMounted(() => {
         <span class="text-sm text-slate-500">
           第 {{ currentPage }} / {{ totalPages }} 页，共 {{ total }} 个任务
         </span>
-      </div>
-    </div>
-
-    <!-- ========== 流程分析任务 Tab ========== -->
-    <div v-if="activeTab === 'pipeline'" class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
-      <!-- 加载中 -->
-      <div v-if="loadingPipelines" class="flex items-center justify-center py-16">
-        <Loader2 class="h-6 w-6 animate-spin text-blue-500" />
-        <span class="ml-2 text-sm text-slate-500">加载流程任务...</span>
-      </div>
-
-      <!-- 空状态 -->
-      <div
-        v-else-if="myPipelines.length === 0"
-        class="rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center"
-      >
-        <Microscope class="mx-auto mb-3 h-10 w-10 text-slate-300" />
-        <p class="text-sm font-medium text-slate-500">暂无流程分析任务</p>
-        <p class="mt-1 text-xs text-slate-400">前往「云流程」创建你的第一个分析</p>
-      </div>
-
-      <!-- 流程任务列表 -->
-      <div v-else class="space-y-3">
-        <div
-          v-for="p in myPipelines"
-          :key="p.id"
-          class="group flex items-center gap-6 overflow-hidden rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm transition-all hover:border-blue-200 hover:shadow-md"
-        >
-          <!-- 左侧：名称 + 元信息 -->
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <h3 class="truncate text-base font-semibold text-slate-900">
-                {{ p.name }}
-              </h3>
-              <span
-                v-if="isAllCompleted(p)"
-                class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600"
-              >
-                <Check class="h-3 w-3" />
-                已完成
-              </span>
-              <span
-                v-else
-                class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600"
-              >
-                进行中
-              </span>
-            </div>
-            <div class="mt-1.5 flex items-center gap-3 text-xs text-slate-400">
-              <span v-if="p.species" class="inline-flex items-center gap-1">
-                🧬 {{ speciesLabels[p.species] || p.species }}
-              </span>
-              <span
-                v-if="p.dataPath"
-                class="max-w-[200px] truncate"
-                :title="p.dataPath"
-              >
-                📁 {{ p.dataPath }}
-              </span>
-              <span class="inline-flex items-center gap-1">
-                <Clock class="h-3 w-3" />
-                {{ formatRelativeTime(p.updatedAt) }}
-              </span>
-            </div>
-          </div>
-
-          <!-- 中间：步骤进度圆点 -->
-          <div class="hidden items-center gap-1.5 sm:flex">
-            <div
-              v-for="(step, idx) in p.steps"
-              :key="idx"
-              class="group/dot relative"
-            >
-              <div
-                class="h-3 w-3 rounded-full transition-colors"
-                :class="{
-                  'bg-emerald-500': step.status === 'completed',
-                  'animate-pulse bg-blue-500': step.status === 'running',
-                  'bg-slate-200': step.status === 'pending',
-                  'bg-red-500': step.status === 'error',
-                }"
-              ></div>
-              <!-- Tooltip -->
-              <div
-                class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover/dot:opacity-100"
-              >
-                {{ STEP_LABELS[step.stepType] }}
-                <div
-                  class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"
-                ></div>
-              </div>
-            </div>
-            <span class="ml-1.5 text-xs text-slate-400">
-              {{ getCompletedSteps(p) }}/{{ p.steps.length }}
-            </span>
-          </div>
-
-          <!-- 右侧：操作按钮 -->
-          <div class="flex items-center gap-2">
-            <button
-              v-if="!isAllCompleted(p)"
-              @click="router.push(`/pipeline/${p.id}`)"
-              class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
-            >
-              <Play class="h-4 w-4" />
-              继续分析
-            </button>
-            <button
-              v-else
-              @click="router.push(`/pipeline/${p.id}`)"
-              class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700"
-            >
-              <Eye class="h-4 w-4" />
-              查看结果
-            </button>
-            <button
-              @click.stop="handleDeletePipeline(p.id)"
-              :disabled="deletingPipelineId === p.id"
-              class="inline-flex cursor-pointer items-center rounded-lg border border-slate-200 p-2 text-slate-400 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Loader2
-                v-if="deletingPipelineId === p.id"
-                class="h-4 w-4 animate-spin"
-              />
-              <Trash2 v-else class="h-4 w-4" />
-            </button>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -821,117 +846,119 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Log Modal -->
+    <!-- 日志抽屉 -->
     <div
-      v-if="showLogModal && logTask"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      @click.self="showLogModal = false"
+      v-if="showLogDrawer"
+      class="fixed inset-0 z-50 flex"
     >
-      <div class="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
-        <div class="mb-4 flex items-center justify-between">
+      <!-- 遮罩层 -->
+      <div
+        class="absolute inset-0 bg-black/40 transition-opacity"
+        @click="showLogDrawer = false"
+      ></div>
+
+      <!-- 抽屉内容 -->
+      <div
+        class="relative ml-auto flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl"
+        style="animation: slideInRight 0.25s ease-out"
+      >
+        <!-- 抽屉头部 -->
+        <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div class="flex items-center gap-3">
-            <div
-              class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100"
-            >
-              <FileText class="h-5 w-5 text-slate-600" />
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900">
+              <FileText class="h-5 w-5 text-white" />
             </div>
             <div>
-              <h3 class="text-lg font-semibold text-slate-900">任务日志</h3>
+              <h3 class="text-lg font-semibold text-slate-900">运行日志</h3>
               <p class="text-sm text-slate-500">
-                {{ logTask.task_name || `任务 #${logTask.id}` }}
+                {{ logTask?.task_name || `任务 #${logTask?.id}` }}
               </p>
             </div>
           </div>
-          <button
-            @click="showLogModal = false"
-            class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          >
-            <X class="h-5 w-5" />
-          </button>
+          <div class="flex items-center gap-2">
+            <!-- 状态标签 -->
+            <div
+              v-if="logTask"
+              class="flex items-center gap-1.5 rounded-full px-3 py-1"
+              :class="getStatusConfig(logTask.status).bg"
+            >
+              <component
+                :is="getStatusConfig(logTask.status).icon"
+                class="h-3.5 w-3.5"
+                :class="[
+                  getStatusConfig(logTask.status).color,
+                  logTask.status === 'running' ? 'animate-spin' : '',
+                ]"
+              />
+              <span class="text-xs font-medium" :class="getStatusConfig(logTask.status).color">
+                {{ getStatusConfig(logTask.status).label }}
+              </span>
+            </div>
+            <button
+              @click="showLogDrawer = false"
+              class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X class="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
-        <!-- Log Content -->
-        <div class="space-y-4">
-          <!-- Status Info -->
-          <div class="rounded-lg bg-slate-50 p-4">
-            <div class="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span class="text-slate-500">工具：</span>
-                <span class="font-medium text-slate-900">{{
-                  logTask.tool_name || '-'
-                }}</span>
-              </div>
-              <div>
-                <span class="text-slate-500">状态：</span>
-                <span
-                  class="font-medium"
-                  :class="getStatusConfig(logTask.status).color"
-                >
-                  {{ getStatusConfig(logTask.status).label }}
-                </span>
-              </div>
-              <div>
-                <span class="text-slate-500">创建时间：</span>
-                <span class="font-medium text-slate-900">{{
-                  formatDateTime(logTask.created_at)
-                }}</span>
-              </div>
-              <div>
-                <span class="text-slate-500">开始时间：</span>
-                <span class="font-medium text-slate-900">{{
-                  logTask.started_at ? formatDateTime(logTask.started_at) : '-'
-                }}</span>
-              </div>
-              <div class="col-span-2">
-                <span class="text-slate-500">完成时间：</span>
-                <span class="font-medium text-slate-900">{{
-                  logTask.completed_at
-                    ? formatDateTime(logTask.completed_at)
-                    : '-'
-                }}</span>
-              </div>
+        <!-- 任务信息概览 -->
+        <div v-if="logTask" class="border-b border-slate-100 px-6 py-3">
+          <div class="grid grid-cols-3 gap-4 text-xs">
+            <div>
+              <span class="text-slate-400">工具</span>
+              <p class="mt-0.5 font-medium text-slate-700">{{ logTask.tool_name || '-' }}</p>
+            </div>
+            <div>
+              <span class="text-slate-400">开始时间</span>
+              <p class="mt-0.5 font-medium text-slate-700">{{ logTask.started_at ? formatDateTime(logTask.started_at) : '-' }}</p>
+            </div>
+            <div>
+              <span class="text-slate-400">完成时间</span>
+              <p class="mt-0.5 font-medium text-slate-700">{{ logTask.completed_at ? formatDateTime(logTask.completed_at) : '-' }}</p>
             </div>
           </div>
+        </div>
 
-          <!-- Error Message -->
-          <div v-if="logTask.error_message" class="rounded-lg bg-red-50 p-4">
-            <div
-              class="mb-2 flex items-center gap-2 text-sm font-medium text-red-700"
-            >
-              <AlertCircle class="h-4 w-4" />
-              错误信息
-            </div>
-            <pre class="whitespace-pre-wrap break-words text-sm text-red-600">{{
-              logTask.error_message
-            }}</pre>
-          </div>
-
-          <!-- Task UUID -->
-          <div v-if="logTask.output_dir" class="rounded-lg bg-blue-50 p-4">
-            <div class="mb-2 text-sm font-medium text-blue-700">任务id</div>
-            <code class="text-sm text-blue-600">{{
-              getTaskUUID(logTask.output_dir)
-            }}</code>
-          </div>
-
-          <!-- No Error -->
+        <!-- 终端风格日志区域 -->
+        <div class="flex-1 overflow-hidden bg-[#1e1e2e] p-1">
           <div
-            v-if="!logTask.error_message && logTask.status === 'completed'"
-            class="rounded-lg bg-green-50 p-4"
+            ref="logContainerRef"
+            class="h-full overflow-auto rounded-lg p-4 font-mono text-sm leading-relaxed"
           >
-            <div
-              class="flex items-center gap-2 text-sm font-medium text-green-700"
-            >
-              <CheckCircle class="h-4 w-4" />
-              任务已成功完成，无错误信息
+            <!-- 加载中 -->
+            <div v-if="logLoading && !logContent" class="flex items-center gap-2 text-slate-400">
+              <Loader2 class="h-4 w-4 animate-spin" />
+              <span>正在加载日志...</span>
             </div>
+            <!-- 无日志 -->
+            <div v-else-if="!logContent" class="text-slate-500">
+              暂无日志输出
+              <span v-if="logTask?.status === 'pending'">，任务等待执行中...</span>
+            </div>
+            <!-- 日志内容 -->
+            <pre v-else class="whitespace-pre-wrap break-words text-green-400">{{ logContent }}</pre>
+            <!-- 运行中闪烁光标 -->
+            <span
+              v-if="logTask?.status === 'running'"
+              class="inline-block h-4 w-2 animate-pulse bg-green-400"
+            ></span>
           </div>
         </div>
 
-        <!-- Actions -->
-        <div class="mt-6 flex justify-end">
+        <!-- 底部操作栏 -->
+        <div class="flex items-center justify-between border-t border-slate-200 px-6 py-3">
+          <div class="text-xs text-slate-400">
+            <span v-if="logTask?.status === 'running'">
+              <Loader2 class="mr-1 inline h-3 w-3 animate-spin" />
+              实时更新中（每 3 秒刷新）
+            </span>
+            <span v-else-if="logTask?.status === 'completed'">✅ 任务已完成</span>
+            <span v-else-if="logTask?.status === 'failed'">❌ 任务失败</span>
+          </div>
           <button
-            @click="showLogModal = false"
+            @click="showLogDrawer = false"
             class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
             关闭
@@ -946,5 +973,27 @@ onMounted(() => {
 /* 自定义 checkbox 样式 */
 input[type='checkbox'] {
   accent-color: #2563eb;
+}
+
+/* 抽屉滑入动画 */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* 终端日志区域自定义滚动条 */
+.font-mono::-webkit-scrollbar {
+  width: 6px;
+}
+.font-mono::-webkit-scrollbar-track {
+  background: transparent;
+}
+.font-mono::-webkit-scrollbar-thumb {
+  background: #4a5568;
+  border-radius: 3px;
 }
 </style>

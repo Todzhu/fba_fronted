@@ -7,7 +7,7 @@
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import { useAccessStore } from '@vben/stores';
@@ -64,12 +64,37 @@ const buildFileUrl = (filePath: string): string => {
   return '';
 };
 
+const hasHtmlReport = ref(false);
+const htmlReportUrl = ref('');
+
 // 获取结果数据
 const fetchOutputData = async () => {
-  if ((!props.taskId && !props.outputDir) || !props.config?.outputs) return;
+  if ((!props.taskId && !props.outputDir)) return;
 
   loading.value = true;
   try {
+    // 检查是否存在 HTML 报告
+    if (props.taskId) {
+      try {
+        const { requestClient } = await import('#/api/request');
+        const files = await requestClient.get(`/api/v1/sys/analysis-tools/tasks/${props.taskId}/result-files`);
+        if (files.some((f: any) => f.name === 'report.html' || f.name.endsWith('/report.html'))) {
+          hasHtmlReport.value = true;
+          const headers: HeadersInit = {};
+          const token = useAccessStore().accessToken;
+          if (token) headers.Authorization = `Bearer ${token}`;
+          
+          const blob = await fetch(buildFileUrl('report.html'), { headers }).then(r => r.blob());
+          htmlReportUrl.value = URL.createObjectURL(blob);
+          return; // 存在报告直接返回，不渲染图表
+        }
+      } catch (e) {
+        console.error('获取结果文件列表失败:', e);
+      }
+    }
+
+    if (!props.config?.outputs) return;
+
     for (const output of props.config.outputs) {
       const url = buildFileUrl(output.path);
       if (!url) continue;
@@ -201,12 +226,22 @@ onMounted(() => {
     fetchOutputData();
   }
 });
+
+onUnmounted(() => {
+  if (htmlReportUrl.value) URL.revokeObjectURL(htmlReportUrl.value);
+  Object.values(imageBlobUrls.value).forEach(URL.revokeObjectURL);
+});
 </script>
 
 <template>
   <div class="result-renderer">
     <Spin :spinning="loading">
-      <template v-if="config?.outputs?.length">
+      <!-- 优先展示 HTML 报告 -->
+      <div v-if="hasHtmlReport" class="html-report-container w-full h-[800px]">
+        <iframe :src="htmlReportUrl" class="w-full h-full border-0 rounded-md"></iframe>
+      </div>
+
+      <template v-else-if="config?.outputs?.length">
         <Tabs v-model:active-key="activeKey" size="small">
           <Tabs.TabPane
             v-for="output in config.outputs"

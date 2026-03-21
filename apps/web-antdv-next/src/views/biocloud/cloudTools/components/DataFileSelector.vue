@@ -8,6 +8,8 @@
  * - 文件导入/清空/模式切换
  * - 示例数据按 key 匹配加载
  */
+import type { ColumnSummary } from '#/api/analysis-tools';
+
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
@@ -19,9 +21,14 @@ import {
   message,
   Space,
   Spin,
+  Table,
   Tabs,
+  Tag,
+  Tooltip,
   Upload,
 } from 'ant-design-vue';
+
+import { inspectFile } from '#/api/analysis-tools';
 
 import { baseRequestClient } from '#/api/request';
 import PlatformFileSelector from './PlatformFileSelector.vue';
@@ -57,6 +64,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: Record<string, null | number>): void;
   (e: 'nextStep'): void;
   (e: 'headersChange', headers: Record<string, string[]>): void;
+  (e: 'metadataChange', metadata: Record<string, MetadataInfo>): void;
 }>();
 
 // 文件配置列表 - 优先使用 example_data 生成 Tab，否则使用 input_schema.files
@@ -126,6 +134,15 @@ const allBinaryMode = computed(() => {
 
   return result;
 });
+
+// Metadata 汇总信息
+interface MetadataInfo {
+  columns: string[];
+  n_cells: number;
+  summary: ColumnSummary[];
+}
+const metadataMap = ref<Record<string, MetadataInfo>>({});
+const metadataLoading = ref(false);
 
 // 每个文件的表格数据和状态
 const fileDataMap = ref<
@@ -241,6 +258,8 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.fileType = 'binary';
       fileData.fileUrl = example.url;
       updateFileId(key, Date.now());
+      // 自动解析 metadata
+      await fetchMetadata(key, { file_url: example.url });
     } else {
       // 表格文件：解析 CSV/TSV
       const response = await baseRequestClient.get(example.url);
@@ -359,6 +378,8 @@ const handleBinaryImportForKey = (key: string, file: File) => {
   fileData.data = []; // 二进制文件不解析
   updateFileId(key, Date.now());
 
+  // 本地上传的二进制文件目前无法直接解析（需要先上传到平台）
+  // 如果有 fileId 会在 handlePlatformFileSelect 中触发解析
   message.success(`${file.name} 已选择`);
   return false; // 阻止默认上传
 };
@@ -487,34 +508,30 @@ const openPlatformSelector = (key: string) => {
   platformSelectorOpen.value = true;
 };
 
-const handlePlatformFileSelect = (file: any) => {
+const handlePlatformFileSelect = async (file: any) => {
   if (!currentSelectorKey.value) return;
 
   const key = currentSelectorKey.value;
   fileDataMap.value[key]!.fileName = file.name;
-  fileDataMap.value[key]!.fileType = 'binary'; // 假设平台选择的都是二进制文件，或者根据扩展名判断
+  fileDataMap.value[key]!.fileType = 'binary';
   fileDataMap.value[key]!.fileId = Number(file.id);
 
-  // 简单根据后缀判断类型
+  // 根据后缀判断类型
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const binaryExts = [
-    'rds',
-    'rdata',
-    'rda',
-    'h5ad',
-    'h5',
-    'loom',
-    'zarr',
-    'hdf5',
-  ];
+  const binaryExts = ['rds', 'rdata', 'rda', 'h5ad', 'h5', 'loom', 'zarr', 'hdf5'];
   if (binaryExts.includes(ext)) {
     fileDataMap.value[key]!.fileType = 'binary';
   } else {
     fileDataMap.value[key]!.fileType = 'tabular';
   }
 
-  updateFileId(key, Date.now()); // 触发更新
+  updateFileId(key, Date.now());
   message.success(`已选择文件: ${file.name}`);
+
+  // 平台文件：自动解析 metadata
+  if (binaryExts.includes(ext)) {
+    await fetchMetadata(key, { file_id: Number(file.id) });
+  }
 };
 
 // 获取二进制文件的 URL（用于示例数据等）和 ID
@@ -540,6 +557,57 @@ const getFileIds = (): Record<string, number> => {
   }
   return ids;
 };
+
+// ========== Metadata 解析 ==========
+const fetchMetadata = async (
+  key: string,
+  params: { file_id?: number; file_url?: string },
+) => {
+  metadataLoading.value = true;
+  try {
+    const data = await inspectFile(params);
+    metadataMap.value[key] = data;
+
+    // 将 metadata 列名通过 headersChange 上报，复用 column_select 联动
+    const allHeaders: Record<string, string[]> = {};
+    for (const [fileKey, meta] of Object.entries(metadataMap.value)) {
+      if (meta?.columns?.length > 0) {
+        allHeaders[fileKey] = meta.columns;
+      }
+    }
+    // 合并表格文件的 headers
+    for (const [fileKey, fileData] of Object.entries(fileDataMap.value)) {
+      if (
+        fileData.fileType === 'tabular' &&
+        fileData.data?.length > 0 &&
+        fileData.data[0]
+      ) {
+        const headers = fileData.data[0].filter((h) => h.trim() !== '');
+        if (headers.length > 0) {
+          allHeaders[fileKey] = headers;
+        }
+      }
+    }
+    emit('headersChange', allHeaders);
+    // 上报 metadata summary 数据，供 column_value_select 联动使用
+    emit('metadataChange', { ...metadataMap.value });
+    message.success(`已解析 ${data.n_cells} 个细胞的 metadata`);
+  } catch (error: any) {
+    console.error('Metadata inspection failed:', error);
+    // 不阻塞流程，只提示
+    message.warning('Metadata 解析失败，参数需手动输入');
+  } finally {
+    metadataLoading.value = false;
+  }
+};
+
+// metadata 汇总表格列定义
+const metadataColumns = [
+  { title: '列名', dataIndex: 'column', width: 140 },
+  { title: '类型', dataIndex: 'type', width: 80 },
+  { title: '唯一值', dataIndex: 'unique', width: 70, align: 'center' as const },
+  { title: '详情', dataIndex: 'detail' },
+];
 
 defineExpose({
   fillAllExamples,
@@ -651,6 +719,66 @@ defineExpose({
           </div>
         </div>
       </div>
+
+      <!-- Metadata 汇总表格 -->
+      <Spin :spinning="metadataLoading" tip="正在解析 metadata...">
+        <div
+          v-if="metadataMap[fileConfigs[0]?.key ?? '']?.summary?.length"
+          class="metadata-section"
+        >
+          <div class="metadata-header">
+            <Icon icon="mdi:table-eye" style="font-size: 16px" />
+            <span>Metadata 概览</span>
+            <Tag color="blue">
+              {{ metadataMap[fileConfigs[0]?.key ?? '']?.n_cells?.toLocaleString() }} cells
+            </Tag>
+            <Tag>
+              {{ metadataMap[fileConfigs[0]?.key ?? '']?.columns?.length }} columns
+            </Tag>
+          </div>
+          <Table
+            :columns="metadataColumns"
+            :data-source="metadataMap[fileConfigs[0]?.key ?? '']?.summary || []"
+            :pagination="false"
+            size="small"
+            row-key="column"
+            class="metadata-table"
+          >
+            <template #bodyCell="{ column: col, record }">
+              <template v-if="col.dataIndex === 'type'">
+                <Tag
+                  :color="record.type === 'numeric' ? 'green' : record.type === 'categorical' ? 'blue' : 'orange'"
+                >
+                  {{ record.type }}
+                </Tag>
+              </template>
+              <template v-else-if="col.dataIndex === 'detail'">
+                <template v-if="record.type === 'numeric'">
+                  <span class="detail-text">
+                    min: {{ record.min }} / max: {{ record.max }} / mean: {{ record.mean }}
+                  </span>
+                </template>
+                <template v-else-if="record.values">
+                  <Tooltip
+                    v-if="record.values.length > 3"
+                    :title="record.values.join(', ')"
+                  >
+                    <span class="detail-text">
+                      {{ record.values.slice(0, 3).join(', ') }}
+                      <span v-if="record.values.length > 3" class="more-text">
+                        ...+{{ record.values.length - 3 }}
+                      </span>
+                    </span>
+                  </Tooltip>
+                  <span v-else class="detail-text">
+                    {{ record.values.join(', ') }}
+                  </span>
+                </template>
+              </template>
+            </template>
+          </Table>
+        </div>
+      </Spin>
     </template>
 
     <!-- ========== 普通模式：表格编辑模式 ========== -->
@@ -934,33 +1062,33 @@ defineExpose({
 /* 二进制文件卡片 */
 .binary-file-card {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
-  min-height: 80px;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 2px dashed #cbd5e1;
+  min-height: 72px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
   border-radius: 12px;
   transition: all 0.3s ease;
 }
 
-/* 成功状态：绿色 */
+/* 成功状态：淡静雅致绿 */
 .binary-file-card.card-success {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-color: #86efac;
-  border-style: solid;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .binary-file-card.card-success .file-card-icon {
-  color: #22c55e;
+  color: #10b981;
 }
 
 .binary-file-card.card-success .file-card-name {
-  color: #166534;
+  color: #065f46;
 }
 
 .binary-file-card.card-success .file-card-hint {
-  color: #16a34a;
+  color: #047857;
 }
 
 /* 表格区域内的卡片需要更大高度 */
@@ -970,8 +1098,8 @@ defineExpose({
 
 .file-card-icon {
   flex-shrink: 0;
-  font-size: 48px;
-  color: #64748b;
+  font-size: 38px;
+  color: #94a3b8;
 }
 
 .file-card-info {
@@ -979,8 +1107,8 @@ defineExpose({
 }
 
 .file-card-name {
-  margin-bottom: 4px;
-  font-size: 16px;
+  margin-bottom: 2px;
+  font-size: 15px;
   font-weight: 600;
   color: #1e293b;
 }
@@ -989,4 +1117,80 @@ defineExpose({
   font-size: 13px;
   color: #64748b;
 }
+
+/* ========== Metadata 汇总表格 ========== */
+.metadata-section {
+  margin-top: 20px;
+  border: 1px solid #f1f5f9;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+}
+
+.metadata-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+/* Metadata 表头背景轻微化与留白 */
+.metadata-table :deep(.ant-table-thead > tr > th) {
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-weight: 500 !important;
+  padding: 10px 16px !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+/* Metadata 行极薄下边框与宽松留白 */
+.metadata-table :deep(.ant-table-tbody > tr > td) {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid #f8fafc !important;
+  color: #475569;
+}
+
+/* 重构 AntDV 原生的 Tag 标签色彩，抛弃廉价主色转而使用莫兰迪高级无边框填充 */
+.metadata-table :deep(.ant-tag) {
+  border: none !important;
+  font-weight: 500;
+  border-radius: 4px;
+  padding: 0 6px;
+}
+.metadata-table :deep(.ant-tag-green) {
+  background: #ecfdf5 !important;
+  color: #059669 !important;
+}
+.metadata-table :deep(.ant-tag-blue) {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+.metadata-table :deep(.ant-tag-orange) {
+  background: #fff7ed !important;
+  color: #ea580c !important;
+}
+
+.detail-text {
+  font-size: 12px;
+  color: #64748b;
+  /* 防止过长参数数值组导致撑爆高度并换行 */
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.more-text {
+  color: #3b82f6;
+  font-weight: 500;
+  margin-left: 2px;
+}
 </style>
+

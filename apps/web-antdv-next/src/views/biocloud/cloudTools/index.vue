@@ -149,7 +149,25 @@ onMounted(() => {
 </script>
 
 <template>
-  <Page>
+  <div class="min-h-screen bg-slate-50">
+    <!-- Floating Header Section for CloudTools -->
+    <div class="mb-6 relative overflow-hidden rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-900/5">
+      <div class="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjI2LCAyMzIsIDI0MCwgMC44KSIvPjwvc3ZnPg==')] opacity-[0.15]"></div>
+      
+      <div class="relative z-10 flex items-center justify-between">
+        <div>
+          <h1 class="text-3xl font-extrabold tracking-tight text-slate-900">云工具</h1>
+          <p class="mt-2 max-w-2xl text-base text-slate-500">
+            强大的云端工具库，包含生信分析所需的各类在线计算与绘图工具。
+          </p>
+        </div>
+        <!-- 研发抽象方块水印 -->
+        <div class="hidden md:block opacity-[0.05]">
+          <svg class="h-24 w-24 text-slate-800" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+        </div>
+      </div>
+    </div>
+
     <!-- Search Bar -->
     <div class="mb-4">
       <Input
@@ -294,7 +312,7 @@ onMounted(() => {
         :show-size-changer="false"
       />
     </div>
-  </Page>
+  </div>
 </template>
 
 <style scoped>

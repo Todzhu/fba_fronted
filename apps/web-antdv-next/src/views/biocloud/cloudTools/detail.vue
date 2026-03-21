@@ -182,6 +182,12 @@ const handleHeadersChange = (headers: Record<string, string[]>) => {
   currentHeaders.value = headers;
 };
 
+// ========== Metadata 状态 ==========
+const currentMetadata = ref<Record<string, { columns: string[]; n_cells: number; summary: Array<{ column: string; type: string; values?: string[] }> }>>({});
+const handleMetadataChange = (metadata: Record<string, any>) => {
+  currentMetadata.value = metadata;
+};
+
 // 动态生成参数模式（注入表头选项）
 const dynamicParamSchema = computed(() => {
   if (!tool.value?.param_schema) return null;
@@ -191,7 +197,7 @@ const dynamicParamSchema = computed(() => {
   const schema = structuredClone(toRaw(tool.value.param_schema));
 
   if (schema.properties) {
-    for (const prop of Object.values(schema.properties) as any) {
+    for (const [_key, prop] of Object.entries(schema.properties) as any) {
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
@@ -202,6 +208,42 @@ const dynamicParamSchema = computed(() => {
         if (headers.length > 0) {
           prop.type = 'string';
           prop.enum = headers;
+        }
+      }
+
+      // === 通用 metadata 联动：与 cwmda 分支 scTenifoldKnk 模式一致 ===
+      const fileKey =
+        prop.fileKey || tool.value.example_data?.[0]?.key || 'data_input';
+      const meta = currentMetadata.value[fileKey];
+
+      if (meta?.summary && meta.summary.length > 0) {
+        // metadata_column_select: 将 metadata 的 categorical 列注入下拉选项
+        if (prop.widget === 'metadata_column_select') {
+          const categoryCols = meta.summary
+            .filter((col: any) => col.type === 'categorical')
+            .map((col: any) => col.column);
+          if (categoryCols.length > 0) {
+            prop.type = 'string';
+            prop.enum = categoryCols;
+            prop.widget = 'select';
+          }
+        }
+        // metadata_value_select: 依赖另一参数选中的列，填充该列唯一值
+        if (prop.widget === 'metadata_value_select' && prop.depends_on) {
+          const selectedCol = formParams.value[prop.depends_on] as string;
+          if (selectedCol) {
+            const colMeta = meta.summary.find(
+              (col: any) => col.column === selectedCol,
+            );
+            if (colMeta?.values) {
+              const values = Array.isArray(colMeta.values) ? colMeta.values : [];
+              if (values.length > 0) {
+                prop.type = 'string';
+                prop.enum = values;
+                prop.widget = 'multi-select';
+              }
+            }
+          }
         }
       }
     }
@@ -790,6 +832,7 @@ onMounted(async () => {
                     :schema="tool?.input_schema ?? null"
                     :example-data="tool?.example_data ?? null"
                     @headers-change="handleHeadersChange"
+                    @metadata-change="handleMetadataChange"
                     @next-step="activeTab = 'params'"
                   />
                   <DataFileSelector
@@ -801,6 +844,7 @@ onMounted(async () => {
                     }"
                     :example-data="tool?.example_data ?? null"
                     @headers-change="handleHeadersChange"
+                    @metadata-change="handleMetadataChange"
                     @next-step="activeTab = 'params'"
                   />
                 </div>
@@ -938,8 +982,9 @@ onMounted(async () => {
   flex: 0 0 580px; /* Fixed width */
   flex-direction: column;
   order: -1; /* 排在左侧 */
+  align-self: flex-start; /* 白卡片独立高度，贴合内容不强行拉伸 */
+  max-height: 100%; /* 保证超长时可被弹性父级限制从而安全触发内部隐式内滚 */
   max-width: 580px;
-  overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 16px; /* Smooth corners */
@@ -951,10 +996,12 @@ onMounted(async () => {
 .panel-scroll-content {
   flex: 1;
   overflow-y: auto;
-  scrollbar-color: #cbd5e1 transparent;
-
-  /* Custom Scrollbar for sleek look */
-  scrollbar-width: thin;
+  /* 针对各系浏览器根除丑陋的实体滚动轨道 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.panel-scroll-content::-webkit-scrollbar {
+  display: none;
 }
 
 :deep(.config-tabs .ant-tabs-nav) {

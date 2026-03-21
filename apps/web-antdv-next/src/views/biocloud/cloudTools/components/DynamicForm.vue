@@ -304,6 +304,34 @@ const handleSubmit = () => {
                 </Select>
               </template>
 
+              <!-- 多选下拉（metadata_value_select 运行时转为 multi-select） -->
+              <template
+                v-else-if="getWidgetType(prop) === 'multi-select'"
+              >
+                <Select
+                  :value="
+                    (modelValue[prop.key]
+                      ? (typeof modelValue[prop.key] === 'string'
+                          ? (modelValue[prop.key] as string).split(',').filter(Boolean)
+                          : modelValue[prop.key])
+                      : []) as any
+                  "
+                  mode="multiple"
+                  class="select-input"
+                  :placeholder="prop.description || '请先选择对应的列名'"
+                  :disabled="!prop.enum || prop.enum.length === 0"
+                  @change="(val: any) => updateField(prop.key, (val as string[]).join(','))"
+                >
+                  <Select.Option
+                    v-for="opt in prop.enum"
+                    :key="opt"
+                    :value="opt"
+                  >
+                    {{ opt }}
+                  </Select.Option>
+                </Select>
+              </template>
+
               <!-- 开关 -->
               <template v-else-if="getWidgetType(prop) === 'switch'">
                 <Switch
@@ -448,53 +476,58 @@ const handleSubmit = () => {
   border-bottom: 2px solid #09f;
 }
 
-/* 可折叠面板样式 */
+/* 可折叠面板样式 (重构分类头) */
 :deep(.ant-collapse) {
   background: transparent;
 }
 
 :deep(.ant-collapse-item) {
-  border-bottom: 1px solid #e2e8f0 !important;
+  border-bottom: none !important; /* 去掉冗杂细线 */
+  margin-bottom: 24px;
 }
 
 :deep(.ant-collapse-header) {
-  padding: 0 0 8px !important; /* 减少标题上下间距 */
-  font-weight: 500;
-  color: #334155 !important;
+  padding: 10px 16px !important;
+  margin-bottom: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b !important;
+  background: #f8fafc;
+  border-left: 4px solid #3b82f6;
+  border-radius: 4px;
+  align-items: center !important;
 }
 
 :deep(.ant-collapse-content-box) {
-  padding: 8px 0 !important; /* 减少内容区域内边距 */
+  padding: 4px 8px !important;
 }
 
 /* ========== 参数网格布局（响应式） ========== */
 .param-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px 24px; /* 减少行间距 16px -> 12px */
+  gap: 16px 28px; /* 增加一定间距提供呼吸感 */
 }
 
-/* 单个参数项 (无边框极简风格) */
+/* 单个参数项 */
 .param-item {
   display: flex;
   flex-direction: column;
-  gap: 4px; /* 标签和输入框间距 6px -> 4px */
-  padding: 0; /* 去除内边距 */
-
-  /* 去除背景和边框 */
+  gap: 6px;
+  padding: 0;
   background: transparent;
   border: none;
   border-radius: 0;
 }
 
-/* 标签样式 */
+/* 标签样式升维 */
 .param-label {
   display: flex;
   align-items: center;
   margin-bottom: 2px;
   font-size: 13px;
   font-weight: 500;
-  color: #64748b; /* 颜色稍微淡一点，不再那么抢眼 */
+  color: #475569; /* 加深一点，提升可读性 */
 }
 
 .label-text {
@@ -502,14 +535,14 @@ const handleSubmit = () => {
 }
 
 .help-icon {
-  font-size: 13px;
+  font-size: 14px;
   color: #94a3b8;
   cursor: help;
   transition: color 0.2s ease;
 }
 
 .help-icon:hover {
-  color: #09f;
+  color: #3b82f6;
 }
 
 /* Tooltip 内容样式 */
@@ -532,9 +565,10 @@ const handleSubmit = () => {
 
 .required-mark {
   margin-right: 2px;
-  margin-left: 2px;
+  margin-left: 4px;
   font-weight: bold;
-  color: #ef4444;
+  font-size: 14px;
+  color: #f43f5e; /* 更高级醒目的玫瑰红 */
 }
 
 /* 输入控件容器 */
@@ -596,15 +630,43 @@ const handleSubmit = () => {
   color: #64748b;
 }
 
-/* 底部操作按钮 */
+/* 底部操作按钮模块化重构 */
 .form-actions {
   display: flex;
   gap: 12px;
-  padding-top: 16px;
+  align-items: center;
+  justify-content: flex-end; /* 主要行动靠右 */
+  padding: 16px 20px;
+  margin-top: 24px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+}
+
+/* 重置推至最左侧边界 */
+.form-actions > .ant-btn:first-child {
+  margin-right: auto;
+  border-color: #e2e8f0 !important;
+  color: #64748b !important;
 }
 
 .form-actions .ant-btn {
-  min-width: 80px;
+  border-radius: 8px;
+}
+
+/* 提交按钮巨幅提亮设计 */
+.form-actions .ant-btn-primary:not(.ant-btn-background-ghost) {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  height: 34px;
+  padding: 0 24px;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.form-actions .ant-btn-primary:not(.ant-btn-background-ghost):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
 }
 
 /* 空状态 */
@@ -617,12 +679,26 @@ const handleSubmit = () => {
   border-radius: 8px;
 }
 
-/* 现代输入框样式 */
+/* 立体悬浮现代输入框样式 */
 :deep(.ant-input),
 :deep(.ant-input-number),
 :deep(.ant-select-selector) {
+  background-color: #f8fafc !important;
   border-color: #e2e8f0 !important;
-  border-radius: 6px !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+}
+
+:deep(.ant-input:focus),
+:deep(.ant-input:hover),
+:deep(.ant-input-number:focus),
+:deep(.ant-input-number:hover),
+:deep(.ant-select-selector:hover),
+:deep(.ant-select-focused .ant-select-selector) {
+  background-color: #ffffff !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1) !important;
 }
 
 /* 确保输入框内的值显示为正常深色（非 placeholder 样式） */
@@ -634,21 +710,15 @@ const handleSubmit = () => {
   color: #94a3b8 !important;
 }
 
-:deep(.ant-input:hover),
-:deep(.ant-input-number:hover),
-:deep(.ant-select-selector:hover) {
-  border-color: var(--primary-color) !important;
-}
-
 :deep(.ant-slider-track) {
-  background-color: #09f;
+  background-color: #3b82f6;
 }
 
 :deep(.ant-slider-handle) {
-  border-color: #09f;
+  border-color: #3b82f6;
 }
 
 :deep(.ant-switch-checked) {
-  background-color: #09f;
+  background-color: #3b82f6;
 }
 </style>

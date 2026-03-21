@@ -27,7 +27,7 @@ import FilePreviewModal from './components/FilePreviewModal.vue';
 import FileTable from './components/FileTable.vue';
 import FileToolbar from './components/FileToolbar.vue';
 import FileUploadModal from './components/FileUploadModal.vue';
-import ImportWizard from './components/ImportWizard.vue';
+// removed ImportWizard
 import MoveModal from './components/MoveModal.vue';
 import NewFolderModal from './components/NewFolderModal.vue';
 import RenameModal from './components/RenameModal.vue';
@@ -54,7 +54,7 @@ const searchKeyword = ref('');
 const allFiles = ref<FileItem[]>([]);
 const selectedFiles = ref<FileItem[]>([]);
 const viewMode = ref('list');
-const activeTab = ref<'files' | 'import'>('files');
+// removed activeTab
 const currentPage = ref(1);
 const pageSize = ref(10);
 const totalFiles = ref(0);
@@ -93,7 +93,11 @@ const fetchStorageStats = async () => {
 };
 
 // Computed
-const files = computed(() => allFiles.value);
+const files = computed(() => {
+  const keyword = searchKeyword.value.trim().toLowerCase();
+  if (!keyword) return allFiles.value;
+  return allFiles.value.filter(item => item.name.toLowerCase().includes(keyword));
+});
 
 // 转换后端数据到前端格式
 const transformFileItem = (item: ApiFileItem): FileItem => ({
@@ -473,36 +477,19 @@ const handlePreview = (file: FileItem) => {
 
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
-    <!-- Header Section（与 MyTasks 一致） -->
-    <div
-      class="border-b border-slate-200 bg-white px-4 pt-10 sm:px-6 lg:px-8"
-    >
-      <div class="mx-auto max-w-7xl">
-        <h1 class="mb-2 text-3xl font-bold text-slate-900">我的数据</h1>
-        <p class="max-w-2xl text-slate-500">
-          管理您的个人数据文件，支持上传、下载和文件夹管理。
-        </p>
-
-        <!-- Tab 切换栏（下划线风格，与 MyTasks 一致） -->
-        <div class="mt-6 flex items-center gap-1">
-          <button
-            class="tab-btn"
-            :class="{ active: activeTab === 'files' }"
-            @click="activeTab = 'files'"
-          >
-            <IconifyIcon icon="ant-design:folder-outlined" class="text-base" />
-            我的文件
-            <div v-if="activeTab === 'files'" class="tab-indicator" />
-          </button>
-          <button
-            class="tab-btn"
-            :class="{ active: activeTab === 'import' }"
-            @click="activeTab = 'import'"
-          >
-            <IconifyIcon icon="ant-design:import-outlined" class="text-base" />
-            导入数据
-            <div v-if="activeTab === 'import'" class="tab-indicator" />
-          </button>
+    <!-- Compact Banner Header -->
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-6">
+      <div class="flex items-center justify-between rounded-2xl bg-white border border-slate-200/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] px-6 py-4">
+        <div class="flex items-center gap-5">
+          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 shadow-inner ring-1 ring-black/5">
+            <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+          </div>
+          <div class="flex flex-col justify-center">
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">我的数据</h1>
+            <p class="mt-0.5 text-[13px] font-medium text-slate-500">
+              管理您的个人数据文件，支持上传、下载和文件夹管理。
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -519,8 +506,8 @@ const handlePreview = (file: FileItem) => {
 
         <!-- 右侧主区域 -->
         <main class="main-area">
-          <!-- 我的文件 Tab -->
-          <div v-if="activeTab === 'files'" class="files-section">
+          <!-- 我的文件全尺寸展示区 -->
+          <div class="files-section">
             <!-- 面包屑导航（仅子文件夹时显示） -->
             <div v-if="currentFolderId !== null" class="flex items-center gap-3">
               <IconifyIcon
@@ -617,11 +604,7 @@ const handlePreview = (file: FileItem) => {
             </div>
           </div>
 
-          <!-- 导入数据 Tab -->
-          <ImportWizard
-            v-if="activeTab === 'import'"
-            @upload="handleUploadFiles"
-          />
+          <!-- 导入数据 Tab 模块已被回收清理 -->
         </main>
       </div>
     </div>
@@ -672,39 +655,7 @@ const handlePreview = (file: FileItem) => {
   min-width: 0;
 }
 
-/* Tab Bar（下划线风格，与 MyTasks 一致） */
-.tab-btn {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: none;
-  background: transparent;
-  font-size: 14px;
-  font-weight: 500;
-  color: #64748b;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.tab-btn:hover {
-  color: #1e293b;
-}
-
-.tab-btn.active {
-  color: #2563eb;
-}
-
-.tab-indicator {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  border-radius: 1px;
-  background: #2563eb;
-}
+/* Content Layout保留，其余 Tab Bar 内容清理完毕 */
 
 /* Files Section */
 .files-section {
@@ -722,9 +673,10 @@ const handlePreview = (file: FileItem) => {
 .file-list-wrap {
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.04);
   background: white;
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.06);
 }
 
 .fade-enter-active,

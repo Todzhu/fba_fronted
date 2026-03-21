@@ -277,15 +277,20 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
-    <!-- Header Section -->
-    <div
-      class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
-    >
-      <div class="mx-auto max-w-7xl">
-        <h1 class="mb-2 text-3xl font-bold text-slate-900">云流程</h1>
-        <p class="max-w-2xl text-slate-500">
-          选择分析流程类型，创建和管理你的组学数据分析任务。
-        </p>
+    <!-- Compact Banner Header -->
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-6">
+      <div class="flex items-center justify-between rounded-2xl bg-white border border-slate-200/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] px-6 py-4">
+        <div class="flex items-center gap-5">
+          <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-inner ring-1 ring-black/5">
+            <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          </div>
+          <div class="flex flex-col justify-center">
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">云流程</h1>
+            <p class="mt-0.5 text-[13px] font-medium text-slate-500">
+              选择分析流程类型，创建和管理你的组学数据分析任务。
+            </p>
+          </div>
+        </div>
       </div>
     </div>
 

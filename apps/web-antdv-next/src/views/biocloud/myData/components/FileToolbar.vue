@@ -23,7 +23,7 @@ const onViewChange = (value: string) => {
 </script>
 
 <template>
-  <div class="flex justify-between items-center p-3 bg-slate-50/50 rounded-xl border border-slate-100">
+  <div class="flex justify-between items-center p-3 sm:p-3.5 bg-white rounded-2xl shadow-[0_2px_12px_-4px_rgba(0,0,0,0.06)] ring-1 ring-slate-900/5 transition-all hover:shadow-md">
     <!-- 左侧：搜索 + 视图切换 -->
     <div class="flex items-center gap-4">
       <Input.Search
@@ -31,6 +31,7 @@ const onViewChange = (value: string) => {
         placeholder="搜索文件..."
         allow-clear
         class="w-64 file-search"
+        @change="onSearch"
         @search="onSearch"
       />
       <div class="bg-slate-100 p-1 rounded-lg flex items-center">

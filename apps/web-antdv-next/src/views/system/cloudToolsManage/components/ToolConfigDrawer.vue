@@ -76,17 +76,19 @@ const basicInfo = ref({
 
 // 示例数据配置
 interface ExampleItem {
+  _id: string;
   key: string;
   name: string;
   url: string;
   description: string;
-  fileName?: string; // 上传文件名
-  uploading?: boolean; // 上传状态
+  fileName?: string;
+  uploading?: boolean;
 }
 const exampleItems = ref<ExampleItem[]>([]);
 
 // 输入文件配置
 interface InputFile {
+  _id: string;
   key: string;
   label: string;
   required: boolean;
@@ -107,6 +109,7 @@ interface ParamItem {
   maximum?: number;
   group: string; // 分组，默认 "通用参数"
   format?: string;
+  depends_on?: string; // 联动依赖的参数 key
 }
 const paramItems = ref<ParamItem[]>([]);
 
@@ -122,6 +125,8 @@ const typeWidgetOptions = [
       { value: 'palette_select', label: '调色板选择器' },
       { value: 'color', label: '颜色选择器' },
       { value: 'column_select', label: '列选择器' },
+      { value: 'metadata_column_select', label: 'Metadata列选择器' },
+      { value: 'metadata_value_select', label: 'Metadata值选择器(联动)' },
     ],
   },
   {
@@ -148,7 +153,12 @@ const typeWidgetOptions = [
 ];
 
 // 输出配置
+// 生成唯一行 ID（防止 Table 编辑失焦）
+let _rowIdCounter = 0;
+const genRowId = () => `row_${Date.now()}_${++_rowIdCounter}`;
+
 interface OutputItem {
+  _id: string;
   key: string;
   path: string;
   type: 'download' | 'echarts' | 'pdf' | 'table';
@@ -175,6 +185,7 @@ watch(
 
     // 示例数据
     exampleItems.value = (tool.example_data || []).map((e: any) => ({
+      _id: genRowId(),
       key: e.key || '',
       name: e.name || '',
       url: e.url || '',
@@ -184,6 +195,7 @@ watch(
     // 输入文件
     const inputSchema = tool.input_schema as null | { files?: any[] };
     inputFiles.value = (inputSchema?.files || []).map((f: any) => ({
+      _id: genRowId(),
       key: f.key || '',
       label: f.label || '',
       required: f.required || false,
@@ -231,6 +243,7 @@ watch(
           maximum: p.maximum,
           group: p.group || '通用参数',
           format: p.format,
+          depends_on: p.depends_on,
         };
       });
     } else {
@@ -240,6 +253,7 @@ watch(
     // 输出
     const outputConfig = tool.output_config as null | { outputs?: any[] };
     outputItems.value = (outputConfig?.outputs || []).map((o: any) => ({
+      _id: genRowId(),
       key: o.key || '',
       path: o.path || '',
       type: o.type || 'echarts',
@@ -252,6 +266,7 @@ watch(
 // ========== 添加/删除操作 ==========
 const addInputFile = () => {
   inputFiles.value.push({
+    _id: genRowId(),
     key: '',
     label: '',
     required: true,
@@ -323,7 +338,7 @@ const handleParamEditCancel = () => {
 };
 
 const addOutput = () => {
-  outputItems.value.push({ key: '', path: '', type: 'echarts', title: '' });
+  outputItems.value.push({ _id: genRowId(), key: '', path: '', type: 'echarts', title: '' });
 };
 
 const removeOutput = (index: number) => {
@@ -332,6 +347,7 @@ const removeOutput = (index: number) => {
 
 const addExample = () => {
   exampleItems.value.push({
+    _id: genRowId(),
     key: '',
     name: '',
     url: '',
@@ -482,6 +498,7 @@ const handleSave = async () => {
     if (p.description) prop.description = p.description;
     if (p.minimum !== undefined) prop.minimum = p.minimum;
     if (p.maximum !== undefined) prop.maximum = p.maximum;
+    if (p.depends_on) prop.depends_on = p.depends_on;
     properties[p.key] = prop;
     order.push(p.key); // 按顺序添加 key
   }
@@ -576,16 +593,19 @@ const outputColumns = [
 ];
 
 // ========== 导出配置 ==========
+const stripId = <T extends { _id?: string }>(arr: T[]) =>
+  arr.map(({ _id, ...rest }) => rest);
+
 const handleExportConfig = () => {
   const config = {
     version: '1.0',
     tool_title: props.tool?.title || 'unknown',
     exported_at: new Date().toISOString(),
     basic_info: basicInfo.value,
-    input_files: inputFiles.value,
+    input_files: stripId(inputFiles.value),
     param_items: paramItems.value,
-    output_items: outputItems.value,
-    example_items: exampleItems.value,
+    output_items: stripId(outputItems.value),
+    example_items: stripId(exampleItems.value),
   };
 
   const blob = new Blob([JSON.stringify(config, null, 2)], {
@@ -629,7 +649,7 @@ const handleImportConfig = async (file: File) => {
 
     // 导入输入文件配置
     if (config.input_files) {
-      inputFiles.value = config.input_files;
+      inputFiles.value = config.input_files.map((f: any) => ({ _id: genRowId(), ...f }));
     }
 
     // 导入参数配置
@@ -639,12 +659,12 @@ const handleImportConfig = async (file: File) => {
 
     // 导入输出配置
     if (config.output_items) {
-      outputItems.value = config.output_items;
+      outputItems.value = config.output_items.map((o: any) => ({ _id: genRowId(), ...o }));
     }
 
     // 导入示例数据
     if (config.example_items) {
-      exampleItems.value = config.example_items;
+      exampleItems.value = config.example_items.map((e: any) => ({ _id: genRowId(), ...e }));
     }
 
     message.success(`配置已导入 (来自: ${config.tool_title || '未知'})`);
@@ -850,6 +870,7 @@ const handleImportConfig = async (file: File) => {
           :data-source="inputFiles"
           :pagination="false"
           size="small"
+          row-key="_id"
         >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.dataIndex === 'key'">
@@ -1052,6 +1073,16 @@ const handleImportConfig = async (file: File) => {
                 </Form.Item>
               </Col>
             </Row>
+
+            <Form.Item
+              v-if="editingParam.typeWidget?.[1] === 'metadata_value_select'"
+              label="联动依赖参数 Key"
+            >
+              <Input
+                v-model:value="editingParam.depends_on"
+                placeholder="填写所依赖的参数 key，如: celltype_col"
+              />
+            </Form.Item>
           </Form>
         </Modal>
       </Tabs.TabPane>
@@ -1068,6 +1099,7 @@ const handleImportConfig = async (file: File) => {
           :data-source="outputItems"
           :pagination="false"
           size="small"
+          row-key="_id"
         >
           <template #bodyCell="{ column, record, index }">
             <template v-if="column.dataIndex === 'key'">
@@ -1120,7 +1152,7 @@ const handleImportConfig = async (file: File) => {
           <div class="example-list">
             <Card
               v-for="(item, index) in exampleItems"
-              :key="index"
+              :key="item._id"
               class="example-card"
             >
               <template #title>

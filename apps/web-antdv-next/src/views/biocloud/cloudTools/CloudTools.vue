@@ -28,6 +28,8 @@ import AuthModal from '#/views/biocloud/landing/components/AuthModal.vue';
 const router = useRouter();
 const accessStore = useAccessStore();
 const showAuthModal = ref(false);
+// 登录成功后跳转的目标路径（记录用户意图）
+const authRedirectPath = ref('');
 
 const isLoggedIn = computed(() => !!accessStore.accessToken);
 
@@ -118,26 +120,37 @@ const goToPage = (page: number) => {
 };
 
 const handleToolClick = (tool: AnalysisTool) => {
-  // 允许游客浏览工具详情，提交分析时再检查登录
+  if (!isLoggedIn.value) {
+    // 未登录：弹出登录注册框，记录目标工具路径
+    authRedirectPath.value = `/tool/${tool.id}`;
+    showAuthModal.value = true;
+    return;
+  }
+  // 已登录：直接跳转到工具详情页
   router.push(`/tool/${tool.id}`);
 };
 </script>
 
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
-    <!-- ========== Header 区域（与云流程/我的数据一致） ========== -->
-    <div
-      class="border-b border-slate-200 bg-white px-4 pb-8 pt-10 sm:px-6 lg:px-8"
-    >
-      <div class="mx-auto max-w-7xl">
-        <h1 class="mb-2 text-3xl font-bold text-slate-900">云工具</h1>
-        <p class="max-w-2xl text-slate-500">
-          探索超过 {{ total }}+
-          款专业生物信息分析工具，从基础绘图到高级多组学挖掘，一键即用。
-        </p>
+    <!-- Compact Banner Header -->
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 mt-6">
+      <div class="flex items-center justify-between rounded-xl bg-white border border-slate-200/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] px-5 py-3.5">
+        <div class="flex items-center gap-4">
+          <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-inner ring-1 ring-black/5">
+            <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <div class="flex flex-col justify-center">
+            <h1 class="text-[17px] font-bold tracking-tight text-slate-900">云工具</h1>
+            <p class="mt-0.5 text-xs font-medium text-slate-500">
+              探索超过 {{ total }}+ 款专业生物信息分析工具，从基础绘图到高级多组学挖掘，一键即用。
+            </p>
+          </div>
+        </div>
+      </div>
 
-        <!-- 搜索 & 筛选条 -->
-        <div class="mt-8 flex flex-col gap-4 md:flex-row">
+      <!-- 搜索 & 筛选条 -->
+      <div class="mt-6 mb-4 flex flex-col gap-4 md:flex-row">
           <!-- 搜索框 -->
           <div class="relative max-w-lg flex-1">
             <div
@@ -180,7 +193,6 @@ const handleToolClick = (tool: AnalysisTool) => {
             </button>
           </div>
         </div>
-      </div>
     </div>
 
     <!-- ========== 工具网格 ========== -->
@@ -191,104 +203,107 @@ const handleToolClick = (tool: AnalysisTool) => {
         <span class="text-sm text-slate-500">加载工具中...</span>
       </div>
 
-      <!-- 工具卡片网格 - 竖直布局，与 landing page 和云流程一致 -->
+      <!-- 工具卡片网格 - 横向饱和排版 -->
       <div
         v-else-if="tools.length > 0"
-        class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        class="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
       >
         <div
           v-for="tool in tools"
           :key="tool.id"
           @click="handleToolClick(tool)"
-          class="group cursor-pointer overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-100/50"
+          class="group flex min-h-[160px] cursor-pointer items-stretch rounded-[20px] border border-slate-200/60 bg-white p-3.5 sm:p-4 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-blue-300 hover:shadow-xl hover:shadow-blue-100/30"
         >
-          <!-- 顶部图片预览区 -->
-          <div class="relative h-40 overflow-hidden sm:h-44">
-            <!-- 有图片：显示工具产出图 -->
-            <img
-              v-if="tool.icon && tool.icon.includes('/')"
-              :src="getFullImageUrl(tool.icon)"
-              :alt="tool.title"
-              class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-            <!-- 无图片：渐变背景 + 首字母 -->
-            <div
-              v-else
-              class="flex h-full w-full items-center justify-center"
-              :style="{
-                background: `linear-gradient(135deg, ${tool.color || '#3b82f6'}20, ${tool.color || '#6366f1'}10)`,
-              }"
-            >
-              <div
-                class="flex h-16 w-16 items-center justify-center rounded-2xl shadow-lg transition-transform duration-300 group-hover:scale-110"
-                :style="{
-                  backgroundColor: tool.color || '#3b82f6',
-                  boxShadow: `0 8px 24px ${tool.color || '#3b82f6'}30`,
-                }"
-              >
-                <span class="text-2xl font-bold text-white">{{
-                  tool.title?.charAt(0) || 'T'
-                }}</span>
+          <!-- 左侧：宽幅画廊满高框，拒绝上下留空 -->
+          <div class="relative shrink-0 overflow-hidden rounded-[14px] bg-slate-50 w-[110px] sm:w-[130px] md:w-[136px]">
+            <!-- ========== 有图片 ========== -->
+            <template v-if="tool.icon && tool.icon.includes('/')">
+              <!-- 沉浸式模糊背景 -->
+              <img
+                :src="getFullImageUrl(tool.icon)"
+                class="absolute inset-0 h-full w-full object-cover opacity-50 blur-lg transition-all duration-500 group-hover:scale-110 group-hover:opacity-75"
+                alt=""
+              />
+              <div class="absolute inset-0 bg-white/55"></div>
+              
+              <!-- 居中最美视效留白的清晰原图 -->
+              <div class="absolute inset-2 flex items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)] ring-1 ring-slate-900/5 transition-transform duration-500 group-hover:scale-105 group-hover:shadow-md sm:inset-2.5">
+                <img
+                  :src="getFullImageUrl(tool.icon)"
+                  :alt="tool.title"
+                  class="h-full w-full object-contain p-1.5"
+                />
               </div>
-            </div>
-
+            </template>
+            
+            <!-- ========== 无图片：高纯度凝胶方块 ========== -->
+            <template v-else>
+              <div
+                class="absolute inset-0 transition-opacity duration-500 group-hover:opacity-100 opacity-60"
+                :style="{ background: `radial-gradient(circle at center, ${tool.color || '#3b82f6'}15 0%, transparent 80%)` }"
+              ></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div
+                  class="flex h-16 w-16 items-center justify-center rounded-[14px] bg-gradient-to-br shadow-lg transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-110 sm:h-20 sm:w-20 sm:rounded-[18px]"
+                  :style="{
+                    backgroundImage: `linear-gradient(135deg, ${tool.color || '#3b82f6'}e6, ${tool.color ? tool.color + 'b3' : '#1d4ed8'}e6)`,
+                    boxShadow: `0 8px 16px -4px ${tool.color || '#3b82f6'}40`
+                  }"
+                >
+                  <span class="text-3xl font-black text-white drop-shadow-sm sm:text-[36px]">
+                    {{ tool.title?.charAt(0) || 'C' }}
+                  </span>
+                </div>
+              </div>
+            </template>
 
             <!-- 登录锁定遮罩 -->
             <div
               v-if="!isLoggedIn"
-              class="absolute bottom-2 right-2 rounded-full bg-black/40 p-1.5 text-white opacity-0 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-100"
-              title="登录后使用"
+              class="absolute bottom-1.5 right-1.5 z-20 rounded-full bg-slate-900/60 p-1.5 text-white opacity-0 backdrop-blur-md transition-opacity duration-300 group-hover:opacity-100"
             >
               <Lock class="h-3.5 w-3.5" />
             </div>
           </div>
 
-          <!-- 底部内容区 -->
-          <div class="p-4">
-            <!-- 标题 -->
-            <h3
-              class="mb-2 text-base font-bold text-slate-900 transition-colors group-hover:text-blue-600"
-            >
-              {{ tool.title }}
-            </h3>
+          <!-- 右侧：自然拉升撑满上下的动态排印 (移除 justify-center) -->
+          <div class="ml-4 flex min-w-0 flex-1 flex-col py-0.5 pr-1 justify-between sm:ml-5">
+            <div class="flex flex-col gap-2">
+              <div class="flex items-start justify-between gap-2">
+                 <!-- 工具名称显示完整、不加过粗字重 -->
+                 <h3 class="text-base font-semibold text-slate-800 transition-colors group-hover:text-blue-600 sm:text-[17px] leading-snug">
+                   {{ tool.title }}
+                 </h3>
+                 <ArrowRight class="mt-0.5 h-4 w-4 shrink-0 text-slate-300 transform -translate-x-1 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-blue-500 group-hover:opacity-100 sm:opacity-100" />
+              </div>
 
-            <!-- 分类标签 -->
-            <div class="mb-3 flex flex-wrap gap-1.5">
-              <span class="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600">
-                {{ tool.omics_category }}
-              </span>
-              <span
-                v-if="tool.func_category"
-                class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-600"
-              >
-                {{ tool.func_category }}
-              </span>
-            </div>
-
-            <!-- 描述 -->
-            <p
-              class="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500"
-            >
-              {{ tool.description }}
-            </p>
-
-            <!-- 底部统计 -->
-            <div
-              class="flex items-center justify-between border-t border-slate-100 pt-3"
-            >
-              <div class="flex items-center gap-3 text-xs text-slate-400">
-                <span class="flex items-center gap-1">
-                  <Eye class="h-3.5 w-3.5" />
-                  {{ tool.views }} 浏览
+              <!-- 工业感微标（Tag） -->
+              <div class="flex flex-wrap gap-1.5">
+                <span class="rounded bg-slate-50 px-1.5 py-[3px] text-[10px] font-semibold uppercase tracking-wider text-slate-500 border border-slate-200/60">
+                  {{ tool.omics_category }}
                 </span>
-                <span class="flex items-center gap-1">
-                  <Star class="h-3.5 w-3.5" />
-                  {{ tool.stars }} 收藏
+                <span
+                  v-if="tool.func_category"
+                  class="rounded bg-blue-50/40 px-1.5 py-[3px] text-[10px] font-semibold uppercase tracking-wider text-blue-500 border border-blue-100/50"
+                >
+                  {{ tool.func_category }}
                 </span>
               </div>
-              <ArrowRight
-                class="h-4 w-4 text-slate-300 transition-all duration-200 group-hover:translate-x-1 group-hover:text-blue-500"
-              />
+
+              <!-- 描述文本，靠紧上方，充分利用中段空间 -->
+              <p class="line-clamp-3 text-[12.5px] leading-[1.65] text-slate-500/90 sm:text-[13px]">
+                {{ tool.description }}
+              </p>
+            </div>
+
+            <!-- 底栏数据紧贴卡片底部沿线 -->
+            <div class="mt-3 flex items-center gap-4 text-[11px] font-medium tracking-wide text-slate-400">
+              <span class="flex items-center gap-1.5 transition-colors group-hover:text-slate-600">
+                <Eye class="h-3.5 w-3.5" /> {{ tool.views }}
+              </span>
+              <span class="flex items-center gap-1.5 transition-colors group-hover:text-amber-500">
+                <Star class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover:text-amber-500" /> {{ tool.stars }}
+              </span>
             </div>
           </div>
         </div>
@@ -383,7 +398,11 @@ const handleToolClick = (tool: AnalysisTool) => {
     </div>
 
     <!-- Auth Modal -->
-    <AuthModal :is-open="showAuthModal" @close="showAuthModal = false" />
+    <AuthModal
+      :is-open="showAuthModal"
+      :redirect-path="authRedirectPath"
+      @close="showAuthModal = false"
+    />
   </div>
 </template>
 
