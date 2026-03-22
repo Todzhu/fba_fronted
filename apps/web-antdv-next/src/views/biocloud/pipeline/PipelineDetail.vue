@@ -800,19 +800,40 @@ const STEP_OUTPUT_DIRS: Record<string, string> = {
   sub_annotation: 'step_5_sub_annotation',
 };
 
+// 将反斜杠统一为正斜杠（Windows 路径兼容）
+const normalizePath = (p: string) => p.split('\\').join('/');
+
+// 从 taskOutputDir（绝对路径）提取 median/ 之后的相对路径
+const extractRelDir = (absDir: string): string | null => {
+  const normalized = normalizePath(absDir);
+  const marker = '/median/';
+  const idx = normalized.indexOf(marker);
+  if (idx === -1) return null;
+  return normalized.substring(idx + marker.length);
+};
+
 // 构建图表/表格的完整访问 URL
 const getChartUrl = (relPath: string): string => {
   if (!pipeline.value || !activeStep.value) return relPath;
-  // 如果已经是完整 URL 则直接返回
   if (relPath.startsWith('http') || relPath.startsWith('/')) return relPath;
+  const normalizedPath = normalizePath(relPath);
+
+  // v2: 使用 Pipeline 关联的统一任务目录
+  const taskDir = pipeline.value.taskOutputDir;
+  if (taskDir) {
+    const relDir = extractRelDir(taskDir);
+    if (relDir) {
+      const stepDir = STEP_OUTPUT_DIRS[activeStep.value.stepType] || `step_${activeStepIndex.value}`;
+      return `/static/pipelines/${relDir}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
+    }
+  }
+
+  // 兼容旧版：使用 pipelines/ 路径
   const userId = pipeline.value.userId;
   const pipelineId = pipeline.value.id;
   const stepDir =
     STEP_OUTPUT_DIRS[activeStep.value.stepType] ||
     `step_${activeStepIndex.value}`;
-  // 将 Windows 反斜杠替换为正斜杠
-  const normalizedPath = relPath.replaceAll('\\\\', '/').replaceAll('\\', '/');
-  // 加时间戳防止浏览器缓存旧图
   return `/static/pipelines/${userId}/pipelines/${pipelineId}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
 };
 
@@ -820,10 +841,22 @@ const getChartUrl = (relPath: string): string => {
 const getStepChartUrl = (relPath: string, stepType: string): string => {
   if (!pipeline.value) return relPath;
   if (relPath.startsWith('http') || relPath.startsWith('/')) return relPath;
+  const normalizedPath = normalizePath(relPath);
+
+  // v2: 使用 Pipeline 关联的统一任务目录
+  const taskDir = pipeline.value.taskOutputDir;
+  if (taskDir) {
+    const relDir = extractRelDir(taskDir);
+    if (relDir) {
+      const stepDir = STEP_OUTPUT_DIRS[stepType] || stepType;
+      return `/static/pipelines/${relDir}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
+    }
+  }
+
+  // 兼容旧版
   const userId = pipeline.value.userId;
   const pipelineId = pipeline.value.id;
   const stepDir = STEP_OUTPUT_DIRS[stepType] || stepType;
-  const normalizedPath = relPath.replaceAll('\\\\', '/').replaceAll('\\', '/');
   return `/static/pipelines/${userId}/pipelines/${pipelineId}/${stepDir}/${normalizedPath}`;
 };
 
@@ -2339,4 +2372,5 @@ onUnmounted(() => {
   transform: scale(0.9);
 }
 </style>
+
 

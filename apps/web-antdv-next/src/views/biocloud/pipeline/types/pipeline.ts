@@ -30,6 +30,8 @@ export interface StepResult {
   charts: string[]; // 图表文件相对路径列表
   tables: string[]; // 表格文件相对路径列表
   completedAt: string;
+  output_dir?: string; // v2: 步骤输出目录绝对路径（用于构建图片 URL）
+  analysis_task_id?: number; // v2: 关联的 AnalysisTask ID（用于"我的任务"跳转）
 }
 
 // 流程定义
@@ -42,6 +44,9 @@ export interface Pipeline {
   species?: string; // 样本物种
   sampleDict?: Record<string, { folder: string; name: string }[]>; // 样本分组映射
   currentStep: number;
+  status: string;
+  analysisTaskId?: number; // 关联的 AnalysisTask ID
+  taskOutputDir?: string;  // 统一任务输出目录（用于构建图片 URL）
   steps: StepConfig[];
   createdAt: string;
   updatedAt: string;

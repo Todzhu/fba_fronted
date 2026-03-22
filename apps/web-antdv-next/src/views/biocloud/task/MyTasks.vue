@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { TaskItem } from '#/api/myTasks';
-import type { Pipeline } from '#/views/biocloud/pipeline/types/pipeline';
 
 // 我的任务页面 - 任务管理（含云工具任务 + 流程分析任务）
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -8,7 +7,6 @@ import { useRouter } from 'vue-router';
 
 import {
   AlertCircle,
-  Check,
   CheckCircle,
   ChevronLeft,
   ChevronRight,
@@ -23,8 +21,6 @@ import {
   Search,
   Trash2,
   X,
-  ExternalLink,
-  FolderOpen,
 } from 'lucide-vue-next';
 
 import {
@@ -35,7 +31,8 @@ import {
   updateTaskName,
 } from '#/api/myTasks';
 
-import { deletePipeline, getPipelines } from '#/api/pipeline';
+import { getPipelines } from '#/api/pipeline';
+import type { Pipeline } from '#/views/biocloud/pipeline/types/pipeline';
 import { STEP_LABELS } from '#/views/biocloud/pipeline/types/pipeline';
 
 // ========== State ==========
@@ -51,12 +48,6 @@ const currentPage = ref(1);
 const pageSize = 10;
 
 // Tab 切换
-const activeTab = ref<'pipeline' | 'tools'>('tools');
-
-const tabs = [
-  { key: 'tools' as const, label: '云工具任务', icon: Search },
-  { key: 'pipeline' as const, label: '流程分析任务', icon: Microscope },
-];
 
 // ========== 状态配置 ==========
 const statusOptions = [
@@ -156,25 +147,27 @@ const filteredTasks = computed(() => {
 const totalPages = computed(() => Math.ceil(total.value / pageSize));
 
 // ========== Selection ==========
-const toggleSelect = (id: number) => {
-  const index = selectedTasks.value.indexOf(id);
-  if (index === -1) {
-    selectedTasks.value.push(id);
+const toggleSelectAll = (e: Event) => {
+  const checked = (e.target as HTMLInputElement).checked;
+  if (checked) {
+    selectedTasks.value = filteredTasks.value.map(t => t.id);
   } else {
-    selectedTasks.value.splice(index, 1);
+    selectedTasks.value = [];
   }
 };
 
-const toggleSelectAll = () => {
-  selectedTasks.value =
-    selectedTasks.value.length === filteredTasks.value.length
-      ? []
-      : filteredTasks.value.map((t) => t.id);
+const toggleSelectTask = (taskId: number) => {
+  const idx = selectedTasks.value.indexOf(taskId);
+  if (idx > -1) {
+    selectedTasks.value.splice(idx, 1);
+  } else {
+    selectedTasks.value.push(taskId);
+  }
 };
 
 // ========== Navigation ==========
 const goToTaskResult = (task: TaskItem) => {
-  // 跳转到任务详情页（结果文件浏览器）
+  // 所有任务统一跳转到任务详情页（结果文件浏览器）
   router.push({ name: 'TaskDetail', params: { taskId: String(task.id) } });
 };
 
@@ -348,49 +341,20 @@ watch(currentPage, () => {
   fetchTasks();
 });
 
-// ========== 流程分析任务 ==========
+// ========== 流程步骤状态（用于圆点展示） ==========
 const myPipelines = ref<Pipeline[]>([]);
-const loadingPipelines = ref(false);
-const deletingPipelineId = ref<null | string>(null);
 
 const loadMyPipelines = async () => {
-  loadingPipelines.value = true;
   try {
     myPipelines.value = await getPipelines();
-  } finally {
-    loadingPipelines.value = false;
-  }
+  } catch { /* ignore */ }
 };
 
-const handleDeletePipeline = async (id: string) => {
-  deletingPipelineId.value = id;
-  try {
-    await deletePipeline(id);
-    await loadMyPipelines();
-  } finally {
-    deletingPipelineId.value = null;
-  }
-};
-
-const getCompletedSteps = (p: Pipeline): number => {
-  return p.steps.filter((s) => s.status === 'completed').length;
-};
-
-const isAllCompleted = (p: Pipeline): boolean => {
-  return getCompletedSteps(p) === p.steps.length;
-};
-
-
-
-const formatRelativeTime = (dateStr: string): string => {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes} 分钟前`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} 小时前`;
-  const days = Math.floor(hours / 24);
-  return `${days} 天前`;
+// 根据 task 的 pipeline_id 找到对应的 Pipeline 记录
+const findPipeline = (task: TaskItem): Pipeline | undefined => {
+  const pid = task.input_params?.pipeline_id;
+  if (!pid) return undefined;
+  return myPipelines.value.find(p => String(p.id) === String(pid));
 };
 
 onMounted(() => {
@@ -486,7 +450,7 @@ onMounted(() => {
         </p>
       </div>
 
-      <!-- Empty State -->
+      <!-- Empty State（流程任务和单工具任务都为空时才显示） -->
       <div v-else-if="filteredTasks.length === 0" class="py-20 text-center">
         <div
           class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100"
@@ -498,164 +462,42 @@ onMounted(() => {
       </div>
 
       <!-- Task List -->
-      <div v-else class="space-y-3">
+      <div v-else class="rounded-xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] overflow-hidden">
         <!-- List Header -->
-        <div class="grid grid-cols-12 gap-4 px-6 py-2 text-sm font-medium text-slate-500">
-          <div class="col-span-1 flex items-center">
+        <div class="grid grid-cols-12 gap-4 border-b border-slate-100 bg-slate-50/50 px-6 py-3 text-[13px] font-bold text-slate-500">
+          <div class="col-span-5 pl-1 flex items-center gap-3">
             <input
+              v-if="filteredTasks.length > 0"
               type="checkbox"
-              :checked="
-                selectedTasks.length === filteredTasks.length &&
-                filteredTasks.length > 0
-              "
+              class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+              :checked="selectedTasks.length === filteredTasks.length && filteredTasks.length > 0"
               @change="toggleSelectAll"
-              class="h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              title="全选本页单工具任务"
             />
+            <span>任务名称</span>
           </div>
-          <div class="col-span-4">任务名称</div>
-          <div class="col-span-2">分析工具</div>
-          <div class="col-span-2">任务状态</div>
-          <div class="col-span-2">创建时间</div>
-          <div class="col-span-1 text-right">操作</div>
+          <div class="col-span-2 pl-1">分析工具</div>
+          <div class="col-span-2 pl-1">任务状态</div>
+          <div class="col-span-2 pl-1">创建时间</div>
+          <div class="col-span-1 text-right pr-2">操作</div>
         </div>
 
-        <!-- List Body -->
-        <!-- 1. 流程分析任务卡片 (置顶) -->
-        <div
-          v-for="p in myPipelines.filter(mp => !searchQuery.trim() || mp.name.toLowerCase().includes(searchQuery.toLowerCase()))"
-          :key="'pipe-' + p.id"
-          class="group relative grid grid-cols-12 items-center gap-4 rounded-xl border border-slate-200 bg-white px-6 py-4 transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
-        >
-          <!-- 左翼：专属身份徽章（替换掉了空白的勾选位） -->
-          <div class="col-span-1 border-r border-slate-100 py-2 flex items-center justify-center h-full pr-1.5 pl-0.5">
-             <span class="flex h-6 items-center justify-center rounded bg-indigo-50/80 px-2 text-[11px] font-bold tracking-widest text-indigo-500 shadow-sm border border-indigo-100/50 cursor-default" title="大型组合分析流程（不可独立勾选删除）">
-               流程
-             </span>
-          </div>
-
-          <!-- Task Name -->
-          <div class="col-span-4 pl-4">
-            <div class="flex items-center gap-3">
-              <!-- 图标使用翡翠绿与普通蓝色工具区分，但不改行背景以保统一 -->
-              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-500 transition-colors group-hover:bg-emerald-100">
-                <Microscope class="h-4 w-4" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div 
-                  class="group/name flex cursor-pointer items-center gap-1.5"
-                  @click="router.push(`/pipeline/${p.id}`)"
-                  title="点击查看多组学流程结果"
-                >
-                  <p class="truncate text-[15px] font-semibold text-slate-800 transition-colors group-hover/name:text-blue-600">
-                    {{ p.name }}
-                  </p>
-                  <ExternalLink class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover/name:text-blue-500" />
-                </div>
-                <p class="mt-1 truncate text-xs text-slate-400 font-mono">
-                  ID: {{ p.id.split('-').pop() || p.id }}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Tool Name -->
-          <div class="col-span-2 flex items-center">
-            <span class="truncate text-slate-600">
-              单细胞转录组分析流程
-            </span>
-          </div>
-
-          <!-- Status -->
-          <div class="col-span-2 flex flex-col justify-center">
-            <!-- 已完成 -> 显示简约标签 -->
-            <div v-if="isAllCompleted(p)" class="flex items-center gap-1.5 w-fit rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-600">
-               <CheckCircle class="h-3.5 w-3.5" />
-               <span class="text-[12px] font-medium">已完成</span>
-            </div>
-            
-            <!-- 运行中 -> 直接显示原生点状进度 -->
-            <div v-else class="flex flex-col justify-center">
-               <!-- 经典的步骤圆点重制版 -->
-               <div class="flex items-center gap-1 sm:flex pl-1">
-                  <div
-                    v-for="(step, idx) in p.steps"
-                    :key="idx"
-                    class="group/dot relative"
-                  >
-                    <div
-                      class="h-2 w-2 rounded-full transition-colors"
-                      :class="{
-                        'bg-emerald-500': step.status === 'completed',
-                        'bg-blue-500 animate-pulse': step.status === 'running',
-                        'bg-slate-200': step.status === 'pending',
-                        'bg-red-500': step.status === 'error',
-                      }"
-                    ></div>
-                    <!-- Tooltip -->
-                    <div
-                      class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover/dot:opacity-100 shadow-lg"
-                    >
-                      {{ STEP_LABELS?.[step.stepType] || step.stepType || '步骤' }}
-                      <div class="absolute left-1/2 top-full -translate-x-1/2 border-[3px] border-transparent border-t-slate-800"></div>
-                    </div>
-                  </div>
-               </div>
-            </div>
-          </div>
-
-          <!-- Created Time -->
-          <div class="col-span-2 flex items-center text-sm text-slate-500">
-            {{ formatDateTime(p.updatedAt) }}
-          </div>
-
-          <!-- Actions -->
-          <div class="col-span-1 flex items-center justify-end gap-1.5" @click.stop>
-            <button
-               v-if="!isAllCompleted(p)"
-              @click="router.push(`/pipeline/${p.id}`)"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md"
-              title="继续流程"
-            >
-              <Play class="h-4 w-4" />
-            </button>
-            <button
-               v-else
-              @click="router.push(`/pipeline/${p.id}`)"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-500 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-emerald-500 hover:text-white hover:shadow-md"
-              title="查看结果"
-            >
-              <Eye class="h-4 w-4" />
-            </button>
-            <button
-              @click.stop="handleDeletePipeline(p.id)"
-              :disabled="deletingPipelineId === p.id"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-rose-500 hover:text-white hover:shadow-md disabled:opacity-50"
-              title="删除任务"
-            >
-              <Loader2 v-if="deletingPipelineId === p.id" class="h-4 w-4 animate-spin" />
-              <Trash2 v-else class="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
+        <div class="divide-y divide-slate-100">
+        <!-- 云工具分析任务卡片（含单工具任务和流程任务） -->
         <!-- 2. 单点云工具分析任务卡片 -->
         <div
           v-for="task in filteredTasks"
           :key="task.id"
-          class="group relative grid grid-cols-12 items-center gap-4 rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+          class="group grid grid-cols-12 items-center gap-4 px-6 py-3 transition-colors hover:bg-slate-50/50"
         >
-          <!-- Checkbox -->
-          <div class="col-span-1 flex items-center" @click.stop>
+          <!-- Task Name & Checkbox -->
+          <div class="col-span-5 pl-1 flex items-center gap-3" @click.stop>
             <input
               type="checkbox"
+              class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
               :checked="selectedTasks.includes(task.id)"
-              @change="toggleSelect(task.id)"
-              class="h-4 w-4 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              @change="toggleSelectTask(task.id)"
             />
-          </div>
-
-          <!-- Task Name -->
-          <div class="col-span-4 flex items-center gap-3" @click.stop>
             <div class="min-w-0 flex-1">
               <!-- 编辑模式 -->
               <div
@@ -665,21 +507,21 @@ onMounted(() => {
                 <input
                   v-model="editingTaskName"
                   type="text"
-                  class="flex-1 rounded-lg border border-blue-400 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  class="flex-1 rounded border border-blue-400 px-2 py-0.5 text-[13px] focus:outline-none focus:ring-1 focus:ring-blue-200"
                   @keyup.enter="saveTaskName"
                   @keyup.escape="cancelEditTaskName"
                   autofocus
                 />
                 <button
                   @click="saveTaskName"
-                  class="rounded p-1 text-green-600 hover:bg-green-50"
+                  class="rounded p-0.5 text-green-600 hover:bg-green-100"
                   title="保存"
                 >
                   <CheckCircle class="h-4 w-4" />
                 </button>
                 <button
                   @click="cancelEditTaskName"
-                  class="rounded p-1 text-slate-400 hover:bg-slate-100"
+                  class="rounded p-0.5 text-slate-400 hover:bg-slate-100"
                   title="取消"
                 >
                   <X class="h-4 w-4" />
@@ -689,66 +531,110 @@ onMounted(() => {
               <div v-else class="group/name flex items-center gap-2">
                 <div 
                   @click="goToTaskResult(task)"
-                  class="flex cursor-pointer items-center gap-2 rounded-lg py-1 pr-2 transition-all hover:bg-blue-50/50"
+                  class="flex cursor-pointer items-center gap-1.5 transition-colors"
                   title="点击查看分析报告及结果"
                 >
-                  <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover/name:bg-blue-100 group-hover/name:text-blue-700 transition-colors">
-                    <FolderOpen class="h-4 w-4" />
-                  </div>
-                  <div class="flex flex-col">
-                    <div class="flex items-center gap-2">
-                      <p class="truncate font-semibold text-slate-800 transition-colors group-hover/name:text-blue-600">
-                        {{ task.task_name || `任务 #${task.id}` }}
-                      </p>
-                      <ExternalLink class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover/name:text-blue-500" />
-                    </div>
+                  <div class="flex items-center gap-1.5 font-bold text-slate-800">
+                    <span class="truncate transition-colors group-hover/name:text-blue-600 text-[14px]">
+                      {{ task.task_name || `任务 #${task.id}` }}
+                    </span>
                   </div>
                 </div>
                 <button
                   @click.stop="startEditTaskName(task)"
-                  class="ml-1 rounded p-1.5 text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-blue-600 group-hover/name:opacity-100"
+                  class="rounded p-1 text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-blue-600 group-hover/name:opacity-100"
                   title="编辑名称"
                 >
                   <Pencil class="h-3.5 w-3.5" />
                 </button>
               </div>
-              <p class="mt-1 truncate text-xs text-slate-400 font-mono ml-10">ID: {{ task.id }}</p>
+              <p class="mt-0.5 truncate text-[12px] text-slate-400 font-mono">ID: {{ task.id }}</p>
             </div>
           </div>
 
           <!-- Tool Name -->
-          <div class="col-span-2 flex items-center">
-            <span class="truncate text-slate-600">
+          <div class="col-span-2 pl-1 flex items-center gap-2">
+            <!-- 流程任务: Microscope 图标 -->
+            <div v-if="task.tool_name === '单细胞分析流程'" class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-indigo-50 text-indigo-500 transition-colors group-hover:bg-indigo-100">
+               <Microscope class="h-3 w-3" />
+            </div>
+            <!-- 普通任务: API 标签 -->
+            <div v-else class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-pink-50 text-pink-500 transition-colors group-hover:bg-pink-100">
+               <span class="font-mono text-[10px] font-bold">API</span>
+            </div>
+            <span class="truncate text-[13px] font-medium text-slate-600">
               {{ task.tool_name || '-' }}
             </span>
           </div>
 
           <!-- Status -->
-          <div class="col-span-2 flex items-center">
-            <div
-              class="flex items-center gap-1.5 rounded-full px-2.5 py-1"
-              :class="getStatusConfig(task.status).bg"
-            >
-              <component
-                :is="getStatusConfig(task.status).icon"
-                class="h-3.5 w-3.5"
-                :class="[
-                  getStatusConfig(task.status).color,
-                  task.status === 'running' ? 'animate-spin' : '',
-                ]"
-              />
-              <span
-                class="text-xs font-medium"
-                :class="getStatusConfig(task.status).color"
+          <div class="col-span-2 pl-1 flex items-center">
+            <!-- 流程任务: 用圆点展示步骤状态 -->
+            <div v-if="task.tool_name === '单细胞分析流程' && findPipeline(task)" class="flex items-center gap-1 pl-1">
+              <div
+                v-for="(step, idx) in findPipeline(task)!.steps"
+                :key="idx"
+                class="group/dot relative"
               >
-                {{ getStatusConfig(task.status).label }}
-              </span>
+                <div
+                  class="h-2.5 w-2.5 rounded-full transition-colors"
+                  :class="{
+                    'bg-emerald-500': step.status === 'completed',
+                    'bg-blue-500 animate-pulse': step.status === 'running',
+                    'bg-slate-200': step.status === 'pending',
+                    'bg-red-500': step.status === 'error',
+                  }"
+                ></div>
+                <div
+                  class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover/dot:opacity-100 shadow-lg"
+                >
+                  {{ STEP_LABELS?.[step.stepType] || step.stepType || '步骤' }}
+                  <div class="absolute left-1/2 top-full -translate-x-1/2 border-[3px] border-transparent border-t-slate-800"></div>
+                </div>
+              </div>
             </div>
+            <!-- 普通任务: 标准状态标签 -->
+            <template v-else>
+              <div
+                class="flex items-center gap-1.5 rounded-full px-2.5 py-1 w-fit border border-transparent"
+                :class="[
+                  getStatusConfig(task.status).bg,
+                  task.status === 'completed' ? 'border-emerald-200/50 shadow-[0_0_10px_-2px_rgba(16,185,129,0.15)]' : ''
+                ]"
+              >
+                <Loader2 v-if="task.status === 'running'" class="h-3.5 w-3.5 animate-spin text-blue-500" />
+                <component
+                  v-else
+                  :is="getStatusConfig(task.status).icon"
+                  class="h-3.5 w-3.5"
+                  :class="getStatusConfig(task.status).color"
+                />
+                <span
+                  class="text-[12px] font-bold tracking-wide"
+                  :class="getStatusConfig(task.status).color"
+                >
+                  {{ getStatusConfig(task.status).label }}
+                </span>
+                <span 
+                  v-if="task.status === 'running' && task.progress !== undefined" 
+                  class="ml-1 text-[11px] font-bold text-blue-600/80 bg-blue-100/50 px-1.5 rounded-md"
+                >
+                  {{ task.progress }}%
+                </span>
+              </div>
+              <div v-if="task.status === 'failed' && task.error_message" class="ml-2 group/error relative">
+                <AlertCircle class="h-4 w-4 text-red-500 cursor-help" />
+                <div class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-[11px] text-white opacity-0 transition-opacity group-hover/error:opacity-100 shadow-lg max-w-[200px] truncate">
+                  {{ task.error_message }}
+                  <div class="absolute left-1/2 top-full -translate-x-1/2 border-[3px] border-transparent border-t-slate-800"></div>
+                </div>
+              </div>
+            </template>
           </div>
 
           <!-- Created Time -->
-          <div class="col-span-2 flex items-center text-sm text-slate-500">
-            {{ formatDateTime(task.created_at) }}
+          <div class="col-span-2 pl-1 flex items-center text-[13px] font-mono text-slate-500">
+            {{ formatDateTime(task.started_at || task.created_at) }}
           </div>
 
           <!-- Actions -->
@@ -756,14 +642,27 @@ onMounted(() => {
             class="col-span-1 flex items-center justify-end gap-1.5"
             @click.stop
           >
+            <!-- 流程分析任务: 继续分析按钮 -->
             <button
+              v-if="task.tool_name === '单细胞分析流程' && task.input_params?.pipeline_id"
+              @click="router.push(`/pipeline/${task.input_params.pipeline_id}`)"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all shadow-blue-500/10 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
+              title="继续分析"
+            >
+              <Play class="h-4 w-4" />
+            </button>
+            <!-- 普通任务: 查看配置与结果 -->
+            <button
+               v-if="task.tool_name !== '单细胞分析流程' && task.status === 'completed'"
               @click="router.push(`/tool/${task.tool_id}?task_id=${task.id}`)"
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all shadow-blue-500/10 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
               title="查看配置与结果"
             >
               <Eye class="h-4 w-4" />
             </button>
+            <!-- 普通任务: 查看执行日志（运行中或失败时显示） -->
             <button
+               v-if="task.tool_name !== '单细胞分析流程' && (task.status === 'running' || task.status === 'failed')"
               @click="handleViewLog(task)"
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 shadow-sm transition-all shadow-indigo-500/10 hover:-translate-y-0.5 hover:bg-indigo-500 hover:text-white hover:shadow-md hover:shadow-indigo-500/25"
               title="查看执行日志"
@@ -779,31 +678,42 @@ onMounted(() => {
             </button>
           </div>
         </div>
+        </div> <!-- end divide-y -->
       </div>
 
       <!-- Pagination -->
-      <div v-if="totalPages > 1" class="mt-6 flex items-center justify-between">
-        <div class="flex items-center gap-2">
+      <div v-if="totalPages > 1" class="mt-4 mb-2 flex items-center justify-between px-2">
+        <div class="text-[13px] text-slate-500 font-medium tracking-wide">
+          共 {{ total }} 个任务， 显示 {{ (currentPage - 1) * pageSize + 1 }} - {{ Math.min(currentPage * pageSize, total) }}
+        </div>
+        <div class="flex items-center gap-1.5">
           <button
             @click="currentPage = Math.max(1, currentPage - 1)"
             :disabled="currentPage === 1"
-            class="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 transition-colors hover:border-blue-400 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ChevronLeft class="h-4 w-4" />
-            上一页
           </button>
+          
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            v-show="page >= currentPage - 2 && page <= currentPage + 2"
+            @click="currentPage = page"
+            class="flex h-8 w-8 items-center justify-center rounded border text-[13px] font-medium transition-colors"
+            :class="currentPage === page ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-slate-200 bg-white text-slate-500 hover:border-blue-400 hover:text-blue-500'"
+          >
+            {{ page }}
+          </button>
+          
           <button
             @click="currentPage = Math.min(totalPages, currentPage + 1)"
             :disabled="currentPage === totalPages"
-            class="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            class="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 transition-colors hover:border-blue-400 hover:text-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            下一页
             <ChevronRight class="h-4 w-4" />
           </button>
         </div>
-        <span class="text-sm text-slate-500">
-          第 {{ currentPage }} / {{ totalPages }} 页，共 {{ total }} 个任务
-        </span>
       </div>
     </div>
 

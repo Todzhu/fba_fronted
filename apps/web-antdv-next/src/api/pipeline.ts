@@ -38,6 +38,8 @@ interface ApiPipeline {
   sample_dict: any;
   current_step: number;
   status: string;
+  analysis_task_id: null | number;
+  task_output_dir: null | string;
   steps: ApiPipelineStep[];
   created_time: null | string;
   updated_time: null | string;
@@ -94,6 +96,9 @@ function toPipeline(api: ApiPipeline): Pipeline {
     species: api.species || undefined,
     sampleDict: api.sample_dict || undefined,
     currentStep: api.current_step,
+    status: api.status || 'running',
+    analysisTaskId: api.analysis_task_id || undefined,
+    taskOutputDir: api.task_output_dir || undefined,
     steps: api.steps.map((s) => toStepConfig(s)),
     createdAt: api.created_time || new Date().toISOString(),
     updatedAt: api.updated_time || new Date().toISOString(),

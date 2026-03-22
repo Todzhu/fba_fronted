@@ -12,19 +12,45 @@ export interface StepHelp {
 
 export const STEP_HELP_CONTENT: Record<StepType, StepHelp> = {
     data_load: {
-        summary: '将原始测序数据（10x Genomics 格式）读入分析环境，合并多样本并计算基础质控指标。',
+        summary: '将原始单细胞测序数据读入分析系统，执行多样本合并，并智能计算所有的基础质控指标。',
         sections: [
             {
                 title: '🎯 这一步做什么',
-                content: '读取每个样本的表达矩阵（matrix.mtx.gz / barcodes.tsv.gz / features.tsv.gz），按样本和分组信息合并为统一的 AnnData 对象，并计算线粒体基因比例、核糖体基因比例和基因复杂度（log10GenesPerUMI）等质控指标。',
+                content: `<div class="space-y-3 text-slate-600 leading-relaxed text-[13px]">
+                  <p>本步骤的核心是将分散的原始测序文件整合成统一的单细胞对象 (AnnData)，并描绘细胞的初始质量画像：</p>
+                  <ul class="ml-4 list-disc space-y-1.5 marker:text-blue-500">
+                    <li><b class="text-slate-700">读取表达矩阵</b>：解析标准 10x Genomics 产物（<code class="px-1.5 py-0.5 rounded-md bg-rose-50 border border-rose-100 text-[11px] text-rose-600 font-mono">matrix.mtx.gz</code> 等格式）。</li>
+                    <li><b class="text-slate-700">多样本融合</b>：根据您填写的样本与分组元数据，无缝将多个数据集拼装。</li>
+                    <li><b class="text-slate-700">量化质控水位</b>：自动统计 <span class="text-slate-800 font-medium">线粒体比例</span>、<span class="text-slate-800 font-medium">核糖体比例</span> 以及鉴别空液滴的 <span class="text-slate-800 font-medium">基因复杂度</span> (log10GenesPerUMI)。</li>
+                  </ul>
+                </div>`,
             },
             {
-                title: '📊 如何配置',
-                content: '在样本表格中填写每个样本的路径、样本名和分组信息。路径指向 10x Genomics 输出目录（包含 matrix.mtx.gz 等文件）。',
+                title: '📊 如何配置表格',
+                content: `<div class="space-y-3 text-slate-600 text-[13px]">
+                  <div class="rounded-xl bg-blue-50/50 p-3.5 border border-blue-100/60 shadow-sm">
+                    <div class="flex items-center gap-1.5 mb-2">
+                       <span class="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-600">💡</span>
+                       <b class="text-blue-800">填写指南</b>
+                    </div>
+                    <ul class="ml-5 list-decimal space-y-1.5 text-blue-700/80">
+                      <li><b>数据路径</b>：指向包含三个核心文件的直接物理目录。</li>
+                      <li><b>样本名称</b>：推荐使用简短的英文与数字组合，作为图表刻度的标签。</li>
+                      <li><b>实验分组</b>：用于界定不同的生物学比较状态（如如 <code class="text-blue-600 font-mono text-[11px]">Control</code> / <code class="text-blue-600 font-mono text-[11px]">Treatment</code>），对后续靶向分析至关重要。</li>
+                    </ul>
+                  </div>
+                </div>`,
             },
             {
                 title: '📈 结果怎么看',
-                content: '运行完成后会生成质控 Violin 图，展示每个样本的基因数分布、UMI 计数分布、线粒体比例分布和基因复杂度分布。这些分布图帮助你在下一步选择合理的过滤阈值。同时会计算出基于 MAD（中位数绝对偏差）的推荐过滤阈值，自动填入质控过滤步骤。',
+                content: `<div class="space-y-3 text-slate-600 leading-relaxed text-[13px]">
+                  <p>运行完成后，右侧面板将输出直观的多维品控图表：</p>
+                  <ul class="ml-4 list-disc space-y-1.5 marker:text-emerald-500">
+                    <li><b class="text-slate-700">质控提琴图 (Violin Plot)</b>：对比观察各个样本的基因分布密度与极端离群点。</li>
+                    <li><b class="text-slate-700">线粒体识别</b>：辅助您快速锁定由细胞器破裂导致的高线粒体死细胞群。</li>
+                    <li><b class="text-slate-700">AI 智能算子推荐</b>：后台算法会基于 MAD 法则生成科学的异常剪裁阈值，并 <span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded-md font-medium shadow-sm ring-1 ring-inset ring-emerald-200">无缝注入后续「质控过滤」环节</span> 供您参考。</li>
+                  </ul>
+                </div>`,
             },
         ],
     },
