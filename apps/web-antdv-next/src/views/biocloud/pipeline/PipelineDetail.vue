@@ -31,7 +31,7 @@ import {
   X,
   ZoomIn,
 } from 'lucide-vue-next';
-import { message } from 'ant-design-vue';
+import { message, Table as ATable } from 'ant-design-vue';
 
 import {
   generateDotplot as generateDotplotApi,
@@ -375,6 +375,130 @@ const handleGenerateDotplot = async () => {
     dotplotLoading.value = false;
   }
 };
+
+// ===== QC 质控图样本切换 =====
+const selectedQcSample = ref<string>('all');
+
+// 从当前步骤的 stats.samples 获取样本列表
+const qcSampleList = computed<string[]>(() => {
+  const samplesObj = activeStep.value?.result?.stats?.samples as Record<string, unknown> | undefined;
+  if (!samplesObj) return [];
+  return Object.keys(samplesObj);
+});
+
+// 数据读取步骤的图后缀
+const currentQcChartSuffix = computed(() => {
+  if (selectedQcSample.value === 'all') return 'orig_violin.png';
+  return `orig_violin_${selectedQcSample.value}.png`;
+});
+
+// 质控过滤步骤的图后缀
+const currentFilteredChartSuffix = computed(() => {
+  if (selectedQcSample.value === 'all') return 'filtered_violin.png';
+  return `filtered_violin_${selectedQcSample.value}.png`;
+});
+
+// 切换步骤时重置下拉框
+watch(activeStepIndex, () => {
+  selectedQcSample.value = 'all';
+  selectedDimChart.value = 'umap_cluster';
+});
+
+// ===== 降维聚类图表切换 =====
+const selectedDimChart = ref<string>('umap_cluster');
+
+// 图表选项配置
+const DIM_CHART_OPTIONS: { value: string; label: string; match: (u: string) => boolean }[] = [
+  { value: 'umap_cluster', label: 'Cluster UMAP', match: (u) => u.includes('umap_cluster') },
+  { value: 'umap_sample', label: 'Sample UMAP', match: (u) => u.includes('umap_sample') },
+  { value: 'umap_group', label: 'Group UMAP', match: (u) => u.includes('umap_group_split') },
+  { value: 'barplot', label: 'Cluster 细胞比例', match: (u) => u.includes('cluster_proportion_barplot') },
+  { value: 'hvg', label: '高变基因', match: (u) => u.includes('highly_variable_genes') },
+  { value: 'pca', label: 'PCA 方差比', match: (u) => u.includes('pca_variance_ratio') },
+];
+
+// 当前可用的图表选项（根据实际返回的 charts 过滤）
+const availableDimCharts = computed(() => {
+  const charts = activeStep.value?.result?.charts as string[] | undefined;
+  if (!charts) return [];
+  return DIM_CHART_OPTIONS.filter(opt => charts.some(opt.match));
+});
+
+// 当前选中的图表 URL
+const currentDimChartUrls = computed(() => {
+  const charts = activeStep.value?.result?.charts as string[] | undefined;
+  if (!charts) return [];
+  const opt = DIM_CHART_OPTIONS.find(o => o.value === selectedDimChart.value);
+  if (!opt) return [];
+  return charts.filter(opt.match);
+});
+
+// ===== Marker 基因表格内联展示 =====
+const markerTableColumns = ref<any[]>([]);
+const markerTableData = ref<Record<string, string>[]>([]);
+const markerTableLoading = ref(false);
+
+const fetchMarkerTable = async () => {
+  if (!activeStep.value?.result?.tables) return;
+  const tables = activeStep.value.result.tables as string[];
+  const target = tables.find((t: string) => t.includes('all_cluster_marker'));
+  if (!target) return;
+
+  const url = getChartUrl(target);
+  markerTableLoading.value = true;
+  try {
+    const resp = await fetch(url);
+    const text = await resp.text();
+    const lines = text.trim().split('\n');
+    if (lines.length > 0) {
+      const headers = lines[0]!.split('\t').map(h => h.trim());
+      console.log('[Marker Table] headers:', headers);
+      // 生成 ant-design-vue Table 列配置（仅 cluster 列支持筛选）
+      const clusterIdx = headers.findIndex(h => h.toLowerCase() === 'cluster');
+      console.log('[Marker Table] clusterIdx:', clusterIdx);
+      const clusterValues = clusterIdx >= 0
+        ? [...new Set(lines.slice(1).map(l => (l.split('\t')[clusterIdx] || '').trim()))].sort((a, b) => Number(a) - Number(b))
+        : [];
+
+      markerTableColumns.value = headers.map(h => ({
+        title: h,
+        dataIndex: h,
+        key: h,
+        width: 120,
+        ellipsis: true,
+        ...(h === 'cluster' && clusterValues.length > 0
+          ? {
+              filters: clusterValues.map(v => ({ text: `Cluster ${v}`, value: v })),
+              onFilter: (value: string, record: Record<string, string>) => record[h] === value,
+            }
+          : {}),
+      }));
+      // 生成数据源
+      markerTableData.value = lines.slice(1).map((line, idx) => {
+        const cells = line.split('\t');
+        const row: Record<string, string> = { _key: String(idx) };
+        headers.forEach((h, i) => { row[h] = (cells[i] || '').trim(); });
+        return row;
+      });
+    }
+  } catch (e) {
+    console.error('获取 Marker 表格失败:', e);
+  } finally {
+    markerTableLoading.value = false;
+  }
+};
+
+// 切换到 find_marker 步骤的数据表 tab 时自动加载
+watch([activeStepIndex, activeResultTab], () => {
+  // 切换步骤时清空旧数据
+  if (activeStep.value?.stepType !== 'find_marker') {
+    markerTableColumns.value = [];
+    markerTableData.value = [];
+  }
+  if (activeStep.value?.stepType === 'find_marker' && activeResultTab.value === 'tables' && markerTableData.value.length === 0) {
+    fetchMarkerTable();
+  }
+});
 
 // ===== Cluster→CellType 映射表 =====
 // 从 dim_cluster 步骤结果中获取 cluster 列表
@@ -792,8 +916,8 @@ const formatStatValue = (value: unknown): string => {
 
 // 步骤类型 → 输出目录名映射（与后端 STEP_OUTPUT_DIRS 保持一致）
 const STEP_OUTPUT_DIRS: Record<string, string> = {
-  data_load: 'step_0_data_load',
-  qc_filter: 'step_1_qc_filter',
+  data_load: '01-data_qc',
+  qc_filter: '02-cell_filter',
   dim_cluster: 'step_2_dim_cluster',
   find_marker: 'step_3_find_marker',
   annotation: 'step_4_annotation',
@@ -1281,10 +1405,20 @@ onUnmounted(() => {
                 class="overflow-hidden rounded-xl border border-slate-200 bg-white"
               >
                 <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
-                  <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
-                    <ScatterChart class="h-5 w-5 text-emerald-500" />
-                    运行结果
-                  </h3>
+                  <div class="flex items-center gap-4">
+                    <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
+                      <ScatterChart class="h-5 w-5 text-emerald-500" />
+                      运行结果
+                    </h3>
+                    <select
+                      v-if="qcSampleList.length > 1"
+                      v-model="selectedQcSample"
+                      class="h-8 cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none transition-colors hover:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    >
+                      <option value="all">all samples</option>
+                      <option v-for="s in qcSampleList" :key="s" :value="s">{{ s }}</option>
+                    </select>
+                  </div>
                   <!-- 统计指标（标题栏右侧） -->
                   <div
                     v-if="
@@ -1317,7 +1451,7 @@ onUnmounted(() => {
                     "
                   >
                     <div
-                      v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.endsWith('orig_violin.png'))"
+                      v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.endsWith(currentQcChartSuffix))"
                       :key="idx"
                       class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
                       @click="openLightbox(getChartUrl(chartUrl))"
@@ -1337,7 +1471,7 @@ onUnmounted(() => {
                     </div>
                     <!-- 图注 -->
                     <p class="mt-2 mb-4 text-center text-sm font-medium text-slate-800">
-                      图. 各样本质控指标分布（基因数、UMI 总数、线粒体比例、基因复杂度）
+                      图. {{ selectedQcSample !== 'all' ? selectedQcSample + ' 样本' : '各样本' }}质控指标分布（基因数、UMI 总数、线粒体比例、基因复杂度）
                     </p>
                   </div>
                 </div>
@@ -1760,10 +1894,20 @@ onUnmounted(() => {
               <!-- ===== 分析结果卡片 ===== -->
               <div v-if="activeStep.result" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
                 <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
+                <div class="flex items-center gap-4">
                 <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
                   <ScatterChart class="h-5 w-5 text-emerald-500" />
                   分析结果
                 </h3>
+                <!-- 降维聚类图表下拉框 -->
+                <select
+                  v-if="activeStep.stepType === 'dim_cluster' && availableDimCharts.length > 0"
+                  v-model="selectedDimChart"
+                  class="h-8 cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none transition-colors hover:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                >
+                  <option v-for="opt in availableDimCharts" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                </select>
+                </div>
                 <!-- 统计指标（标题栏右侧） -->
                 <div
                   v-if="
@@ -1787,9 +1931,9 @@ onUnmounted(() => {
                 </div>
                 <div class="px-8 pt-4 pb-6">
 
-                <!-- Tab 切换栏 -->
+                <!-- Tab 切换栏（降维聚类步骤不显示 tab，改用下拉框） -->
                 <div
-                  v-if="(activeStep.result.charts && activeStep.result.charts.length > 0) || (activeStep.result.tables && activeStep.result.tables.length > 0)"
+                  v-if="activeStep.stepType !== 'dim_cluster' && ((activeStep.result.charts && activeStep.result.charts.length > 0) || (activeStep.result.tables && activeStep.result.tables.length > 0))"
                   class="mb-3 flex gap-1 rounded-lg bg-slate-100 p-1"
                 >
                   <button
@@ -1837,17 +1981,17 @@ onUnmounted(() => {
                     </template>
                   </template>
                   <template v-else-if="activeStep.stepType === 'dim_cluster'">
-                    <!-- 降维聚类：UMAP 并排 + barplot + 辅助图折叠 -->
+                    <!-- 降维聚类：下拉框切换图表（下拉框已移到标题栏） -->
 
-                    <!-- 核心图：2 张 UMAP 并排 -->
-                    <div class="mb-4 grid grid-cols-2 gap-3">
-                      <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('umap_sample') || u.includes('umap_cluster'))" :key="idx">
+                    <!-- UMAP 类型：并排展示，限制最大宽度 -->
+                    <div v-if="selectedDimChart === 'umap_cluster' || selectedDimChart === 'umap_sample'" class="mx-auto grid max-w-3xl gap-3" :class="currentDimChartUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
+                      <template v-for="(chartUrl, idx) in currentDimChartUrls" :key="idx">
                         <div>
                           <div
                             class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
                             @click="openLightbox(getChartUrl(chartUrl))"
                           >
-                            <img :src="getChartUrl(chartUrl)" :alt="chartUrl.includes('sample') ? 'Sample UMAP' : 'Cluster UMAP'" class="w-full rounded-lg" loading="lazy" />
+                            <img :src="getChartUrl(chartUrl)" :alt="selectedDimChart" class="w-full rounded-lg" loading="lazy" />
                             <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
                               <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
                                 <ZoomIn class="h-3.5 w-3.5" />
@@ -1855,59 +1999,27 @@ onUnmounted(() => {
                               </div>
                             </div>
                           </div>
-                          <p class="mt-1 text-center text-sm font-medium text-slate-800">
-                            {{ chartUrl.includes('sample') ? '图. Sample UMAP' : '图. Cluster UMAP' }}
-                          </p>
                         </div>
                       </template>
                     </div>
 
-                    <!-- 核心图：barplot 全宽 -->
-                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('cluster_proportion_barplot'))" :key="'bar'+idx">
-                      <div
-                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                        @click="openLightbox(getChartUrl(chartUrl))"
-                      >
-                        <img :src="getChartUrl(chartUrl)" alt="Cluster Proportion" class="w-full rounded-lg" loading="lazy" />
-                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                            <ZoomIn class="h-3.5 w-3.5" />
-                            点击放大
-                          </div>
-                        </div>
-                      </div>
-                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">图. 各样本 Cluster 细胞比例</p>
-                    </template>
-
-                    <!-- 辅助图折叠区 -->
-                    <div
-                      v-if="activeStep.result.charts.filter((u: string) => !u.includes('umap_sample') && !u.includes('umap_cluster') && !u.includes('cluster_proportion_barplot')).length > 0"
-                    >
-                      <button
-                        type="button"
-                        class="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
-                        @click="showAuxCharts = !showAuxCharts"
-                      >
-                        <ChevronRight class="h-4 w-4 transition-transform" :class="showAuxCharts ? 'rotate-90' : ''" />
-                        {{ showAuxCharts ? '收起辅助图' : '查看辅助图（高变基因、PCA 方差比等）' }}
-                      </button>
-                      <div v-show="showAuxCharts" class="grid grid-cols-2 gap-3">
-                        <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => !u.includes('umap_sample') && !u.includes('umap_cluster') && !u.includes('cluster_proportion_barplot'))" :key="'aux'+idx">
-                          <div
-                            class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                            @click="openLightbox(getChartUrl(chartUrl))"
-                          >
-                            <img :src="getChartUrl(chartUrl)" :alt="`辅助图 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
-                            <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                              <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                                <ZoomIn class="h-3.5 w-3.5" />
-                                点击放大
-                              </div>
+                    <!-- 其他图表：居中限宽展示 -->
+                    <template v-else>
+                      <template v-for="(chartUrl, idx) in currentDimChartUrls" :key="idx">
+                        <div
+                          class="group relative mx-auto mb-2 max-w-3xl cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                          @click="openLightbox(getChartUrl(chartUrl))"
+                        >
+                          <img :src="getChartUrl(chartUrl)" :alt="selectedDimChart" class="w-full rounded-lg" loading="lazy" />
+                          <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                            <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                              <ZoomIn class="h-3.5 w-3.5" />
+                              点击放大
                             </div>
                           </div>
-                        </template>
-                      </div>
-                    </div>
+                        </div>
+                      </template>
+                    </template>
                   </template>
 
                   <template v-else-if="activeStep.stepType === 'find_marker'">
@@ -2059,18 +2171,34 @@ onUnmounted(() => {
                 <div
                   v-if="activeResultTab === 'tables' && activeStep.result.tables && activeStep.result.tables.length > 0"
                 >
-                  <div class="space-y-2">
-                    <a
-                      v-for="(tableUrl, idx) in activeStep.result.tables"
-                      :key="idx"
-                      :href="getChartUrl(tableUrl)"
-                      target="_blank"
-                      class="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm text-blue-600 transition-colors hover:bg-blue-50"
-                    >
-                      <FileText class="h-4 w-4" />
-                      {{ tableUrl.split('/').pop() }}
-                    </a>
-                  </div>
+                  <!-- find_marker 步骤：使用 Ant Design Table 展示 -->
+                  <template v-if="activeStep.stepType === 'find_marker'">
+                    <ATable
+                      :columns="markerTableColumns"
+                      :data-source="markerTableData"
+                      :loading="markerTableLoading"
+                      :row-key="(r: any) => r._key"
+                      :pagination="{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20','50','100'], showTotal: (total: number) => `共 ${total} 条` }"
+                      :scroll="{ x: 'max-content', y: 480 }"
+                      size="small"
+                      bordered
+                    />
+                  </template>
+                  <!-- 其他步骤：文件下载链接 -->
+                  <template v-else>
+                    <div class="space-y-2">
+                      <a
+                        v-for="(tableUrl, idx) in activeStep.result.tables"
+                        :key="idx"
+                        :href="getChartUrl(tableUrl)"
+                        target="_blank"
+                        class="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm text-blue-600 transition-colors hover:bg-blue-50"
+                      >
+                        <FileText class="h-4 w-4" />
+                        {{ tableUrl.split('/').pop() }}
+                      </a>
+                    </div>
+                  </template>
                 </div>
 
               </div>

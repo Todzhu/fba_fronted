@@ -107,7 +107,7 @@ const creating = ref(false);
 // 表单数据
 const formName = ref('');
 const formDataPath = ref('');
-const formSpecies = ref('human');
+const formSpecies = ref('');
 const formDescription = ref('');
 
 // 表单校验
@@ -227,7 +227,7 @@ const handleStartAnalysis = async () => {
   // 重置表单
   formName.value = '';
   formDataPath.value = '';
-  formSpecies.value = 'human';
+  formSpecies.value = '';
   formDescription.value = '';
   formErrors.value = {};
   // 加载目录树
@@ -972,8 +972,14 @@ onMounted(() => {
               </label>
               <select
                 v-model="formSpecies"
-                class="w-full cursor-pointer appearance-none rounded-lg border border-slate-200 bg-white px-4 py-2.5 pr-10 text-sm transition-colors focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                class="w-full cursor-pointer appearance-none rounded-lg border px-4 py-2.5 pr-10 text-sm transition-colors focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+                :class="[
+                  formErrors.species ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white',
+                  !formSpecies ? 'text-slate-400' : 'text-slate-900'
+                ]"
+                @change="formErrors.species && delete formErrors.species"
               >
+                <option value="" disabled>请选择样本物种</option>
                 <option
                   v-for="opt in speciesOptions"
                   :key="opt.value"
@@ -982,6 +988,9 @@ onMounted(() => {
                   {{ opt.label }}
                 </option>
               </select>
+              <p v-if="formErrors.species" class="mt-1 text-xs text-red-500">
+                {{ formErrors.species }}
+              </p>
             </div>
 
             <!-- 项目描述 -->
