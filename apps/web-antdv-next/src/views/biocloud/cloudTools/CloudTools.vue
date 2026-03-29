@@ -161,6 +161,8 @@ const handleToolClick = (tool: AnalysisTool) => {
             <input
               v-model="searchQuery"
               type="text"
+              name="tool-search"
+              autocomplete="off"
               class="block w-full rounded-xl border border-slate-300 bg-white py-2.5 pl-10 pr-10 leading-5 placeholder-slate-400 shadow-sm transition-all focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100 sm:text-sm"
               placeholder="搜索工具名称、功能描述..."
             />
@@ -227,11 +229,11 @@ const handleToolClick = (tool: AnalysisTool) => {
               <div class="absolute inset-0 bg-white/55"></div>
               
               <!-- 居中最美视效留白的清晰原图 -->
-              <div class="absolute inset-2 flex items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)] ring-1 ring-slate-900/5 transition-transform duration-500 group-hover:scale-105 group-hover:shadow-md sm:inset-2.5">
+              <div class="absolute inset-1 flex items-center justify-center overflow-hidden rounded-lg bg-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.06)] ring-1 ring-slate-900/5 transition-transform duration-500 group-hover:scale-105 group-hover:shadow-md sm:inset-1.5">
                 <img
                   :src="getFullImageUrl(tool.icon)"
                   :alt="tool.title"
-                  class="h-full w-full object-contain p-1.5"
+                  class="h-full w-full object-contain p-0.5"
                 />
               </div>
             </template>

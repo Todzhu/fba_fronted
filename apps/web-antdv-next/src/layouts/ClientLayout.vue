@@ -512,97 +512,110 @@ const handleChangePassword = async () => {
           <h3 class="text-lg font-semibold text-slate-900">修改密码</h3>
         </div>
 
-        <!-- Success Message -->
-        <div
-          v-if="passwordSuccess"
-          class="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600"
-        >
-          密码修改成功！
-        </div>
+        <!-- 用 form 包裹，防止浏览器密码管理器将用户名自动填充到页面其他输入框 -->
+        <form autocomplete="off" @submit.prevent="handleChangePassword">
+          <!-- 隐藏的 username 字段，吸收浏览器的用户名自动填充 -->
+          <input type="text" name="username" autocomplete="username" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;" tabindex="-1" aria-hidden="true" />
 
-        <!-- Error Message -->
-        <div
-          v-if="passwordError"
-          class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600"
-        >
-          {{ passwordError }}
-        </div>
+          <!-- Success Message -->
+          <div
+            v-if="passwordSuccess"
+            class="mb-4 rounded-lg bg-green-50 p-3 text-sm text-green-600"
+          >
+            密码修改成功！
+          </div>
 
-        <!-- Old Password -->
-        <div class="mb-4">
-          <label class="mb-1 block text-sm font-medium text-slate-700">
-            当前密码
-          </label>
-          <div class="relative">
+          <!-- Error Message -->
+          <div
+            v-if="passwordError"
+            class="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600"
+          >
+            {{ passwordError }}
+          </div>
+
+          <!-- Old Password -->
+          <div class="mb-4">
+            <label class="mb-1 block text-sm font-medium text-slate-700">
+              当前密码
+            </label>
+            <div class="relative">
+              <input
+                v-model="passwordForm.old_password"
+                :type="showOldPassword ? 'text' : 'password'"
+                name="current-password"
+                autocomplete="off"
+                class="w-full rounded-lg border border-slate-300 px-4 py-2.5 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                placeholder="请输入当前密码"
+              />
+              <button
+                type="button"
+                @click="showOldPassword = !showOldPassword"
+                class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+              >
+                <Eye v-if="!showOldPassword" class="h-5 w-5" />
+                <EyeOff v-else class="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          <!-- New Password -->
+          <div class="mb-4">
+            <label class="mb-1 block text-sm font-medium text-slate-700">
+              新密码
+            </label>
+            <div class="relative">
+              <input
+                v-model="passwordForm.new_password"
+                :type="showNewPassword ? 'text' : 'password'"
+                name="new-password"
+                autocomplete="new-password"
+                class="w-full rounded-lg border border-slate-300 px-4 py-2.5 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                placeholder="请输入新密码（至少6位）"
+              />
+              <button
+                type="button"
+                @click="showNewPassword = !showNewPassword"
+                class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+              >
+                <Eye v-if="!showNewPassword" class="h-5 w-5" />
+                <EyeOff v-else class="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+
+          <!-- Confirm Password -->
+          <div class="mb-6">
+            <label class="mb-1 block text-sm font-medium text-slate-700">
+              确认新密码
+            </label>
             <input
-              v-model="passwordForm.old_password"
-              :type="showOldPassword ? 'text' : 'password'"
-              class="w-full rounded-lg border border-slate-300 px-4 py-2.5 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              placeholder="请输入当前密码"
+              v-model="passwordForm.confirm_password"
+              type="password"
+              name="confirm-password"
+              autocomplete="new-password"
+              class="w-full rounded-lg border border-slate-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              placeholder="请再次输入新密码"
             />
+          </div>
+
+          <!-- Buttons -->
+          <div class="flex justify-end gap-3">
             <button
               type="button"
-              @click="showOldPassword = !showOldPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+              @click="closePasswordModal"
+              class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
             >
-              <Eye v-if="!showOldPassword" class="h-5 w-5" />
-              <EyeOff v-else class="h-5 w-5" />
+              取消
             </button>
-          </div>
-        </div>
-
-        <!-- New Password -->
-        <div class="mb-4">
-          <label class="mb-1 block text-sm font-medium text-slate-700">
-            新密码
-          </label>
-          <div class="relative">
-            <input
-              v-model="passwordForm.new_password"
-              :type="showNewPassword ? 'text' : 'password'"
-              class="w-full rounded-lg border border-slate-300 px-4 py-2.5 pr-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              placeholder="请输入新密码（至少6位）"
-            />
             <button
-              type="button"
-              @click="showNewPassword = !showNewPassword"
-              class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600"
+              type="submit"
+              :disabled="passwordLoading"
+              class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              <Eye v-if="!showNewPassword" class="h-5 w-5" />
-              <EyeOff v-else class="h-5 w-5" />
+              {{ passwordLoading ? '提交中...' : '确认修改' }}
             </button>
           </div>
-        </div>
-
-        <!-- Confirm Password -->
-        <div class="mb-6">
-          <label class="mb-1 block text-sm font-medium text-slate-700">
-            确认新密码
-          </label>
-          <input
-            v-model="passwordForm.confirm_password"
-            type="password"
-            class="w-full rounded-lg border border-slate-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            placeholder="请再次输入新密码"
-          />
-        </div>
-
-        <!-- Buttons -->
-        <div class="flex justify-end gap-3">
-          <button
-            @click="closePasswordModal"
-            class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            取消
-          </button>
-          <button
-            @click="handleChangePassword"
-            :disabled="passwordLoading"
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {{ passwordLoading ? '提交中...' : '确认修改' }}
-          </button>
-        </div>
+        </form>
       </div>
     </div>
   </div>
