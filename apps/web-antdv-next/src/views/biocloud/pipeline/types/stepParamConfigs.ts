@@ -295,13 +295,13 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
   // ========== 步骤5：亚群分析 ==========
   sub_annotation: [
     {
-      key: 'target_cluster',
-      label: '目标亚群',
-      tooltip: '选择要进行亚群分析的细胞类型或聚类编号，如 "T cells" 或 "0,1,3"',
+      key: 'target_celltype',
+      label: '目标大群',
+      tooltip: '选择要进行亚群分析的大类细胞类型（例如：T cells）',
       controlType: 'select',
       defaultValue: '',
       options: [], // 动态填充
-      group: '亚群选择',
+      group: '细胞大群选择',
     },
     {
       key: 'sub_n_top_genes',
@@ -319,9 +319,9 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       label: '分辨率',
       tooltip: '亚群聚类分辨率，亚群分析通常需要更高的分辨率（0.5~2.0）',
       controlType: 'number',
-      defaultValue: 0.8,
+      defaultValue: 0.3,
       min: 0.1,
-      max: 3,
+      max: 2,
       step: 0.1,
       group: '重聚类',
     },
@@ -330,7 +330,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       label: '近邻数',
       tooltip: '亚群分析的近邻数',
       controlType: 'number',
-      defaultValue: 15,
+      defaultValue: 20,
       min: 2,
       max: 50,
       step: 1,

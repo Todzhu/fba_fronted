@@ -38,6 +38,7 @@ import {
   getPipeline as fetchPipelineApi,
   getFilesInFolder,
   getStepLogs,
+  getCelltypes,
   runStep as runStepApi,
   saveH5adToMyData as saveH5adApi,
   updateSampleDict,
@@ -219,6 +220,7 @@ const fetchPipeline = async () => {
       );
       if (runningStepIdx !== -1 && !pollTimer) {
         activeStepIndex.value = runningStepIdx;
+        startLogPolling(runningStepIdx);
         startPolling(runningStepIdx);
       }
     }
@@ -247,12 +249,33 @@ const isAnnotationStep = computed(() => {
 
 // ========== 参数表单逻辑 ==========
 
+// 存储亚群分析可用的大类细胞类型列表
+const subAnnotationCellTypes = ref<{ name: string; count: number }[]>([]);
+const isFetchingCellTypes = ref(false);
+
 // 当前步骤的参数配置列表
 const currentStepParamConfigs = computed<ParamFieldConfig[]>(() => {
   if (!activeStep.value) return [];
-  return STEP_PARAM_CONFIGS[activeStep.value.stepType] || [];
+  const configs = STEP_PARAM_CONFIGS[activeStep.value.stepType] || [];
+  
+  // 对于亚群分析，动态注入下拉选项
+  if (activeStep.value.stepType === 'sub_annotation' && subAnnotationCellTypes.value.length > 0) {
+    return configs.map(c => {
+      if (c.key === 'target_celltype') {
+        return {
+          ...c,
+          options: subAnnotationCellTypes.value.map(ct => ({
+            label: `${ct.name} (${ct.count} cells)`,
+            value: ct.name,
+          })),
+        };
+      }
+      return c;
+    });
+  }
+  
+  return configs;
 });
-
 
 
 // 当前步骤参数的分组列表（去重，保留顺序）
@@ -488,13 +511,37 @@ const fetchMarkerTable = async () => {
   }
 };
 
-// 切换到 find_marker 步骤的数据表 tab 时自动加载
-watch([activeStepIndex, activeResultTab], () => {
+// 切换步骤时重置状态
+watch(activeStepIndex, async () => {
+  // 切换回图表视图
+  activeResultTab.value = 'charts';
+  
   // 切换步骤时清空旧数据
   if (activeStep.value?.stepType !== 'find_marker') {
     markerTableColumns.value = [];
     markerTableData.value = [];
   }
+  
+  // 切换到亚群分析步骤时，获取已有注释细胞类型
+  if (activeStep.value?.stepType === 'sub_annotation' && pipeline.value?.id) {
+    // 只有在上一步（细胞注释）已完成，且还没有获取过数据时才去获取
+    const annotationStep = pipeline.value.steps.find((s) => s.stepType === 'annotation');
+    if (annotationStep?.status === 'completed' && subAnnotationCellTypes.value.length === 0 && !isFetchingCellTypes.value) {
+      isFetchingCellTypes.value = true;
+      try {
+        const items = await getCelltypes(pipeline.value.id);
+        subAnnotationCellTypes.value = items;
+      } catch (err) {
+        console.error('获取细胞类型失败', err);
+      } finally {
+        isFetchingCellTypes.value = false;
+      }
+    }
+  }
+});
+
+// 切换到 find_marker 数据表 tab 时自动加载
+watch([activeStepIndex, activeResultTab], () => {
   if (activeStep.value?.stepType === 'find_marker' && activeResultTab.value === 'tables' && markerTableData.value.length === 0) {
     fetchMarkerTable();
   }
@@ -918,10 +965,10 @@ const formatStatValue = (value: unknown): string => {
 const STEP_OUTPUT_DIRS: Record<string, string> = {
   data_load: '01-data_qc',
   qc_filter: '02-cell_filter',
-  dim_cluster: 'step_2_dim_cluster',
-  find_marker: 'step_3_find_marker',
-  annotation: 'step_4_annotation',
-  sub_annotation: 'step_5_sub_annotation',
+  dim_cluster: '03-dim_cluster',
+  find_marker: '04-marker_genes',
+  annotation: '05-cell_annotation',
+  sub_annotation: '06-sub_cell_annotation',
 };
 
 // 将反斜杠统一为正斜杠（Windows 路径兼容）
@@ -1206,6 +1253,8 @@ onUnmounted(() => {
                   <button
                     v-if="
                       activeStep.status === 'completed' ||
+                      activeStep.status === 'running' ||
+                      activeStep.status === 'error' ||
                       currentStepLogs.length > 0
                     "
                     @click="openLogDrawer"

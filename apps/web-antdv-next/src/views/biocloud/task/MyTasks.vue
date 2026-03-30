@@ -465,7 +465,7 @@ onMounted(() => {
       <div v-else class="rounded-xl border border-slate-200 bg-white shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] overflow-hidden">
         <!-- List Header -->
         <div class="grid grid-cols-12 gap-4 border-b border-slate-100 bg-slate-50/50 px-6 py-3 text-[13px] font-bold text-slate-500">
-          <div class="col-span-5 pl-1 flex items-center gap-3">
+          <div class="col-span-4 pl-1 flex items-center gap-3">
             <input
               v-if="filteredTasks.length > 0"
               type="checkbox"
@@ -479,7 +479,7 @@ onMounted(() => {
           <div class="col-span-2 pl-1">分析工具</div>
           <div class="col-span-2 pl-1">任务状态</div>
           <div class="col-span-2 pl-1">创建时间</div>
-          <div class="col-span-1 text-right pr-2">操作</div>
+          <div class="col-span-2 text-right pr-2">操作</div>
         </div>
 
         <div class="divide-y divide-slate-100">
@@ -491,7 +491,7 @@ onMounted(() => {
           class="group grid grid-cols-12 items-center gap-4 px-6 py-3 transition-colors hover:bg-slate-50/50"
         >
           <!-- Task Name & Checkbox -->
-          <div class="col-span-5 pl-1 flex items-center gap-3" @click.stop>
+          <div class="col-span-4 pl-1 flex items-center gap-3" @click.stop>
             <input
               type="checkbox"
               class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -639,42 +639,44 @@ onMounted(() => {
 
           <!-- Actions -->
           <div
-            class="col-span-1 flex items-center justify-end gap-1.5"
+            class="col-span-2 flex items-center justify-end gap-1.5"
             @click.stop
           >
             <!-- 流程分析任务: 继续分析按钮 -->
             <button
               v-if="task.tool_name === '单细胞分析流程' && task.input_params?.pipeline_id"
               @click="router.push(`/pipeline/${task.input_params.pipeline_id}`)"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all shadow-blue-500/10 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
+              class="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 text-white shadow-md shadow-indigo-500/25 transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500 hover:shadow-lg hover:shadow-indigo-500/40"
               title="继续分析"
             >
-              <Play class="h-4 w-4" />
+              <Play class="h-[14px] w-[14px]" fill="currentColor" />
+              <span class="text-[13px] font-semibold tracking-wide whitespace-nowrap">继续分析</span>
             </button>
             <!-- 普通任务: 查看配置与结果 -->
             <button
                v-if="task.tool_name !== '单细胞分析流程' && task.status === 'completed'"
               @click="router.push(`/tool/${task.tool_id}?task_id=${task.id}`)"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-500 shadow-sm transition-all shadow-blue-500/10 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
               title="查看配置与结果"
             >
-              <Eye class="h-4 w-4" />
+              <Eye class="h-[15px] w-[15px]" />
             </button>
             <!-- 普通任务: 查看执行日志（运行中或失败时显示） -->
             <button
                v-if="task.tool_name !== '单细胞分析流程' && (task.status === 'running' || task.status === 'failed')"
               @click="handleViewLog(task)"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 shadow-sm transition-all shadow-indigo-500/10 hover:-translate-y-0.5 hover:bg-indigo-500 hover:text-white hover:shadow-md hover:shadow-indigo-500/25"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-indigo-500 hover:text-white hover:shadow-md hover:shadow-indigo-500/25"
               title="查看执行日志"
             >
-              <FileText class="h-4 w-4" />
+              <FileText class="h-[15px] w-[15px]" />
             </button>
+            <!-- 删除任务按钮 -->
             <button
               @click="handleDelete(task)"
-              class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 text-slate-400 shadow-sm transition-all hover:-translate-y-0.5 hover:bg-rose-500 hover:text-white hover:shadow-md"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-500 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-rose-500 hover:text-white hover:shadow-md hover:shadow-rose-500/25"
               title="删除任务"
             >
-              <Trash2 class="h-4 w-4" />
+              <Trash2 class="h-[15px] w-[15px]" />
             </button>
           </div>
         </div>

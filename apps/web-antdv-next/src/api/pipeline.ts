@@ -279,6 +279,15 @@ export async function saveH5adToMyData(
 
 // ========== 用户数据文件 API ==========
 
+/** 获取上一步（细胞注释）产出的细胞类型列表，供亚群分析选择 */
+export async function getCelltypes(
+  pipelineId: string | number,
+): Promise<{ name: string; count: number }[]> {
+  return await requestClient.get<{ name: string; count: number }[]>(
+    `/api/v1/pipelines/${pipelineId}/celltypes`,
+  );
+}
+
 /** 文件节点（树形结构） */
 export interface FileNode {
   key: string;
