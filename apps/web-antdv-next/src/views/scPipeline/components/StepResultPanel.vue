@@ -11,7 +11,7 @@ import { nextTick, ref, watch } from 'vue';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
-import { Card, Empty, Statistic, Table, Tabs } from 'ant-design-vue';
+import { Card, Empty, Statistic, Table, Tabs } from 'antdv-next';
 
 const props = defineProps<{
   result?: StepResult;

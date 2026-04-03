@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Tree } from 'ant-design-vue';
+import { Tree } from 'antdv-next';
 import { IconifyIcon } from '@vben/icons';
 import type { Folder } from '../mock';
 

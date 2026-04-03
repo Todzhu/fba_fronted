@@ -44,12 +44,16 @@
     "antdv-next": "catalog:",
     "croner": "catalog:",
     "dayjs": "catalog:",
+    "markdown-it": "^14.1.1",
     "mitt": "catalog:",
     "pinia": "catalog:",
     "socket.io-client": "catalog:",
+    "sortablejs": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:",
-    "x-data-spreadsheet": "^1.1.9",
-    "sortablejs": "catalog:"
+    "x-data-spreadsheet": "^1.1.9"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2"
   }
 }

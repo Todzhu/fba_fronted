@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Image, message, Upload } from 'ant-design-vue';
+import { Button, Image, message, Upload } from 'antdv-next';
 
 import { uploadToolIconApi } from '#/api';
 

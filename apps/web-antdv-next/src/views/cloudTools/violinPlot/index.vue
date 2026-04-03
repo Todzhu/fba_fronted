@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Page } from '@vben/common-ui';
-import { Button } from 'ant-design-vue';
+import { Button } from 'antdv-next';
 import { BookOpen, Eye } from 'lucide-vue-next';
 import ChartPreview from './components/ChartPreview.vue';
 import DataStatistics from './components/DataStatistics.vue';

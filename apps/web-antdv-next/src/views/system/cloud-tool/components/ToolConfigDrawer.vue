@@ -36,7 +36,7 @@ import {
   Tag,
   Tooltip,
   Upload,
-} from 'ant-design-vue';
+} from 'antdv-next';
 // @ts-ignore
 import Sortable from 'sortablejs';
 

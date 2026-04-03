@@ -14,7 +14,7 @@ import {
   Pagination,
   Radio,
   Spin,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import {
   getAnalysisToolCategories,

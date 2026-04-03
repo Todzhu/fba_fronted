@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Card, Tabs, TabPane, Button, Input, Upload, Table, Alert } from 'ant-design-vue';
+import { Card, Tabs, TabPane, Button, Input, Upload, Table, Alert } from 'antdv-next';
 import { FileText, Settings, Sparkles, Upload as UploadIcon, Download, Trash2, ArrowRight } from 'lucide-vue-next';
 
 const activeTab = ref('data');

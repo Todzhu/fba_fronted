@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
 
-import { Button, Popover } from 'ant-design-vue';
+import { Button, Popover } from 'antdv-next';
 
 const props = defineProps<{
   defaultColor?: string;

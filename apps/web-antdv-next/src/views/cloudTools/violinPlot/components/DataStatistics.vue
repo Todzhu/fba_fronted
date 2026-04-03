@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card } from 'ant-design-vue';
+import { Card } from 'antdv-next';
 import { Info } from 'lucide-vue-next';
 
 defineProps<{

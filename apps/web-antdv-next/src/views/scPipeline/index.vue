@@ -25,7 +25,7 @@ import {
   Tag,
   TreeSelect,
   Typography,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import { createPipelineApi, deletePipelineApi, listPipelinesApi, updatePipelineApi } from './api';
 import { getMyDataTree } from './mock/myDataMock';

@@ -13,7 +13,7 @@ import { uploadFile, uploadTempFile } from '#/api/user-file';
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Space, Spin, Tabs, Upload, Dropdown, Menu, Table} from 'ant-design-vue';
+import { Button, Input, message, Space, Spin, Tabs, Upload, Dropdown, Menu, Table} from 'antdv-next';
 
 import { baseRequestClient } from '../../../api/request';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';

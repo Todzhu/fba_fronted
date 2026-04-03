@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Table, Tooltip, Dropdown, Menu } from 'ant-design-vue';
+import { Table, Tooltip, Dropdown, Menu } from 'antdv-next';
 import { IconifyIcon } from '@vben/icons';
 import type { FileItem } from '../mock';
 import { computed } from 'vue';

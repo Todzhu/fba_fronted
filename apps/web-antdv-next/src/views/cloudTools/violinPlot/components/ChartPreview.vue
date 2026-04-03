@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Button } from 'ant-design-vue';
+import { Card, Button } from 'antdv-next';
 import { Download, Sparkles } from 'lucide-vue-next';
 import { onMounted, ref } from 'vue';
 import { EchartsUI, useEcharts, type EchartsUIType } from '@vben/plugins/echarts';

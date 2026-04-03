@@ -6,7 +6,7 @@ import { computed, onMounted, ref } from 'vue';
 import { Page } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
 
-import { Breadcrumb, message, Modal } from 'ant-design-vue';
+import { Breadcrumb, message, Modal } from 'antdv-next';
 
 import {
   batchDeleteMyDataFiles,

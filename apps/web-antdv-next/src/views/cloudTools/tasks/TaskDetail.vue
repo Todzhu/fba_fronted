@@ -141,7 +141,7 @@ import {
   Tag,
   Tooltip,
   message,
-} from 'ant-design-vue';
+} from 'antdv-next';
 import { Page } from '@vben/common-ui';
 import { Icon } from '@iconify/vue';
 

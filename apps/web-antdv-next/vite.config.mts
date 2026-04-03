@@ -7,14 +7,14 @@ export default defineConfig(async () => {
       server: {
         host: '0.0.0.0',
         hmr: {
-          host: '172.30.10.205',
+          host: '127.0.0.1',
           port: 5173,
         },
         proxy: {
           '/api': {
             changeOrigin: true,
             // 真实后端地址
-            target: 'http://172.30.10.205:8000',
+            target: 'http://127.0.0.1:8000',
             ws: true,
           },
           '/static': {

@@ -24,7 +24,7 @@ import {
   Spin,
   Table,
   Tabs,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import { getTaskFileUrl } from '#/api/analysis-tools';
 

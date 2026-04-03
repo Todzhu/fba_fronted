@@ -1,17 +1,11 @@
 <script lang="ts" setup>
 import type { NotificationItem } from '@vben/layouts';
 
-<<<<<<< HEAD:apps/web-antd/src/layouts/basic.vue
 import { computed, onMounted, ref, watch } from 'vue';
-
-import { AuthenticationLoginExpiredModal, useVbenModal } from '@vben/common-ui';
-=======
-import { computed, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { AuthenticationLoginExpiredModal } from '@vben/common-ui';
+import { AuthenticationLoginExpiredModal, useVbenModal } from '@vben/common-ui';
 import { VBEN_DOC_URL, VBEN_GITHUB_URL } from '@vben/constants';
->>>>>>> 2dc386e36c052781dda586acbd26bb782d5627f2:apps/web-antdv-next/src/layouts/basic.vue
 import { useWatermark } from '@vben/hooks';
 import { BookOpenText, CircleHelp, SvgGithubIcon } from '@vben/icons';
 import {
@@ -24,12 +18,9 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 import { openWindow } from '@vben/utils';
 
-<<<<<<< HEAD:apps/web-antd/src/layouts/basic.vue
 import { router } from '#/router';
 import { getTaskCenterPath } from '#/utils/route-helpers';
-=======
 import { $t } from '#/locales';
->>>>>>> 2dc386e36c052781dda586acbd26bb782d5627f2:apps/web-antdv-next/src/layouts/basic.vue
 import { useAuthStore } from '#/store';
 import LoginForm from '#/views/_core/authentication/login.vue';
 import {
@@ -39,66 +30,11 @@ import {
   markAsRead,
 } from '#/api/message';
 
-<<<<<<< HEAD:apps/web-antd/src/layouts/basic.vue
 const notifications = ref<NotificationItem[]>([]);
 const allMessages = ref<NotificationItem[]>([]);
 const allMessagesTotal = ref(0);
 const allMessagesPage = ref(1);
 const allMessagesLoading = ref(false);
-=======
-const notifications = ref<NotificationItem[]>([
-  {
-    id: 1,
-    avatar: 'https://avatar.vercel.sh/vercel.svg?text=VB',
-    date: '3小时前',
-    isRead: true,
-    message: '描述信息描述信息描述信息',
-    title: '收到了 14 份新周报',
-  },
-  {
-    id: 2,
-    avatar: 'https://avatar.vercel.sh/1',
-    date: '刚刚',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '朱偏右 回复了你',
-  },
-  {
-    id: 3,
-    avatar: 'https://avatar.vercel.sh/1',
-    date: '2024-01-01',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '曲丽丽 评论了你',
-  },
-  {
-    id: 4,
-    avatar: 'https://avatar.vercel.sh/satori',
-    date: '1天前',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '代办提醒',
-  },
-  {
-    id: 5,
-    avatar: 'https://avatar.vercel.sh/satori',
-    date: '1天前',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '跳转Workspace示例',
-    link: '/workspace',
-  },
-  {
-    id: 6,
-    avatar: 'https://avatar.vercel.sh/satori',
-    date: '1天前',
-    isRead: false,
-    message: '描述信息描述信息描述信息',
-    title: '跳转外部链接示例',
-    link: 'https://doc.vben.pro',
-  },
-]);
->>>>>>> 2dc386e36c052781dda586acbd26bb782d5627f2:apps/web-antdv-next/src/layouts/basic.vue
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -245,16 +181,6 @@ async function handleNoticeClear() {
   }
 }
 
-<<<<<<< HEAD:apps/web-antd/src/layouts/basic.vue
-async function handleMakeAll() {
-  try {
-    await markAllAsRead();
-    notifications.value.forEach((item) => (item.isRead = true));
-    allMessages.value.forEach((item) => (item.isRead = true));
-  } catch {
-    // 标记失败
-  }
-=======
 function markRead(id: number | string) {
   const item = notifications.value.find((item) => item.id === id);
   if (item) {
@@ -266,9 +192,14 @@ function remove(id: number | string) {
   notifications.value = notifications.value.filter((item) => item.id !== id);
 }
 
-function handleMakeAll() {
-  notifications.value.forEach((item) => (item.isRead = true));
->>>>>>> 2dc386e36c052781dda586acbd26bb782d5627f2:apps/web-antdv-next/src/layouts/basic.vue
+async function handleMakeAll() {
+  try {
+    await markAllAsRead();
+    notifications.value.forEach((item) => (item.isRead = true));
+    allMessages.value.forEach((item) => (item.isRead = true));
+  } catch {
+    // 标记失败
+  }
 }
 
 // 点击消息处理
@@ -342,7 +273,6 @@ watch(
         :dot="showDot"
         :notifications="notifications"
         @clear="handleNoticeClear"
-        @read="(item) => item.id && markRead(item.id)"
         @remove="(item) => item.id && remove(item.id)"
         @make-all="handleMakeAll"
         @read="handleNoticeRead"

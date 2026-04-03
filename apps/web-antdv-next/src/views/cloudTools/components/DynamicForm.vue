@@ -22,7 +22,7 @@ import {
   Slider,
   Switch,
   Tooltip,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import OfficeColorPicker from './OfficeColorPicker.vue';
 import PaletteSelect from './PaletteSelect.vue';

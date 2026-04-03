@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Checkbox, Tooltip } from 'ant-design-vue';
+import { Card, Checkbox, Tooltip } from 'antdv-next';
 import { IconifyIcon } from '@vben/icons';
 import type { FileItem } from '../mock';
 import { ref } from 'vue';

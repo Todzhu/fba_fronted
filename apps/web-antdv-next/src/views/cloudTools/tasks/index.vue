@@ -25,7 +25,7 @@ import {
   Table,
   Tag,
   Tooltip,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import { deleteTask, deleteTasksBatch, getTaskList, updateTaskName } from '#/api/analysis-tools';
 

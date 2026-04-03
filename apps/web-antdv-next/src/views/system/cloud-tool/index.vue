@@ -15,7 +15,7 @@ import { Page, useVbenModal, VbenButton } from '@vben/common-ui';
 import { MaterialSymbolsAdd } from '@vben/icons';
 import { $t } from '@vben/locales';
 
-import { message } from 'ant-design-vue';
+import { message } from 'antdv-next';
 
 import { useVbenForm } from '#/adapter/form';
 import { useVbenVxeGrid } from '#/adapter/vxe-table';

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { Modal, Tree } from 'ant-design-vue';
+import { Modal, Tree } from 'antdv-next';
 import type { DataNode } from 'ant-design-vue/es/tree';
 
 interface Props {

@@ -19,7 +19,7 @@ import {
   Spin,
   Tag,
   Tooltip,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import { STEP_LABELS, STEP_ORDER, SKIPPABLE_STEPS } from '../types/pipeline';
 import StepConfigPanel from './StepConfigPanel.vue';

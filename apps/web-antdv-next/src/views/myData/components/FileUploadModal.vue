@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { UploadChangeParam, UploadProps } from 'ant-design-vue';
+import type { UploadChangeParam, UploadProps } from 'antdv-next';
 
 import { computed, ref, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
-import { message, Modal, Progress, Upload } from 'ant-design-vue';
+import { message, Modal, Progress, Upload } from 'antdv-next';
 
 interface Props {
   open: boolean;

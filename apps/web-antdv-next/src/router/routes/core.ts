@@ -147,6 +147,30 @@ const coreRoutes: RouteRecordRaw[] = [
       },
     ],
   },
+  // BioClaw 独立全屏页面（不套 BasicLayout）
+  {
+    component: () => import('#/views/bioclaw/workbench/index.vue'),
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      title: 'PedalUp',
+    },
+    name: 'BioClaw',
+    path: '/agent',
+  },
+  // 项目工作区详情页（独立全屏）
+  {
+    component: () => import('#/views/bioclaw/projects/detail.vue'),
+    meta: {
+      hideInBreadcrumb: true,
+      hideInMenu: true,
+      hideInTab: true,
+      title: '项目工作区',
+    },
+    name: 'ProjectWorkspace',
+    path: '/agent/projects/:id',
+  },
 ];
 
 export { coreRoutes, fallbackNotFoundRoute };

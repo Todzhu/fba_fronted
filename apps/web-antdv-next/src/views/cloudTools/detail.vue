@@ -25,7 +25,7 @@ import {
   TabPane,
   Tabs,
   Typography,
-} from 'ant-design-vue';
+} from 'antdv-next';
 
 import {
   executeAnalysisTool,

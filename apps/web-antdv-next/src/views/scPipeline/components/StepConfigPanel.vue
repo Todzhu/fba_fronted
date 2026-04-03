@@ -10,7 +10,7 @@ import type { SampleInfo } from '../mock/myDataMock';
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, message, Space, Spin, Tag } from 'ant-design-vue';
+import { Button, message, Space, Spin, Tag } from 'antdv-next';
 
 import DynamicForm from '../../cloudTools/components/DynamicForm.vue';
 import { STEP_DEFINITIONS } from '../mock/stepSchemas';

@@ -8,7 +8,7 @@ import type { StepState, StepType } from '../types/pipeline';
 import { computed } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Steps } from 'ant-design-vue';
+import { Steps } from 'antdv-next';
 
 import { STEP_DEFINITIONS } from '../mock/stepSchemas';
 import { STEP_ORDER } from '../types/pipeline';

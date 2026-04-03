@@ -23,7 +23,7 @@ import {
   getTaskList,
   type TaskStatusResponse,
 } from '#/api/analysis-tools';
-import { Modal } from 'ant-design-vue';
+import { Modal } from 'antdv-next';
 
 const userStore = useUserStore();
 

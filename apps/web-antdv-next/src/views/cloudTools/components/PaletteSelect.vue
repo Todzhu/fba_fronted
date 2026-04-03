@@ -7,7 +7,7 @@
  */
 import { computed } from 'vue';
 
-import { Select } from 'ant-design-vue';
+import { Select } from 'antdv-next';
 
 const props = withDefaults(
   defineProps<{

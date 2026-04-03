@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { Modal, Input, Form, FormItem } from 'ant-design-vue';
+import { Modal, Input, Form, FormItem } from 'antdv-next';
 
 interface Props {
   open: boolean;

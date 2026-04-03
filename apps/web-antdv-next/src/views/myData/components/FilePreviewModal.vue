@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Modal, Image, Button, message } from 'ant-design-vue';
+import { Modal, Image, Button, message } from 'antdv-next';
 import { IconifyIcon } from '@vben/icons';
 import type { FileItem } from '../mock';
 import { downloadMyDataFile } from '#/api/my-data';

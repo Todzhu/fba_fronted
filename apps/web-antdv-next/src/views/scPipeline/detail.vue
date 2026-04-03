@@ -11,7 +11,7 @@ import { Page } from '@vben/common-ui';
 import { useTabs } from '@vben/hooks';
 
 import { Icon } from '@iconify/vue';
-import { Button, message, Spin, Tag } from 'ant-design-vue';
+import { Button, message, Spin, Tag } from 'antdv-next';
 
 import { getPipelineApi, runStepApi } from './api';
 import PipelineWorkspace from './components/PipelineWorkspace.vue';

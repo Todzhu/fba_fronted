@@ -8,7 +8,7 @@ import type { AnalysisTool } from '#/api';
 
 import { $t } from '@vben/locales';
 
-import { message } from 'ant-design-vue';
+import { message } from 'antdv-next';
 
 import { updateCloudToolApi } from '#/api';
 

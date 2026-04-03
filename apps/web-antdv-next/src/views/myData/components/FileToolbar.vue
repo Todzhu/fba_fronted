@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Input, Button, Tooltip } from 'ant-design-vue';
+import { Input, Button, Tooltip } from 'antdv-next';
 import { IconifyIcon } from '@vben/icons';
 import { ref } from 'vue';
 
