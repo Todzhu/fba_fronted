@@ -47,11 +47,15 @@ const categoryColors: Record<
   蛋白组学: { bg: '#dbeafe', border: '#3b82f6', text: '#1d4ed8' },
   代谢组学: { bg: '#fce7f3', border: '#ec4899', text: '#be185d' },
   基因组学: { bg: '#e0e7ff', border: '#6366f1', text: '#4338ca' },
+  单细胞: { bg: '#f0fdf4', border: '#22c55e', text: '#15803d' },
   // 功能分类颜色
   可视化: { bg: '#d1fae5', border: '#10b981', text: '#047857' },
   富集分析: { bg: '#ede9fe', border: '#8b5cf6', text: '#6d28d9' },
+  通路富集分析: { bg: '#ede9fe', border: '#8b5cf6', text: '#6d28d9' },
   数据预处理: { bg: '#fed7aa', border: '#f97316', text: '#c2410c' },
   差异分析: { bg: '#fecaca', border: '#ef4444', text: '#b91c1c' },
+  肿瘤分析: { bg: '#fef2f2', border: '#dc2626', text: '#991b1b' },
+  细胞通讯: { bg: '#ecfeff', border: '#06b6d4', text: '#0e7490' },
   网络分析: { bg: '#a5f3fc', border: '#06b6d4', text: '#0e7490' },
   降维分析: { bg: '#bbf7d0', border: '#22c55e', text: '#15803d' },
 };

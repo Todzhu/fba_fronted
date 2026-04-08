@@ -22,6 +22,7 @@ import {
   Folder,
   Layers,
   Loader2,
+  Map,
   Pencil,
   Play,
   ScatterChart,
@@ -35,6 +36,8 @@ import { message, Table as ATable } from 'ant-design-vue';
 
 import {
   generateDotplot as generateDotplotApi,
+  generateFeatureplot as generateFeatureplotApi,
+  autoAnnotate as autoAnnotateApi,
   getPipeline as fetchPipelineApi,
   getFilesInFolder,
   getStepLogs,
@@ -337,15 +340,22 @@ const selectedTissueType = ref('pbmc');
 const markerTableRows = ref<MarkerRow[]>([]);
 const dotplotUrl = ref('');
 const dotplotLoading = ref(false);
+const featureplotUrl = ref('');
+const featureplotLoading = ref(false);
+const activeAnnotationVizTab = ref<'dotplot' | 'featureplot'>('dotplot'); // Dotplot / Feature Plot 切换
 const showMarkerTable = ref(false); // Marker 表折叠状态
 const showSaveDropdown = ref(false); // 保存 h5ad 下拉菜单
 const savingH5ad = ref(false); // 保存中状态
+
+// ===== 自动注释相关 =====
+const autoAnnotateResult = ref<Record<string, { cell_type: string; score: number; confidence: number }>>({});
+const autoAnnotateLoading = ref(false);
 
 // Marker 表中的细胞类型候选列表（供 Cluster 映射下拉使用）
 const candidateCellTypes = computed(() =>
   markerTableRows.value.map((r) => r.cellType).filter(Boolean),
 );
-// 从知识库加载组织类型的 Marker 预设
+// 从知识库加载组织类型的 Marker 预设，并自动触发后端注释
 const loadMarkerPreset = (tissue: string) => {
   selectedTissueType.value = tissue;
   if (!activeStep.value) return;
@@ -362,6 +372,8 @@ const loadMarkerPreset = (tissue: string) => {
     cellType: ct.cellType,
     markers: ct.positive.join(', '),
   }));
+  // 选择组织后自动触发自动注释（异步，不阻塞 UI）
+  handleAutoAnnotate();
 };
 
 const addMarkerRow = () => {
@@ -397,6 +409,78 @@ const handleGenerateDotplot = async () => {
   } finally {
     dotplotLoading.value = false;
   }
+};
+
+// 收集 marker 表格中的所有基因并调用后端生成 Feature Plot
+const handleGenerateFeatureplot = async () => {
+  if (!pipeline.value || markerTableRows.value.length === 0) return;
+  featureplotLoading.value = true;
+  try {
+    // 从 marker 表提取所有基因
+    const allGenes = new Set<string>();
+    for (const row of markerTableRows.value) {
+      const genes = row.markers
+        .split(/[,，\s]+/)
+        .map((g) => g.trim())
+        .filter(Boolean);
+      genes.forEach((g) => allGenes.add(g));
+    }
+    if (allGenes.size === 0) return;
+    const resp = await generateFeatureplotApi(pipeline.value.id, [...allGenes]);
+    featureplotUrl.value = resp.url;
+    // 自动切换到 Feature Plot tab
+    activeAnnotationVizTab.value = 'featureplot';
+  } catch (error) {
+    console.error('生成 Feature Plot 失败:', error);
+  } finally {
+    featureplotLoading.value = false;
+  }
+};
+
+// 调用后端自动注释预览，获取 cluster→cell_type 映射
+const handleAutoAnnotate = async () => {
+  if (!pipeline.value || !activeStep.value) return;
+  autoAnnotateLoading.value = true;
+  try {
+    const method = (activeStep.value.params['annotation_method'] as string) || 'panglaodb';
+    const organism = (activeStep.value.params['organism'] as string) || 'human';
+    const result = await autoAnnotateApi(pipeline.value.id, method, organism);
+    autoAnnotateResult.value = result;
+    // 将结果自动填入 Cluster 映射表
+    for (const row of clusterTableData.value) {
+      const autoResult = result[row.cluster];
+      if (autoResult && autoResult.cell_type) {
+        // 仅在用户未手动填写的情况下自动填入
+        if (!row.cellType || row.cellType.trim() === '') {
+          row.cellType = autoResult.cell_type;
+        }
+      }
+    }
+    message.success(`自动注释完成，已为 ${Object.keys(result).length} 个 Cluster 生成建议`);
+  } catch (error) {
+    console.error('自动注释失败:', error);
+    message.error('自动注释失败，请检查降维聚类步骤是否完成');
+  } finally {
+    autoAnnotateLoading.value = false;
+  }
+};
+
+// 一键用自动注释结果填充所有 Cluster
+const fillAllAutoAnnotation = () => {
+  for (const row of clusterTableData.value) {
+    const autoResult = autoAnnotateResult.value[row.cluster];
+    if (autoResult && autoResult.cell_type) {
+      row.cellType = autoResult.cell_type;
+    }
+  }
+};
+
+// 重置所有注释
+const resetAllAnnotation = () => {
+  for (const row of clusterTableData.value) {
+    row.cellType = '';
+  }
+  autoAnnotateResult.value = {};
 };
 
 // ===== QC 质控图样本切换 =====
@@ -1545,19 +1629,38 @@ onUnmounted(() => {
                 </div>
 
                 <div class="px-8 py-5">
-                  <!-- 组织类型选择 -->
+                  <!-- 组织类型选择 + 自动注释状态 -->
                   <div class="mb-5 flex items-center gap-4">
                     <label class="text-sm font-medium text-slate-700 whitespace-nowrap">组织类型</label>
                     <select
                       :value="selectedTissueType"
                       @change="(e: Event) => loadMarkerPreset((e.target as HTMLSelectElement).value)"
                       class="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
+                      :disabled="autoAnnotateLoading"
                     >
                       <option v-for="opt in TISSUE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
                         {{ opt.label }}
                       </option>
                     </select>
-                    <span class="text-xs text-slate-400">选择后自动加载对应组织的细胞类型和 Marker 基因</span>
+                    <!-- 自动注释状态指示 -->
+                    <div v-if="autoAnnotateLoading" class="flex items-center gap-2 text-sm text-purple-600">
+                      <Loader2 class="h-4 w-4 animate-spin" />
+                      <span>自动注释中...</span>
+                    </div>
+                    <div v-else-if="Object.keys(autoAnnotateResult).length > 0" class="flex items-center gap-2">
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                        <Check class="h-3 w-3" />
+                        已注释 {{ Object.keys(autoAnnotateResult).length }} 个 Cluster
+                      </span>
+                      <button
+                        type="button"
+                        @click="handleAutoAnnotate"
+                        class="cursor-pointer text-xs text-purple-500 hover:text-purple-700"
+                      >
+                        🔄 重新注释
+                      </button>
+                    </div>
+                    <span v-else class="text-xs text-slate-400">选择后自动加载 Marker 基因并执行自动注释</span>
                   </div>
 
                   <!-- Marker 紧凑摘要（默认显示） -->
@@ -1636,7 +1739,7 @@ onUnmounted(() => {
                     请先选择组织类型以加载预设 Marker 基因
                   </div>
 
-                  <!-- 生成 Dotplot 按钮 -->
+                  <!-- 生成 Dotplot / Feature Plot 按钮区 -->
                   <div class="flex items-center gap-3">
                     <button
                       type="button"
@@ -1648,21 +1751,72 @@ onUnmounted(() => {
                       <ScatterChart v-else class="h-4 w-4" />
                       {{ dotplotLoading ? '生成中...' : '生成 Dotplot' }}
                     </button>
+                    <button
+                      type="button"
+                      @click="handleGenerateFeatureplot"
+                      :disabled="featureplotLoading || markerTableRows.length === 0"
+                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Loader2 v-if="featureplotLoading" class="h-4 w-4 animate-spin" />
+                      <Map v-else class="h-4 w-4" />
+                      {{ featureplotLoading ? '生成中...' : 'Feature Plot' }}
+                    </button>
                   </div>
 
-                  <!-- Dotplot 结果展示 -->
-                  <div v-if="dotplotUrl" class="mt-5">
-                    <div class="mb-2 flex items-center gap-2">
-                      <ScatterChart class="h-4 w-4 text-emerald-500" />
-                      <span class="text-sm font-bold text-slate-700">Dotplot 预览</span>
+                  <!-- 可视化结果 Tab 切换 -->
+                  <div v-if="dotplotUrl || featureplotUrl" class="mt-5">
+                    <!-- Tab 切换栏 -->
+                    <div class="mb-3 flex items-center gap-1 rounded-lg bg-slate-100 p-1" style="width: fit-content;">
+                      <button
+                        type="button"
+                        class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
+                        :class="activeAnnotationVizTab === 'dotplot' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        @click="activeAnnotationVizTab = 'dotplot'"
+                        :disabled="!dotplotUrl"
+                      >
+                        <ScatterChart class="h-4 w-4" />
+                        Dotplot
+                      </button>
+                      <button
+                        type="button"
+                        class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
+                        :class="activeAnnotationVizTab === 'featureplot' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                        @click="activeAnnotationVizTab = 'featureplot'"
+                        :disabled="!featureplotUrl"
+                      >
+                        <Map class="h-4 w-4" />
+                        Feature Plot
+                      </button>
                     </div>
+
+                    <!-- Dotplot 预览 -->
                     <div
+                      v-if="activeAnnotationVizTab === 'dotplot' && dotplotUrl"
                       class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-100 transition-shadow hover:shadow-md"
                       @click="openLightbox(getStepChartUrl(dotplotUrl, 'annotation'))"
                     >
                       <img
                         :src="getStepChartUrl(dotplotUrl, 'annotation')"
                         alt="Marker Dotplot"
+                        class="w-full rounded-lg"
+                      />
+                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
+                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
+                          <ZoomIn class="h-3.5 w-3.5" />
+                          点击放大
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Feature Plot 预览 -->
+                    <div
+                      v-if="activeAnnotationVizTab === 'featureplot' && featureplotUrl"
+                      class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-100 transition-shadow hover:shadow-md"
+                      @click="openLightbox(getStepChartUrl(featureplotUrl, 'annotation'))"
+                    >
+                      <img
+                        :src="getStepChartUrl(featureplotUrl, 'annotation')"
+                        alt="Feature Plot"
                         class="w-full rounded-lg"
                       />
                       <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
@@ -1681,19 +1835,42 @@ onUnmounted(() => {
 
                 <!-- 注释步骤专属：Cluster → CellType 映射表格 -->
                 <template v-if="isAnnotationStep && clusterList.length > 0">
-                  <div class="mb-4 flex items-center gap-2">
-                    <Tag class="h-5 w-5 text-blue-500" />
-                    <h3 class="text-base font-bold text-slate-800">Cluster 细胞类型注释</h3>
-                    <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                      共 {{ clusterList.length }} 个 Cluster
-                    </span>
+                  <div class="mb-4 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <Tag class="h-5 w-5 text-blue-500" />
+                      <h3 class="text-base font-bold text-slate-800">Cluster 细胞类型注释</h3>
+                      <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+                        共 {{ clusterList.length }} 个 Cluster
+                      </span>
+                    </div>
+                    <!-- 工具按钮（一键填充 / 重置） -->
+                    <div class="flex items-center gap-2">
+                      <button
+                        v-if="Object.keys(autoAnnotateResult).length > 0"
+                        type="button"
+                        @click="fillAllAutoAnnotation"
+                        class="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                      >
+                        一键填充
+                      </button>
+                      <button
+                        type="button"
+                        @click="resetAllAnnotation"
+                        class="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                      >
+                        重置
+                      </button>
+                    </div>
                   </div>
 
                   <div class="max-h-[400px] overflow-y-auto overflow-hidden rounded-lg border border-slate-200">
                     <table class="w-full text-sm">
                       <thead class="sticky top-0 z-10">
                         <tr class="bg-slate-50">
-                          <th class="w-24 px-4 py-2.5 text-center font-semibold text-slate-600">Cluster</th>
+                          <th class="w-20 px-4 py-2.5 text-center font-semibold text-slate-600">Cluster</th>
+                          <th v-if="Object.keys(autoAnnotateResult).length > 0" class="w-40 px-4 py-2.5 text-left font-semibold text-purple-600">
+                            🤖 自动注释
+                          </th>
                           <th class="px-4 py-2.5 text-left font-semibold text-slate-600">细胞类型（从 Marker 表选择或手动输入）</th>
                         </tr>
                       </thead>
@@ -1701,12 +1878,26 @@ onUnmounted(() => {
                         <tr
                           v-for="row in clusterTableData"
                           :key="row.cluster"
-                          class="border-t border-slate-100 hover:bg-slate-50/50"
+                          class="border-t border-slate-100 transition-colors"
+                          :class="row.cellType?.trim() ? 'bg-emerald-50/30 hover:bg-emerald-50/60' : 'bg-amber-50/20 hover:bg-amber-50/40'"
                         >
                           <td class="px-4 py-2 text-center">
                             <span class="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
                               {{ row.cluster }}
                             </span>
+                          </td>
+                          <!-- 自动注释参考列（只读） -->
+                          <td v-if="Object.keys(autoAnnotateResult).length > 0" class="px-4 py-2">
+                            <div v-if="autoAnnotateResult[row.cluster]" class="flex items-center gap-2">
+                              <span class="text-xs text-purple-700">{{ autoAnnotateResult[row.cluster]?.cell_type }}</span>
+                              <span
+                                class="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                                :class="(autoAnnotateResult[row.cluster]?.confidence ?? 0) >= 70 ? 'bg-emerald-100 text-emerald-700' : (autoAnnotateResult[row.cluster]?.confidence ?? 0) >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'"
+                              >
+                                {{ autoAnnotateResult[row.cluster]?.confidence ?? 0 }}%
+                              </span>
+                            </div>
+                            <span v-else class="text-xs text-slate-300">—</span>
                           </td>
                           <td class="px-4 py-2">
                             <div class="flex items-center gap-2">
@@ -1727,6 +1918,9 @@ onUnmounted(() => {
                                 class="h-8 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
                                 placeholder="或手动输入细胞类型..."
                               />
+                              <!-- 已填/未填状态指示 -->
+                              <span v-if="row.cellType?.trim()" class="h-2 w-2 shrink-0 rounded-full bg-emerald-400"></span>
+                              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-amber-300"></span>
                             </div>
                           </td>
                         </tr>
@@ -1736,7 +1930,7 @@ onUnmounted(() => {
 
                   <div class="mt-4 flex items-center justify-between">
                     <p class="text-xs text-slate-400">
-                      💡 参考上方 Dotplot 和特征基因分析结果，为每个 Cluster 指定细胞类型
+                      💡 流程：① 选择组织类型自动注释 → ② 参考 Dotplot / Feature Plot 核验 → ③ 手动修改后提交
                     </p>
                     <button
                       type="button"

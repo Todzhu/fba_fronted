@@ -255,6 +255,43 @@ export async function generateDotplot(
   return await requestClient.post<{ url: string }>(
     `/api/v1/pipelines/${pipelineId}/dotplot`,
     { marker_dict: markerDict },
+    { timeout: 180_000 }, // 3分钟超时，生物信息分析耗时较长
+  );
+}
+
+/**
+ * 生成 Feature Plot（基因表达 UMAP 图）
+ * @param pipelineId 流程 ID
+ * @param genes 要展示的基因列表
+ * @returns {url: 图片相对路径}
+ */
+export async function generateFeatureplot(
+  pipelineId: string,
+  genes: string[],
+): Promise<{ url: string }> {
+  return await requestClient.post<{ url: string }>(
+    `/api/v1/pipelines/${pipelineId}/featureplot`,
+    { genes },
+    { timeout: 180_000 }, // 3分钟超时
+  );
+}
+
+/**
+ * 自动注释预览：返回 cluster→cell_type 映射，不修改 h5ad
+ * @param pipelineId 流程 ID
+ * @param method 注释方法 (panglaodb/celltypist)
+ * @param organism 物种 (human/mouse)
+ * @returns {cluster_id: {cell_type, score, confidence}}
+ */
+export async function autoAnnotate(
+  pipelineId: string,
+  method: string = 'panglaodb',
+  organism: string = 'human',
+): Promise<Record<string, { cell_type: string; confidence: number; score: number }>> {
+  return await requestClient.post<Record<string, { cell_type: string; confidence: number; score: number }>>(
+    `/api/v1/pipelines/${pipelineId}/auto-annotate`,
+    { method, organism },
+    { timeout: 300_000 }, // 5分钟超时，自动注释需要联网下载数据并运行 ORA 分析
   );
 }
 
