@@ -136,3 +136,18 @@ export interface FolderTreeNode extends FileItem {
 export async function getUserFolderTree(): Promise<FolderTreeNode[]> {
   return requestClient.get<FolderTreeNode[]>(`${BASE_URL}/tree`);
 }
+
+// ========== 存储用量 ==========
+
+export interface StorageUsage {
+  used: number;
+  quota: number;
+  percent: number;
+}
+
+/**
+ * 获取存储用量
+ */
+export async function getStorageUsage() {
+  return requestClient.get<StorageUsage>(`${BASE_URL}/storage`);
+}

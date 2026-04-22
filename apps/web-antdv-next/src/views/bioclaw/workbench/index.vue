@@ -10,26 +10,27 @@
         @navigate="handleNavigate"
         @new-thread="handleNewThread"
         @select-thread="handleSelectThread"
+        @delete-thread="handleDeleteThread"
       />
     </aside>
 
     <!-- 中间主内容区 -->
     <main class="bioclaw-main">
       <ChatCanvas
-        v-if="activeSection === 'chat'"
+        v-show="activeSection === 'chat'"
         ref="chatCanvasRef"
         :newThreadTrigger="newThreadTrigger"
         @toggle-panel="isRightPanelOpen = !isRightPanelOpen"
         :isPanelOpen="isRightPanelOpen"
       />
-      <ProjectBoard v-else-if="activeSection === 'projects'" @enter-project="handleEnterProject" />
-      <KnowledgeBase v-else-if="activeSection === 'knowledge'" />
-      <CloudDrive v-else-if="activeSection === 'cloud'" />
-      <SkillsStore v-else-if="activeSection === 'skills'" />
-      <AutomationTasks v-else-if="activeSection === 'automation'" />
-      <HistoryRecords v-else-if="activeSection === 'history'" />
+      <ProjectBoard v-if="activeSection === 'projects'" @enter-project="handleEnterProject" />
+      <KnowledgeBase v-if="activeSection === 'knowledge'" />
+      <CloudDrive v-if="activeSection === 'cloud'" />
+      <SkillsStore v-if="activeSection === 'skills'" />
+      <AutomationTasks v-if="activeSection === 'automation'" />
+      <HistoryRecords v-if="activeSection === 'history'" />
       <!-- 设置页占位 -->
-      <div v-else class="placeholder-page">
+      <div v-if="activeSection === 'settings'" class="placeholder-page">
         <div class="placeholder-icon">
           <IconifyIcon icon="ant-design:setting-outlined" style="font-size: 48px; color: #ccc;" />
         </div>
@@ -48,7 +49,8 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue';
 import { IconifyIcon } from '@vben/icons';
-import { getThreads } from '#/api/bioclaw';
+import { getThreads, deleteThread } from '#/api/bioclaw';
+import { message, Modal } from 'antdv-next';
 import LeftSidebar from './components/LeftSidebar.vue';
 import ChatCanvas from './components/ChatCanvas.vue';
 import RightDashboard from './components/RightDashboard.vue';
@@ -122,6 +124,33 @@ async function handleSelectThread(thread: Thread) {
   if (project) {
     await chatCanvasRef.value?.loadThread(thread.id, project);
   }
+}
+
+// --- 删除左侧线程 ---
+async function handleDeleteThread(thread: Thread) {
+  Modal.confirm({
+    title: '确认删除对话？',
+    content: `您将永久删除历史记录 "${thread.title || '新对话'}"，此操作不可恢复。`,
+    okText: '确认删除',
+    okType: 'danger',
+    cancelText: '取消',
+    centered: true,
+    async onOk() {
+      try {
+        await deleteThread(thread.id);
+        message.success('已删除');
+        const project = chatCanvasRef.value?.currentProject;
+        if (project) {
+          await fetchThreads(project.id);
+        }
+        if (activeThreadId.value === thread.id) {
+          handleNewThread();
+        }
+      } catch (error) {
+        message.error('删除失败');
+      }
+    }
+  });
 }
 
 // --- 从项目页"进入项目" ---

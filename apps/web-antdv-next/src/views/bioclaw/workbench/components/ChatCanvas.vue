@@ -241,7 +241,7 @@
               :key="file.name"
               class="picker-row"
               :class="{ selected: selectedCloudFiles.includes(file.name), 'is-dir': file.isDir }"
-              @click="file.isDir ? enterCloudDir(file.name) : toggleCloudFile(file.name)"
+              @click="file.isDir ? enterCloudDir(file) : toggleCloudFile(file.name)"
             >
               <IconifyIcon
                 :icon="file.isDir ? 'ant-design:folder-filled' : 'ant-design:file-outlined'"
@@ -333,41 +333,73 @@ const attachedFiles = ref<File[]>([]);
 const showExportModal = ref(false);
 
 // --- 云盘文件选择器 ---
-interface CloudFile { name: string; isDir: boolean; size?: string; }
+import { getMyDataFiles, type FileItem } from '#/api/my-data';
+
+interface CloudFile { id: number; name: string; isDir: boolean; size?: string; parentId?: number | null; }
 const showCloudPicker = ref(false);
-const cloudCurrentPath = ref('/');
 const selectedCloudFiles = ref<string[]>([]);
-const cloudFiles = ref<CloudFile[]>([
-  { name: 'projects', isDir: true },
-  { name: 'samples', isDir: true },
-  { name: 'references', isDir: true },
-  { name: 'deg_results_all.csv', isDir: false, size: '1.2 MB' },
-  { name: 'volcano_plot.html', isDir: false, size: '856 KB' },
-  { name: 'heatmap_top50.png', isDir: false, size: '2.1 MB' },
-  { name: 'sample_metadata.xlsx', isDir: false, size: '45 KB' },
-  { name: 'counts_matrix.csv', isDir: false, size: '28 MB' },
-]);
+const cloudFiles = ref<CloudFile[]>([]);
+const cloudLoading = ref(false);
+
+// 文件夹导航栈: [{id, name}]
+const cloudNavStack = ref<{ id: number | null; name: string }[]>([]);
+const cloudCurrentParentId = computed(() => {
+  if (cloudNavStack.value.length === 0) return undefined;
+  return cloudNavStack.value[cloudNavStack.value.length - 1]!.id ?? undefined;
+});
 
 const cloudPathSegments = computed(() => {
-  const parts = cloudCurrentPath.value.split('/').filter(Boolean);
-  return ['根目录', ...parts];
+  return ['根目录', ...cloudNavStack.value.map(s => s.name)];
 });
+
+function formatCloudSize(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${Number.parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`;
+}
+
+async function loadCloudFiles() {
+  cloudLoading.value = true;
+  try {
+    const res = await getMyDataFiles({
+      parent_id: cloudCurrentParentId.value as number | undefined,
+    });
+    cloudFiles.value = res.items.map((item: FileItem) => ({
+      id: item.id,
+      name: item.name,
+      isDir: item.type === 'folder',
+      size: item.type === 'folder' ? undefined : formatCloudSize(item.size),
+      parentId: item.parent_id,
+    }));
+  } catch (error) {
+    console.error('加载云盘文件失败', error);
+    cloudFiles.value = [];
+  } finally {
+    cloudLoading.value = false;
+  }
+}
 
 function openCloudPicker() {
   selectedCloudFiles.value = [];
+  cloudNavStack.value = [];
   showCloudPicker.value = true;
+  loadCloudFiles();
 }
 
 function navigateCloudPath(index: number) {
-  if (index === 0) { cloudCurrentPath.value = '/'; return; }
-  const parts = cloudCurrentPath.value.split('/').filter(Boolean);
-  cloudCurrentPath.value = '/' + parts.slice(0, index).join('/');
+  if (index === 0) {
+    cloudNavStack.value = [];
+  } else {
+    cloudNavStack.value = cloudNavStack.value.slice(0, index);
+  }
+  loadCloudFiles();
 }
 
-function enterCloudDir(name: string) {
-  cloudCurrentPath.value = cloudCurrentPath.value === '/'
-    ? `/${name}`
-    : `${cloudCurrentPath.value}/${name}`;
+function enterCloudDir(file: CloudFile) {
+  cloudNavStack.value.push({ id: file.id, name: file.name });
+  loadCloudFiles();
 }
 
 function toggleCloudFile(name: string) {
@@ -379,10 +411,12 @@ function toggleCloudFile(name: string) {
 function confirmCloudFiles() {
   // 将选中的云盘文件路径作为「云盘标签」加入 attachedFiles（用特殊标记区分）
   for (const name of selectedCloudFiles.value) {
-    const path = cloudCurrentPath.value === '/' ? `/${name}` : `${cloudCurrentPath.value}/${name}`;
+    // 构建完整路径
+    const pathParts = cloudNavStack.value.map(s => s.name);
+    const fullPath = '/' + [...pathParts, name].join('/');
     // 用 File 对象模拟（path 存于 name 字段，size=0）
-    const fake = new File([], path, { type: 'cloud' });
-    if (!attachedFiles.value.find(f => f.name === path)) {
+    const fake = new File([], fullPath, { type: 'cloud' });
+    if (!attachedFiles.value.find(f => f.name === fullPath)) {
       attachedFiles.value.push(fake);
     }
   }

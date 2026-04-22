@@ -86,6 +86,10 @@ export async function updateThread(
   return requestClient.put(`${BASE_URL}/threads/${threadId}`, data);
 }
 
+export async function deleteThread(threadId: number) {
+  return requestClient.delete(`${BASE_URL}/threads/${threadId}`);
+}
+
 // ========== Message ==========
 
 export interface Message {

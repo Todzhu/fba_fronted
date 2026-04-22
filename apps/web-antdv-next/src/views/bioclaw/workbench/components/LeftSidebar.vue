@@ -55,6 +55,9 @@
             <span class="thread-name">{{ t.title || '新对话' }}</span>
             <span class="thread-time">{{ t.status === 'active' ? '进行中' : '' }}</span>
           </div>
+          <div class="thread-action-btn" title="删除对话" @click.stop="$emit('delete-thread', t)">
+            <IconifyIcon icon="ant-design:delete-outlined" class="thread-delete-icon" />
+          </div>
         </div>
       </template>
       <template v-else>
@@ -91,14 +94,14 @@ const props = withDefaults(defineProps<{
   currentProjectName: '',
 });
 
-defineEmits(['navigate', 'new-thread', 'select-thread']);
+defineEmits(['navigate', 'new-thread', 'select-thread', 'delete-thread']);
 
-const navItems = [
+const navItems: Array<{ id: string; icon: string; label: string; badge?: string }> = [
   { id: 'chat', icon: 'ant-design:message-outlined', label: '对话' },
-  { id: 'projects', icon: 'ant-design:project-outlined', label: '项目', badge: '3' },
+  { id: 'projects', icon: 'ant-design:project-outlined', label: '项目' },
   { id: 'knowledge', icon: 'ant-design:book-outlined', label: '知识库' },
   { id: 'cloud', icon: 'ant-design:cloud-outlined', label: '云盘' },
-  { id: 'skills', icon: 'ant-design:appstore-outlined', label: 'Skills 商店', badge: '12' },
+  { id: 'skills', icon: 'ant-design:appstore-outlined', label: 'Skills 商店' },
   { id: 'automation', icon: 'ant-design:thunderbolt-outlined', label: '自动化' },
   { id: 'history', icon: 'ant-design:history-outlined', label: '历史记录' },
 ];
@@ -298,6 +301,31 @@ const navItems = [
   font-size: 11px;
   color: #aaa;
 }
+
+.thread-action-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #999;
+}
+.thread-item:hover .thread-action-btn {
+  opacity: 1;
+}
+.thread-action-btn:hover {
+  background: #fceceb;
+  color: #ff4d4f;
+  transform: scale(1.05);
+}
+.thread-delete-icon {
+  font-size: 16px;
+}
+
 
 .sidebar-spacer {
   flex: 1;
