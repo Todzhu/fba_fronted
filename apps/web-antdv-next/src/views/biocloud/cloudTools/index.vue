@@ -291,16 +291,6 @@ onMounted(() => {
                   {{ tool.func_category }}
                 </span>
               </div>
-              <div class="tool-stats">
-                <span class="tool-stat">
-                  <Icon icon="mdi:eye-outline" class="text-sm" />
-                  <span>{{ tool.views }} 浏览</span>
-                </span>
-                <span class="tool-stat">
-                  <Icon icon="mdi:star-outline" class="text-sm" />
-                  <span>{{ tool.stars }} 收藏</span>
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -493,22 +483,6 @@ onMounted(() => {
   border-top-color: #374151;
 }
 
-.tool-stats {
-  display: flex;
-  gap: 12px;
-}
-
-.tool-stat {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  font-size: 12px;
-  color: #9ca3af;
-}
-
-.dark .tool-stat {
-  color: #6b7280;
-}
 
 /* 限时免费按钮 - 更饱满 */
 .tool-badge {

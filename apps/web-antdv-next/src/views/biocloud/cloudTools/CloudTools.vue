@@ -10,12 +10,10 @@ import {
   ArrowRight,
   ChevronLeft,
   ChevronRight,
-  Eye,
   Loader2,
   Lock,
   Search,
   Sparkles,
-  Star,
   X,
 } from 'lucide-vue-next';
 
@@ -296,16 +294,6 @@ const handleToolClick = (tool: AnalysisTool) => {
               <p class="line-clamp-3 text-[12.5px] leading-[1.65] text-slate-500/90 sm:text-[13px]">
                 {{ tool.description }}
               </p>
-            </div>
-
-            <!-- 底栏数据紧贴卡片底部沿线 -->
-            <div class="mt-3 flex items-center gap-4 text-[11px] font-medium tracking-wide text-slate-400">
-              <span class="flex items-center gap-1.5 transition-colors group-hover:text-slate-600">
-                <Eye class="h-3.5 w-3.5" /> {{ tool.views }}
-              </span>
-              <span class="flex items-center gap-1.5 transition-colors group-hover:text-amber-500">
-                <Star class="h-3.5 w-3.5 text-slate-300 transition-colors group-hover:text-amber-500" /> {{ tool.stars }}
-              </span>
             </div>
           </div>
         </div>
