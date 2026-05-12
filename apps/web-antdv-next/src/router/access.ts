@@ -42,10 +42,12 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
   // 手动添加前端定义的隐藏详情页路由（后端可能不返回这些路由）
   // 遍历 options.routes 找到所有 hideInMenu 的路由并确保它们被包含
   const ensureHiddenRoutes = (routes: any[], accessibleRoutes: any[]) => {
-    routes.forEach(route => {
+    routes.forEach((route) => {
       if (route.children && route.children.length > 0) {
         // 检查是否有父路由在 accessibleRoutes 中
-        const parentInAccessible = accessibleRoutes.find(r => r.name === route.name || r.path === route.path);
+        const parentInAccessible = accessibleRoutes.find(
+          (r) => r.name === route.name || r.path === route.path,
+        );
         if (parentInAccessible) {
           // 遍历子路由，添加隐藏的详情页
           route.children.forEach((child: any) => {
@@ -56,6 +58,13 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
                 parentInAccessible.children = [];
               }
               parentInAccessible.children.push(child);
+              if (
+                parentInAccessible.name &&
+                child.name &&
+                !options.router.hasRoute(child.name)
+              ) {
+                options.router.addRoute(parentInAccessible.name, child);
+              }
             }
           });
         }
@@ -70,6 +79,33 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
   if (options.routes && result.accessibleRoutes) {
     ensureHiddenRoutes(options.routes, result.accessibleRoutes);
   }
+
+  const reportingHiddenRoutes = [
+    {
+      name: 'MockReportCreate',
+      path: 'mock-report/create',
+      component: () => import('#/views/reporting/create.vue'),
+      meta: {
+        title: '创建报告',
+        hideInMenu: true,
+      },
+    },
+    {
+      name: 'MockReportDetail',
+      path: 'mock-report/:id/view',
+      component: () => import('#/views/reporting/detail.vue'),
+      meta: {
+        title: '查看报告',
+        hideInMenu: true,
+      },
+    },
+  ];
+
+  reportingHiddenRoutes.forEach((route) => {
+    if (!options.router.hasRoute(route.name)) {
+      options.router.addRoute('Root', route);
+    }
+  });
 
   return result;
 }
