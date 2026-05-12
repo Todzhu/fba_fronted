@@ -77,99 +77,278 @@ const hasOutputConfig = computed(() => {
   return config?.outputs && config.outputs.length > 0;
 });
 
-// 简单的 Markdown 转 HTML 函数
-function simpleMarkdownToHtml(md: string): string {
-  // 首先处理表格（需要在其他替换之前处理）
-  // 使用更灵活的正则，支持表格前有空白行或直接在文本后
-  const tableRegex =
-    /(?:^|\n\n?)((?:\|[^\n]+\|\n)+?\|[-:\s|]+\|\n(?:\|[^\n]+\|(?:\n|$))+)/gm;
-  md = md.replaceAll(tableRegex, (_match, table) => {
-    const lines = table.trim().split('\n');
-    if (lines.length < 2) return _match;
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
 
-    // 找到分隔行（包含 - 和可能的 : 用于对齐）
-    let separatorIndex = -1;
-    for (const [i, line] of lines.entries()) {
-      if (/^\|[\s\-:|]+\|$/.test(line.trim())) {
-        separatorIndex = i;
-        break;
-      }
-    }
+function escapeAttr(value: string): string {
+  return escapeHtml(value).replaceAll('`', '&#96;');
+}
 
-    if (separatorIndex === -1 || separatorIndex === 0) return _match;
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim();
+  const lowerUrl = trimmed.toLowerCase();
+  if (
+    lowerUrl.startsWith('http://') ||
+    lowerUrl.startsWith('https://') ||
+    lowerUrl.startsWith('mailto:') ||
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('#')
+  ) {
+    return trimmed;
+  }
+  return '#';
+}
 
-    // 表头是分隔行之前的所有行（通常只有一行）
-    const headerLine = lines[separatorIndex - 1];
-    // 表体是分隔行之后的所有行
-    const bodyLines = lines.slice(separatorIndex + 1);
+function renderInlineMarkdown(value: string): string {
+  const tokens: string[] = [];
+  const stash = (html: string) => {
+    const token = `@@GUIDE_TOKEN_${tokens.length}@@`;
+    tokens.push(html);
+    return token;
+  };
 
-    // 解析表头
-    const headers = headerLine
-      .split('|')
-      .filter((cell: string) => cell.trim() !== '')
-      .map((cell: string) => `<th>${cell.trim()}</th>`)
-      .join('');
+  let text = value.replaceAll(/`([^`]+)`/g, (_match, code) =>
+    stash(`<code>${escapeHtml(code)}</code>`),
+  );
 
-    // 解析表体
-    const rows = bodyLines
-      .filter((row: string) => row.trim() !== '')
-      .map((row: string) => {
-        const cells = row
-          .split('|')
-          .filter((cell: string) => cell.trim() !== '')
-          .map((cell: string) => `<td>${cell.trim()}</td>`)
-          .join('');
-        return `<tr>${cells}</tr>`;
-      })
-      .join('');
-
-    return `\n<table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>\n`;
+  text = text.replaceAll(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label, url) => {
+    const safeUrl = escapeAttr(sanitizeUrl(url));
+    return stash(
+      `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${renderInlineMarkdown(
+        label,
+      )}</a>`,
+    );
   });
 
+  let html = escapeHtml(text)
+    .replaceAll(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replaceAll(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replaceAll(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+
+  tokens.forEach((tokenHtml, index) => {
+    html = html.replaceAll(`@@GUIDE_TOKEN_${index}@@`, tokenHtml);
+  });
+
+  return html;
+}
+
+function splitMarkdownTableRow(row: string): string[] {
+  return row
+    .trim()
+    .replaceAll(/^\||\|$/g, '')
+    .split('|')
+    .map((cell) => cell.trim());
+}
+
+function isMarkdownTableSeparator(row: string): boolean {
+  const cells = splitMarkdownTableRow(row);
   return (
-    md
-      // 标题（从多到少，避免被提前匹配）
-      .replaceAll(/^###### (.*$)/gm, '<h6>$1</h6>')
-      .replaceAll(/^##### (.*$)/gm, '<h5>$1</h5>')
-      .replaceAll(/^#### (.*$)/gm, '<h4>$1</h4>')
-      .replaceAll(/^### (.*$)/gm, '<h3>$1</h3>')
-      .replaceAll(/^## (.*$)/gm, '<h2>$1</h2>')
-      .replaceAll(/^# (.*$)/gm, '<h1>$1</h1>')
-      // 粗体和斜体
-      .replaceAll(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replaceAll(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replaceAll(/\*(.+?)\*/g, '<em>$1</em>')
-      // 代码块
-      .replaceAll(/```[\s\S]*?```/g, (match) => {
-        const code = match.replaceAll(/```\w*\n?/g, '').replaceAll(/```$/g, '');
-        return `<pre><code>${code}</code></pre>`;
-      })
-      // 行内代码
-      .replaceAll(/`([^`]+)`/g, '<code>$1</code>')
-      // 无序列表
-      .replaceAll(/^\s*[-*+] (.*)$/gm, '<li>$1</li>')
-      // 有序列表
-      .replaceAll(/^\s*\d+\. (.*)$/gm, '<li>$1</li>')
-      // 引用
-      .replaceAll(/^> (.*)$/gm, '<blockquote>$1</blockquote>')
-      // 链接
-      .replaceAll(
-        /\[([^\]]+)\]\(([^)]+)\)/g,
-        '<a href="$2" target="_blank">$1</a>',
-      )
-      // 水平线
-      .replaceAll(/^---$/gm, '<hr>')
-      // 换行
-      .replaceAll('\n\n', '</p><p>')
-      .replaceAll('\n', '<br>')
+    cells.length > 0 &&
+    cells.every((cell) => /^:?-{3,}:?$/.test(cell.replaceAll(/\s/g, '')))
   );
+}
+
+function renderMarkdownTable(lines: string[]): string {
+  const [headerLine, , ...bodyLines] = lines;
+  const headers = splitMarkdownTableRow(headerLine ?? '')
+    .map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`)
+    .join('');
+  const rows = bodyLines
+    .filter((line) => line.trim())
+    .map((line) => {
+      const cells = splitMarkdownTableRow(line)
+        .map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`)
+        .join('');
+      return `<tr>${cells}</tr>`;
+    })
+    .join('');
+
+  return `<div class="guide-table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function isBlockStart(line: string, nextLine?: string): boolean {
+  const trimmed = line.trim();
+  return (
+    /^#{1,6}\s+/.test(trimmed) ||
+    /^-{3,}$/.test(trimmed) ||
+    /^>\s?/.test(trimmed) ||
+    /^[-*+]\s+/.test(trimmed) ||
+    /^\d+\.\s+/.test(trimmed) ||
+    trimmed.startsWith('```') ||
+    (trimmed.includes('|') && !!nextLine && isMarkdownTableSeparator(nextLine))
+  );
+}
+
+function parseMarkdownHeading(
+  line: string,
+): null | { level: number; text: string } {
+  const marker = line.match(/^#{1,6}/)?.[0];
+  if (!marker || line[marker.length] !== ' ') return null;
+  return {
+    level: marker.length,
+    text: line.slice(marker.length + 1),
+  };
+}
+
+function parseMarkdownListItem(
+  line: string,
+): null | { ordered: boolean; text: string } {
+  const trimmed = line.trim();
+  if (['*', '+', '-'].includes(trimmed[0] ?? '') && trimmed[1] === ' ') {
+    return {
+      ordered: false,
+      text: trimmed.slice(2),
+    };
+  }
+
+  const separatorIndex = trimmed.indexOf('. ');
+  if (separatorIndex > 0 && /^\d+$/.test(trimmed.slice(0, separatorIndex))) {
+    return {
+      ordered: true,
+      text: trimmed.slice(separatorIndex + 2),
+    };
+  }
+
+  return null;
+}
+
+// 将工具配置中的 Markdown 渲染为安全、结构化的使用说明 HTML。
+function markdownToGuideHtml(markdown: string): string {
+  const lines = markdown
+    .replaceAll('\r\n', '\n')
+    .replaceAll('\r', '\n')
+    .split('\n');
+  const html: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index] ?? '';
+    const trimmed = line.trim();
+    const nextLine = lines[index + 1];
+
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      const codeLanguage = trimmed.slice(3).trim();
+      const language = codeLanguage
+        ? ` language-${escapeAttr(codeLanguage)}`
+        : '';
+      const codeLines: string[] = [];
+      index += 1;
+      while (
+        index < lines.length &&
+        !(lines[index] ?? '').trim().startsWith('```')
+      ) {
+        codeLines.push(lines[index] ?? '');
+        index += 1;
+      }
+      index += 1;
+      html.push(
+        `<pre><code class="${language.trim()}">${escapeHtml(
+          codeLines.join('\n'),
+        )}</code></pre>`,
+      );
+      continue;
+    }
+
+    const heading = parseMarkdownHeading(trimmed);
+    if (heading) {
+      const { level, text } = heading;
+      html.push(`<h${level}>${renderInlineMarkdown(text)}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    if (/^-{3,}$/.test(trimmed)) {
+      html.push('<hr>');
+      index += 1;
+      continue;
+    }
+
+    if (
+      trimmed.includes('|') &&
+      nextLine &&
+      isMarkdownTableSeparator(nextLine)
+    ) {
+      const tableLines = [line, nextLine];
+      index += 2;
+      while (
+        index < lines.length &&
+        (lines[index] ?? '').trim().includes('|')
+      ) {
+        tableLines.push(lines[index] ?? '');
+        index += 1;
+      }
+      html.push(renderMarkdownTable(tableLines));
+      continue;
+    }
+
+    if (/^>\s?/.test(trimmed)) {
+      const quoteLines: string[] = [];
+      while (
+        index < lines.length &&
+        /^>\s?/.test((lines[index] ?? '').trim())
+      ) {
+        quoteLines.push((lines[index] ?? '').trim().replace(/^>\s?/, ''));
+        index += 1;
+      }
+      html.push(
+        `<blockquote>${quoteLines
+          .map((quoteLine) => renderInlineMarkdown(quoteLine))
+          .join('<br>')}</blockquote>`,
+      );
+      continue;
+    }
+
+    const listMatch = parseMarkdownListItem(trimmed);
+    if (listMatch) {
+      const ordered = listMatch.ordered;
+      const tag = ordered ? 'ol' : 'ul';
+      const items: string[] = [];
+      while (index < lines.length) {
+        const itemMatch = parseMarkdownListItem(lines[index] ?? '');
+        if (!itemMatch || itemMatch.ordered !== ordered) break;
+        items.push(`<li>${renderInlineMarkdown(itemMatch.text)}</li>`);
+        index += 1;
+      }
+      html.push(`<${tag}>${items.join('')}</${tag}>`);
+      continue;
+    }
+
+    const paragraphLines = [trimmed];
+    index += 1;
+    while (
+      index < lines.length &&
+      (lines[index] ?? '').trim() &&
+      !isBlockStart(lines[index] ?? '', lines[index + 1])
+    ) {
+      paragraphLines.push((lines[index] ?? '').trim());
+      index += 1;
+    }
+    html.push(
+      `<p>${paragraphLines
+        .map((paragraphLine) => renderInlineMarkdown(paragraphLine))
+        .join('<br>')}</p>`,
+    );
+  }
+
+  return html.join('\n');
 }
 
 // 渲染 guide_doc
 const renderedGuideHtml = computed(() => {
   const doc = tool.value?.guide_doc;
   if (!doc) return '';
-  return `<p>${simpleMarkdownToHtml(doc)}</p>`;
+  return markdownToGuideHtml(doc);
 });
 
 // ========== 表单状态 ==========
@@ -183,7 +362,16 @@ const handleHeadersChange = (headers: Record<string, string[]>) => {
 };
 
 // ========== Metadata 状态 ==========
-const currentMetadata = ref<Record<string, { columns: string[]; n_cells: number; summary: Array<{ column: string; type: string; values?: string[] }> }>>({});
+const currentMetadata = ref<
+  Record<
+    string,
+    {
+      columns: string[];
+      n_cells: number;
+      summary: Array<{ column: string; type: string; values?: string[] }>;
+    }
+  >
+>({});
 const handleMetadataChange = (metadata: Record<string, any>) => {
   currentMetadata.value = metadata;
 };
@@ -197,7 +385,7 @@ const dynamicParamSchema = computed(() => {
   const schema = structuredClone(toRaw(tool.value.param_schema));
 
   if (schema.properties) {
-    for (const [_key, prop] of Object.entries(schema.properties) as any) {
+    for (const [, prop] of Object.entries(schema.properties) as any) {
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
@@ -236,7 +424,9 @@ const dynamicParamSchema = computed(() => {
               (col: any) => col.column === selectedCol,
             );
             if (colMeta?.values) {
-              const values = Array.isArray(colMeta.values) ? colMeta.values : [];
+              const values = Array.isArray(colMeta.values)
+                ? colMeta.values
+                : [];
               if (values.length > 0) {
                 prop.type = 'string';
                 prop.enum = values;
@@ -356,7 +546,7 @@ const submitAnalysis = async () => {
     taskId.value = String(response.task_id);
     message.destroy();
 
-      // 长时间任务：跳转到任务中心
+    // 长时间任务：跳转到任务中心
     if (response.is_long_running) {
       message.success('任务已提交，请在任务中心查看进度');
       analyzing.value = false;
@@ -1140,137 +1330,247 @@ onMounted(async () => {
   flex: 1;
   width: 100%;
   height: 100%;
+  padding: 18px;
   overflow-y: auto;
+  background: linear-gradient(180deg, #f8fbff 0%, #fff 44%), #fff;
 }
 
 .guide-card {
   width: 100%;
-  height: 100%;
+  min-height: 100%;
   padding: 0;
   overflow-y: auto;
   background: #fff;
+  border: 1px solid #e5edf7;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgb(15 23 42 / 6%);
 }
 
-/* Markdown 内容样式 - 使用 Vditor 的 vditor-reset 基础样式 */
 .guide-md-content {
   width: 100%;
-  padding: 20px 28px;
-  font-size: 13px;
-  line-height: 1.7;
-  color: #334155;
-}
-
-/* h1 → h4 风格 */
-.guide-md-content h1 {
-  padding-bottom: 8px;
-  margin-top: 0;
-  margin-bottom: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #1e293b;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-/* h2 → h5 风格 */
-.guide-md-content h2 {
-  margin-top: 16px;
-  margin-bottom: 8px;
+  max-width: 920px;
+  padding: 28px 36px 36px;
+  margin: 0 auto;
   font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
+  line-height: 1.85;
+  color: #26364f;
+  word-break: break-word;
 }
 
-/* h3 → h6 风格 */
-.guide-md-content h3 {
-  margin-top: 12px;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
-}
-
-/* h4 样式（当前主标题） */
-.guide-md-content h4 {
-  padding-bottom: 8px;
+.guide-md-content :deep(h1) {
+  padding-bottom: 14px;
   margin-top: 0;
+  margin-bottom: 22px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f1f35;
+  border-bottom: 1px solid #d9e4f2;
+}
+
+.guide-md-content :deep(h2) {
+  padding-top: 6px;
+  margin-top: 26px;
   margin-bottom: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  color: #1e293b;
-  border-bottom: 1px solid #e2e8f0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #14233a;
 }
 
-/* h5 样式（二级标题） */
-.guide-md-content h5 {
-  margin-top: 16px;
-  margin-bottom: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
+.guide-md-content :deep(h3) {
+  margin-top: 22px;
+  margin-bottom: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1d2f49;
 }
 
-/* h6 样式（三级标题） */
-.guide-md-content h6 {
-  margin-top: 12px;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #475569;
+.guide-md-content :deep(h4) {
+  position: relative;
+  padding-left: 12px;
+  margin-top: 22px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: #183153;
 }
 
-.guide-md-content p {
-  margin-bottom: 12px;
-}
-
-.guide-md-content ul,
-.guide-md-content ol {
-  padding-left: 24px;
-  margin-bottom: 12px;
-}
-
-.guide-md-content li {
-  margin-bottom: 6px;
-}
-
-.guide-md-content code {
-  padding: 2px 6px;
-  font-size: 13px;
-  background: #f1f5f9;
+.guide-md-content :deep(h4)::before {
+  position: absolute;
+  top: 0.45em;
+  left: 0;
+  width: 4px;
+  height: 1em;
+  content: '';
+  background: #2f7df6;
   border-radius: 4px;
 }
 
-.guide-md-content pre {
+.guide-md-content :deep(h5) {
+  margin-top: 18px;
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #26364f;
+}
+
+.guide-md-content :deep(h6) {
+  margin-top: 16px;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #3c4d66;
+}
+
+.guide-md-content :deep(p) {
+  margin: 0 0 14px;
+}
+
+.guide-md-content :deep(ul),
+.guide-md-content :deep(ol) {
+  padding-left: 22px;
+  margin: 8px 0 16px;
+}
+
+.guide-md-content :deep(ul) {
+  list-style: disc;
+}
+
+.guide-md-content :deep(ol) {
+  list-style: decimal;
+}
+
+.guide-md-content :deep(li) {
+  padding-left: 2px;
+  margin-bottom: 8px;
+}
+
+.guide-md-content :deep(li)::marker {
+  color: #2f7df6;
+  font-weight: 700;
+}
+
+.guide-md-content :deep(code) {
+  padding: 2px 6px;
+  font-size: 0.92em;
+  color: #0f3b7a;
+  background: #eef5ff;
+  border: 1px solid #d8e8ff;
+  border-radius: 5px;
+}
+
+.guide-md-content :deep(pre) {
   padding: 16px;
-  margin-bottom: 12px;
+  margin: 12px 0 18px;
   overflow-x: auto;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0f172a;
+  border: 1px solid #1e293b;
   border-radius: 8px;
 }
 
-.guide-md-content blockquote {
-  padding-left: 16px;
-  margin: 12px 0;
-  color: #64748b;
+.guide-md-content :deep(pre code) {
+  padding: 0;
+  color: #e5eefc;
+  background: transparent;
+  border: 0;
+}
+
+.guide-md-content :deep(blockquote) {
+  padding: 10px 14px;
+  margin: 14px 0 18px;
+  color: #415572;
+  background: #f5f9ff;
+  border: 1px solid #dce9fa;
   border-left: 4px solid #3b82f6;
+  border-radius: 6px;
 }
 
-.guide-md-content table {
+.guide-md-content :deep(hr) {
+  height: 1px;
+  margin: 22px 0;
+  background: #e4edf7;
+  border: 0;
+}
+
+.guide-md-content :deep(a) {
+  color: #1d6ff2;
+  text-decoration: none;
+}
+
+.guide-md-content :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.guide-md-content :deep(.guide-table-wrap) {
   width: 100%;
-  margin-bottom: 12px;
+  margin: 12px 0 18px;
+  overflow-x: auto;
+  border: 1px solid #dfebf7;
+  border-radius: 8px;
+}
+
+.guide-md-content :deep(table) {
+  width: 100%;
+  min-width: 520px;
   border-collapse: collapse;
+  background: #fff;
 }
 
-.guide-md-content th,
-.guide-md-content td {
-  padding: 8px 12px;
+.guide-md-content :deep(th),
+.guide-md-content :deep(td) {
+  padding: 10px 14px;
   text-align: left;
-  border: 1px solid #e2e8f0;
+  vertical-align: top;
+  border-bottom: 1px solid #e8eff7;
 }
 
-.guide-md-content th {
-  font-weight: 600;
-  background: #f8fafc;
+.guide-md-content :deep(th) {
+  font-size: 13px;
+  font-weight: 700;
+  color: #243550;
+  white-space: nowrap;
+  background: #f3f7fc;
+}
+
+.guide-md-content :deep(td) {
+  color: #33445f;
+}
+
+.guide-md-content :deep(tr:last-child td) {
+  border-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .guide-content {
+    padding: 10px;
+  }
+
+  .guide-md-content {
+    padding: 22px 18px 28px;
+    font-size: 13px;
+  }
+
+  .guide-md-content :deep(h1) {
+    font-size: 20px;
+  }
+
+  .guide-md-content :deep(h2) {
+    font-size: 18px;
+  }
+
+  .guide-md-content :deep(table) {
+    min-width: 100%;
+  }
+
+  .guide-md-content :deep(th),
+  .guide-md-content :deep(td) {
+    padding: 9px 10px;
+  }
 }
 
 .loading-state,
@@ -1369,6 +1669,56 @@ onMounted(async () => {
   white-space: pre-wrap;
   background: #fff2f0;
   border-radius: 8px;
+}
+
+@media (max-width: 1024px) {
+  .page-container {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .main-content {
+    flex-direction: column;
+    gap: 14px;
+    height: auto;
+    padding: 0 16px 24px;
+  }
+
+  .control-panel,
+  .result-panel {
+    flex: none;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .result-panel {
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 640px) {
+  .tool-header {
+    padding: 14px 16px;
+  }
+
+  .tool-title {
+    font-size: 18px;
+  }
+
+  .main-content {
+    padding: 0 10px 18px;
+  }
+
+  .panel-header {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .panel-header :deep(.ant-space) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+    justify-content: flex-start;
+  }
 }
 
 /* Scientific Minimalism Design System */
