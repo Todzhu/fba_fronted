@@ -5,9 +5,7 @@
  * 为 ROE 等热图分析工具提供可视化的调色板选择
  * 显示渐变色条预览，用户可直观选择配色方案
  */
-import { computed } from 'vue';
-
-import { Select } from 'antdv-next';
+import { computed, ref } from 'vue';
 
 const props = withDefaults(
   defineProps<{
@@ -87,19 +85,40 @@ const isGradientPalette = (key: string): boolean => {
   return key.startsWith('pal');
 };
 
+const normalizedOptions = computed(() => {
+  const rawOptions = props.options as string[] | string | undefined;
+  const options = Array.isArray(rawOptions)
+    ? rawOptions
+    : typeof rawOptions === 'string'
+      ? rawOptions.split(',')
+      : [];
+
+  return options.map((key) => key.trim()).filter(Boolean);
+});
+
 // 根据传入的选项过滤可用的调色板
 const availablePalettes = computed(() => {
-  return props.options
+  return normalizedOptions.value
     .filter((key) => paletteConfigs[key])
     .map((key) => ({
       value: key,
       isGradient: isGradientPalette(key),
-      ...paletteConfigs[key],
+      ...paletteConfigs[key]!,
     }));
 });
 
+const selectedPalette = computed(() => {
+  return (
+    availablePalettes.value.find((palette) => palette.value === props.modelValue) ??
+    availablePalettes.value[0]
+  );
+});
+
+const open = ref(false);
+
 const handleChange = (value: string) => {
   emit('update:modelValue', value);
+  open.value = false;
 };
 
 // 生成渐变 CSS（用于热图配色）
@@ -111,56 +130,146 @@ const getGradientStyle = (colors: string[]) => {
 </script>
 
 <template>
-  <Select
-    :value="modelValue"
-    class="palette-select"
-    :dropdown-match-select-width="false"
-    @change="handleChange"
+  <div
+    class="palette-select-wrapper"
+    tabindex="0"
+    @blur="open = false"
   >
-    <Select.Option
-      v-for="palette in availablePalettes"
-      :key="palette.value"
-      :value="palette.value"
+    <button
+      type="button"
+      class="palette-trigger"
+      :title="selectedPalette?.label"
+      @click="open = !open"
     >
-      <div class="palette-option">
-        <!-- 渐变配色：显示渐变条 -->
-        <div
+      <span
+        v-if="selectedPalette?.isGradient"
+        class="selected-palette-preview"
+        :style="getGradientStyle(selectedPalette.colors)"
+      ></span>
+      <span v-else class="selected-palette-preview palette-blocks">
+        <span
+          v-for="(color, index) in selectedPalette?.colors ?? []"
+          :key="index"
+          class="color-block"
+          :style="{ backgroundColor: color }"
+        ></span>
+      </span>
+      <span class="palette-arrow">⌄</span>
+    </button>
+
+    <div v-if="open" class="palette-menu">
+      <button
+        v-for="palette in availablePalettes"
+        :key="palette.value"
+        type="button"
+        class="palette-option"
+        :class="{ active: palette.value === modelValue }"
+        :title="palette.label"
+        @mousedown.prevent="handleChange(palette.value)"
+      >
+        <span
           v-if="palette.isGradient"
           class="palette-preview"
           :style="getGradientStyle(palette.colors)"
-        ></div>
-        <!-- 离散配色：显示独立色块 -->
-        <div v-else class="palette-blocks">
+        ></span>
+        <span v-else class="palette-preview palette-blocks">
           <span
             v-for="(color, index) in palette.colors"
             :key="index"
             class="color-block"
             :style="{ backgroundColor: color }"
           ></span>
-        </div>
-        <span class="palette-label">{{ palette.label }}</span>
-      </div>
-    </Select.Option>
-  </Select>
+        </span>
+      </button>
+    </div>
+  </div>
 </template>
 
 <style scoped>
-.palette-select {
-  min-width: 180px;
+.palette-select-wrapper {
+  position: relative;
+  width: 112px;
 }
 
-/* 下拉选项样式 */
+.palette-trigger {
+  display: flex;
+  align-items: center;
+  width: 112px;
+  height: 32px;
+  padding: 0 8px;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.palette-trigger:hover,
+.palette-select-wrapper:focus-within .palette-trigger {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgb(22 119 255 / 10%);
+}
+
+.palette-arrow {
+  flex-shrink: 0;
+  margin-left: 8px;
+  color: #64748b;
+  line-height: 1;
+}
+
+.palette-menu {
+  position: absolute;
+  z-index: 20;
+  top: 36px;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 112px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow:
+    0 10px 15px -3px rgb(15 23 42 / 10%),
+    0 4px 6px -4px rgb(15 23 42 / 10%);
+}
+
+.selected-palette-preview {
+  display: flex;
+  flex: 1;
+  height: 16px;
+  overflow: hidden;
+  border: 1px solid #d9e2ec;
+  border-radius: 4px;
+}
+
 .palette-option {
   display: flex;
-  gap: 10px;
   align-items: center;
-  padding: 4px 0;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  padding: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
 }
 
-/* 渐变配色预览条 */
+.palette-option:hover,
+.palette-option.active {
+  background: #f1f5f9;
+  border-color: #bfdbfe;
+}
+
 .palette-preview {
-  width: 80px;
-  height: 20px;
+  display: flex;
+  width: 100%;
+  height: 18px;
+  overflow: hidden;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
 }
@@ -169,8 +278,6 @@ const getGradientStyle = (colors: string[]) => {
 .palette-blocks {
   display: flex;
   gap: 2px;
-  width: 80px;
-  height: 20px;
 }
 
 /* 单个色块 */
@@ -186,29 +293,5 @@ const getGradientStyle = (colors: string[]) => {
 
 .color-block:last-child {
   border-radius: 0 4px 4px 0;
-}
-
-.palette-label {
-  font-size: 13px;
-  color: #334155;
-}
-
-/* 已选中项的预览（显示在下拉框右侧） */
-.selected-preview {
-  width: 40px;
-  height: 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 3px;
-}
-
-/* 下拉选项悬停效果 */
-:deep(.ant-select-item-option:hover) .palette-preview,
-:deep(.ant-select-item-option:hover) .palette-blocks {
-  box-shadow: 0 0 0 2px rgb(59 130 246 / 20%);
-}
-
-:deep(.ant-select-item-option-selected) .palette-preview,
-:deep(.ant-select-item-option-selected) .palette-blocks {
-  box-shadow: 0 0 0 2px rgb(59 130 246 / 30%);
 }
 </style>

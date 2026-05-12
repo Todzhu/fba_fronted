@@ -22,6 +22,7 @@ import {
   Col,
   Drawer,
   Form,
+  FormItem,
   Input,
   InputNumber,
   message,
@@ -29,12 +30,15 @@ import {
   Popconfirm,
   Row,
   Select,
+  SelectOption,
   Space,
   Switch,
   Table,
+  TabPane,
   Tabs,
   Tag,
   Tooltip,
+  TextArea,
   Upload,
 } from 'antdv-next';
 // @ts-ignore
@@ -69,10 +73,16 @@ const basicInfo = ref({
   script_path: '',
   guide_doc: '',
   video_url: '',
-  env_type: '' as string, // 环境类型: singularity|conda|docker|system
+  env_type: '' as string, // 环境类型: system|conda|sif
   env_config: {} as Record<string, any>, // 环境配置
   is_long_running: false, // 提交后是否跳转到任务中心
 });
+
+const envTypeOptions = [
+  { label: 'system', value: 'system' },
+  { label: 'conda', value: 'conda' },
+  { label: 'sif', value: 'sif' },
+];
 
 // 示例数据配置
 interface ExampleItem {
@@ -93,6 +103,16 @@ interface InputFile {
   extensions: string;
 }
 const inputFiles = ref<InputFile[]>([]);
+
+const joinConfigList = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean).join(', ');
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return '';
+};
 
 // 参数配置
 interface ParamItem {
@@ -172,7 +192,7 @@ watch(
       script_path: tool.script_path || '',
       guide_doc: tool.guide_doc || '',
       video_url: tool.video_url || '',
-      env_type: tool.env_type || '',
+      env_type: tool.env_type === 'singularity' ? 'sif' : tool.env_type || '',
       env_config: tool.env_config || {},
       is_long_running: (tool as any).is_long_running || false,
     };
@@ -191,7 +211,7 @@ watch(
       key: f.key || '',
       label: f.label || '',
       required: f.required || false,
-      extensions: (f.extensions || []).join(', '),
+      extensions: joinConfigList(f.extensions),
     }));
 
     // 参数
@@ -229,7 +249,7 @@ watch(
           title: p.title || key,
           description: p.description || '',
           default: String(p.default ?? ''),
-          enum: (p.enum || []).join(', '),
+          enum: joinConfigList(p.enum),
           required: p.required || false,
           minimum: p.minimum,
           maximum: p.maximum,
@@ -406,7 +426,6 @@ const handleExampleUpload = async (index: number, file: File) => {
   try {
     const result = await uploadFile(file);
     // 构建完整的公开下载 URL
-    const userId = result.user_id;
     const storagePath = result.storage_path || '';
     item.url = `/api/v1/sys/analysis-tools/tools/data/${storagePath}`;
     message.success(`${file.name} 上传成功`);
@@ -636,7 +655,10 @@ const handleImportConfig = async (file: File) => {
         script_path: config.basic_info.script_path || '',
         guide_doc: config.basic_info.guide_doc || '',
         video_url: config.basic_info.video_url || '',
-        env_type: config.basic_info.env_type || '',
+        env_type:
+          config.basic_info.env_type === 'singularity'
+            ? 'sif'
+            : config.basic_info.env_type || '',
         env_config: config.basic_info.env_config || {},
         is_long_running: config.basic_info.is_long_running || false,
       };
@@ -681,36 +703,36 @@ const handleImportConfig = async (file: File) => {
   >
     <Tabs v-model:active-key="activeTab">
       <!-- 基本信息 -->
-      <Tabs.TabPane key="basic" tab="基本信息">
+      <TabPane key="basic" tab="基本信息">
         <Form layout="vertical" class="basic-form">
           <Row :gutter="16">
             <Col :span="12">
-              <Form.Item label="执行引擎">
+              <FormItem label="执行引擎">
                 <Select v-model:value="basicInfo.runner_type">
-                  <Select.Option value="r_script">R Script</Select.Option>
-                  <Select.Option value="python">Python</Select.Option>
-                  <Select.Option value="snakemake">Snakemake</Select.Option>
+                  <SelectOption value="r_script">R Script</SelectOption>
+                  <SelectOption value="python">Python</SelectOption>
+                  <SelectOption value="snakemake">Snakemake</SelectOption>
                 </Select>
-              </Form.Item>
+              </FormItem>
             </Col>
             <Col :span="12">
-              <Form.Item label="脚本路径">
+              <FormItem label="脚本路径">
                 <Input
                   v-model:value="basicInfo.script_path"
                   placeholder="scripts/go_enrichment.R"
                 />
-              </Form.Item>
+              </FormItem>
             </Col>
           </Row>
 
           <Row :gutter="16">
             <Col :span="12">
-              <Form.Item label="提交后跳转到任务中心">
+              <FormItem label="提交后跳转到任务中心">
                 <Switch v-model:checked="basicInfo.is_long_running" />
                 <span class="switch-hint">
                   {{ basicInfo.is_long_running ? '是 - 适合长时间任务' : '否 - 在当前页面等待结果' }}
                 </span>
-              </Form.Item>
+              </FormItem>
             </Col>
           </Row>
 
@@ -718,38 +740,32 @@ const handleImportConfig = async (file: File) => {
           <Card size="small" title="运行环境配置" class="env-config-card">
             <Row :gutter="16">
               <Col :span="8">
-                <Form.Item label="环境类型">
+                <FormItem label="环境类型">
                   <Select
                     v-model:value="basicInfo.env_type"
                     placeholder="选择运行环境"
+                    :options="envTypeOptions"
                     allow-clear
                     @change="() => (basicInfo.env_config = {})"
-                  >
-                    <Select.Option value="system">系统默认</Select.Option>
-                    <Select.Option value="singularity">
-                      Singularity (.sif)
-                    </Select.Option>
-                    <Select.Option value="conda">Conda 环境</Select.Option>
-                    <Select.Option value="docker">Docker 容器</Select.Option>
-                  </Select>
-                </Form.Item>
+                  />
+                </FormItem>
               </Col>
 
-              <!-- Singularity 配置 -->
-              <template v-if="basicInfo.env_type === 'singularity'">
+              <!-- SIF 配置 -->
+              <template v-if="basicInfo.env_type === 'sif'">
                 <Col :span="16">
-                  <Form.Item label="容器镜像路径 (.sif)">
+                  <FormItem label="SIF 镜像路径">
                     <Input
                       v-model:value="basicInfo.env_config.image"
                       placeholder="/path/to/container.sif"
                     />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
                 <Col :span="24">
-                  <Form.Item
+                  <FormItem
                     label="绑定目录 (每行一个，格式: /host:/container)"
                   >
-                    <Input.TextArea
+                    <TextArea
                       :value="
                         (basicInfo.env_config.bind_paths || []).join('\n')
                       "
@@ -764,80 +780,93 @@ const handleImportConfig = async (file: File) => {
                             .filter(Boolean))
                       "
                     />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
+                <Col :span="8">
+                  <FormItem label="使用 Docker 执行 SIF">
+                    <Switch v-model:checked="basicInfo.env_config.use_docker" />
+                  </FormItem>
+                </Col>
+                <template v-if="basicInfo.env_config.use_docker">
+                  <Col :span="16">
+                    <FormItem label="Docker 镜像">
+                      <Input
+                        v-model:value="basicInfo.env_config.docker_image"
+                        placeholder="quay.io/singularity/singularity:v3.11.4"
+                      />
+                    </FormItem>
+                  </Col>
+                  <Col :span="8">
+                    <FormItem label="容器内运行时 (可选)">
+                      <Input
+                        v-model:value="basicInfo.env_config.docker_runtime"
+                        placeholder="镜像 entrypoint 已是 singularity 时留空"
+                      />
+                    </FormItem>
+                  </Col>
+                  <Col :span="16">
+                    <FormItem label="Docker 参数 (每行一个)">
+                      <TextArea
+                        :value="
+                          (basicInfo.env_config.docker_options || ['--privileged']).join('\n')
+                        "
+                        :rows="2"
+                        placeholder="--privileged"
+                        @change="
+                          (e: Event) =>
+                            (basicInfo.env_config.docker_options = (
+                              e.target as HTMLTextAreaElement
+                            ).value
+                              .split('\n')
+                              .filter(Boolean))
+                        "
+                      />
+                    </FormItem>
+                  </Col>
+                </template>
               </template>
 
               <!-- Conda 配置 -->
               <template v-else-if="basicInfo.env_type === 'conda'">
                 <Col :span="8">
-                  <Form.Item label="环境名称">
+                  <FormItem label="环境名称">
                     <Input
                       v-model:value="basicInfo.env_config.env_name"
                       placeholder="bioinfo_env"
                     />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
                 <Col :span="8">
-                  <Form.Item label="Conda 路径 (可选)">
+                  <FormItem label="Conda 路径 (可选)">
                     <Input
                       v-model:value="basicInfo.env_config.conda_path"
                       placeholder="conda"
                     />
-                  </Form.Item>
-                </Col>
-              </template>
-
-              <!-- Docker 配置 -->
-              <template v-else-if="basicInfo.env_type === 'docker'">
-                <Col :span="16">
-                  <Form.Item label="Docker 镜像">
-                    <Input
-                      v-model:value="basicInfo.env_config.image"
-                      placeholder="bioinfo/rstudio:latest"
-                    />
-                  </Form.Item>
-                </Col>
-                <Col :span="24">
-                  <Form.Item label="挂载卷 (每行一个，格式: /host:/container)">
-                    <Input.TextArea
-                      :value="(basicInfo.env_config.volumes || []).join('\n')"
-                      :rows="2"
-                      placeholder="/data:/data"
-                      @change="
-                        (e: Event) =>
-                          (basicInfo.env_config.volumes = (
-                            e.target as HTMLTextAreaElement
-                          ).value
-                            .split('\n')
-                            .filter(Boolean))
-                      "
-                    />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
               </template>
 
               <!-- System 配置 -->
               <template v-else-if="basicInfo.env_type === 'system'">
                 <Col :span="16">
-                  <Form.Item label="自定义可执行文件路径 (可选)">
+                  <FormItem label="自定义可执行文件路径 (可选)">
                     <Input
                       v-model:value="basicInfo.env_config.executable"
                       placeholder="/usr/bin/Rscript"
                     />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
               </template>
             </Row>
           </Card>
 
-          <Form.Item label="视频教程" style="margin-top: 16px">
+          <FormItem label="视频教程" style="margin-top: 16px">
             <Input
               v-model:value="basicInfo.video_url"
               placeholder="视频教程链接 (如 Bilibili/YouTube)"
             />
-          </Form.Item>
-          <Form.Item label="使用指南 (Markdown)">
+          </FormItem>
+          <FormItem label="使用指南 (Markdown)">
             <div class="md-editor-wrapper">
               <MarkdownEditor
                 v-model:value="basicInfo.guide_doc"
@@ -845,12 +874,12 @@ const handleImportConfig = async (file: File) => {
                 mode="wysiwyg"
               />
             </div>
-          </Form.Item>
+          </FormItem>
         </Form>
-      </Tabs.TabPane>
+      </TabPane>
 
       <!-- 输入文件 -->
-      <Tabs.TabPane key="input" tab="输入文件">
+      <TabPane key="input" tab="输入文件">
         <div class="tab-actions">
           <Button type="primary" size="small" @click="addInputFile">
             + 添加文件
@@ -886,10 +915,10 @@ const handleImportConfig = async (file: File) => {
             </template>
           </template>
         </Table>
-      </Tabs.TabPane>
+      </TabPane>
 
       <!-- 参数配置 -->
-      <Tabs.TabPane key="params" tab="参数配置">
+      <TabPane key="params" tab="参数配置">
         <div class="tab-actions">
           <Button type="primary" size="small" @click="addParam">
             + 添加参数
@@ -957,89 +986,89 @@ const handleImportConfig = async (file: File) => {
           <Form layout="vertical" class="param-edit-form">
             <Row :gutter="16">
               <Col :span="12">
-                <Form.Item label="参数 Key" required>
+                <FormItem label="参数 Key" required>
                   <Input v-model:value="editingParam.key" placeholder="参数唯一标识" />
-                </Form.Item>
+                </FormItem>
               </Col>
               <Col :span="12">
-                <Form.Item label="参数标题">
+                <FormItem label="参数标题">
                   <Input v-model:value="editingParam.title" placeholder="显示名称" />
-                </Form.Item>
+                </FormItem>
               </Col>
             </Row>
 
-            <Form.Item label="参数描述">
-              <Input.TextArea
+            <FormItem label="参数描述">
+              <TextArea
                 v-model:value="editingParam.description"
                 :rows="2"
                 placeholder="参数说明，用于 tooltip 提示"
               />
-            </Form.Item>
+            </FormItem>
 
             <Row :gutter="16">
               <Col :span="12">
-                <Form.Item label="类型/控件">
+                <FormItem label="类型/控件">
                   <Cascader
                     v-model:value="editingParam.typeWidget"
                     :options="typeWidgetOptions"
                     placeholder="选择类型和控件"
                     style="width: 100%"
                   />
-                </Form.Item>
+                </FormItem>
               </Col>
               <Col :span="12">
-                <Form.Item label="默认值">
+                <FormItem label="默认值">
                   <Input v-model:value="editingParam.default" placeholder="默认值" />
-                </Form.Item>
+                </FormItem>
               </Col>
             </Row>
 
             <Row :gutter="16">
               <Col :span="12">
-                <Form.Item label="分组">
+                <FormItem label="分组">
                   <Input v-model:value="editingParam.group" placeholder="通用参数" />
-                </Form.Item>
+                </FormItem>
               </Col>
               <Col :span="12">
-                <Form.Item label="必填">
+                <FormItem label="必填">
                   <Switch v-model:checked="editingParam.required" />
-                </Form.Item>
+                </FormItem>
               </Col>
             </Row>
 
-            <Form.Item
+            <FormItem
               v-if="editingParam.typeWidget?.[1] === 'select'"
               label="选项列表"
             >
-              <Input.TextArea
+              <TextArea
                 v-model:value="editingParam.enum"
                 :rows="2"
                 placeholder="多个选项用逗号分隔，如: 选项1,选项2,选项3"
               />
-            </Form.Item>
+            </FormItem>
 
             <Row
               v-if="['number', 'integer'].includes(editingParam.typeWidget?.[0] || '')"
               :gutter="16"
             >
               <Col :span="8">
-                <Form.Item label="最小值">
+                <FormItem label="最小值">
                   <InputNumber
                     v-model:value="editingParam.minimum"
                     style="width: 100%"
                   />
-                </Form.Item>
+                </FormItem>
               </Col>
               <Col :span="8">
-                <Form.Item label="最大值">
+                <FormItem label="最大值">
                   <InputNumber
                     v-model:value="editingParam.maximum"
                     style="width: 100%"
                   />
-                </Form.Item>
+                </FormItem>
               </Col>
               <Col :span="8">
-                <Form.Item label="步长">
+                <FormItem label="步长">
                   <InputNumber
                     v-model:value="editingParam.step"
                     :min="0"
@@ -1047,15 +1076,15 @@ const handleImportConfig = async (file: File) => {
                     style="width: 100%"
                     placeholder="如 0.1"
                   />
-                </Form.Item>
+                </FormItem>
               </Col>
             </Row>
           </Form>
         </Modal>
-      </Tabs.TabPane>
+      </TabPane>
 
       <!-- 输出配置 -->
-      <Tabs.TabPane key="output" tab="输出配置">
+      <TabPane key="output" tab="输出配置">
         <div class="tab-actions">
           <Button type="primary" size="small" @click="addOutput">
             + 添加输出
@@ -1084,11 +1113,11 @@ const handleImportConfig = async (file: File) => {
                 size="small"
                 style="width: 100%"
               >
-                <Select.Option value="echarts">ECharts</Select.Option>
-                <Select.Option value="image">Image (图片)</Select.Option>
-                <Select.Option value="table">Table</Select.Option>
-                <Select.Option value="download">Download</Select.Option>
-                <Select.Option value="pdf">PDF</Select.Option>
+                <SelectOption value="echarts">ECharts</SelectOption>
+                <SelectOption value="image">Image (图片)</SelectOption>
+                <SelectOption value="table">Table</SelectOption>
+                <SelectOption value="download">Download</SelectOption>
+                <SelectOption value="pdf">PDF</SelectOption>
               </Select>
             </template>
             <template v-else-if="column.dataIndex === 'title'">
@@ -1101,10 +1130,10 @@ const handleImportConfig = async (file: File) => {
             </template>
           </template>
         </Table>
-      </Tabs.TabPane>
+      </TabPane>
 
       <!-- 示例数据 -->
-      <Tabs.TabPane key="example" tab="示例数据">
+      <TabPane key="example" tab="示例数据">
         <div class="example-section">
           <div class="section-header">
             <span class="section-title">示例文件配置</span>
@@ -1132,21 +1161,21 @@ const handleImportConfig = async (file: File) => {
 
               <Row :gutter="16">
                 <Col :span="12">
-                  <Form.Item label="Key" class="form-item">
+                  <FormItem label="Key" class="form-item">
                     <Input
                       v-model:value="item.key"
                       placeholder="对应输入文件 key"
                     />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
                 <Col :span="12">
-                  <Form.Item label="名称" class="form-item">
+                  <FormItem label="名称" class="form-item">
                     <Input v-model:value="item.name" placeholder="示例名称" />
-                  </Form.Item>
+                  </FormItem>
                 </Col>
               </Row>
 
-              <Form.Item label="示例文件" class="form-item">
+              <FormItem label="示例文件" class="form-item">
                 <div class="file-upload-row">
                   <Input
                     v-model:value="item.url"
@@ -1172,18 +1201,18 @@ const handleImportConfig = async (file: File) => {
                 <div v-if="item.url" class="path-hint">
                   完整 API 路径: {{ item.url.startsWith('/api/') ? item.url : `/api/v1/sys/analysis-tools/tools/data/${item.url}` }}
                 </div>
-              </Form.Item>
+              </FormItem>
 
-              <Form.Item label="描述" class="form-item">
+              <FormItem label="描述" class="form-item">
                 <Input
                   v-model:value="item.description"
                   placeholder="示例数据说明"
                 />
-              </Form.Item>
+              </FormItem>
             </Card>
           </div>
         </div>
-      </Tabs.TabPane>
+      </TabPane>
     </Tabs>
 
     <template #footer>

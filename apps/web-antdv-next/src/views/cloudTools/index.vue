@@ -146,6 +146,20 @@ const handleFuncChange = () => {
 
 // Navigate to tool detail page
 const goToDetail = (toolId: number) => {
+  if (router.hasRoute('AnalysisCore')) {
+    router.removeRoute('AnalysisCore');
+  }
+  if (!router.hasRoute('AnalysisToolDetail')) {
+    router.addRoute('Root', {
+      name: 'AnalysisToolDetail',
+      path: 'analysis/tool/:id',
+      component: () => import('#/views/cloudTools/detail.vue'),
+      meta: {
+        title: '工具详情',
+        hideInMenu: true,
+      },
+    });
+  }
   router.push(`/analysis/tool/${toolId}`);
 };
 
@@ -371,17 +385,22 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-sizing: border-box;
   width: 140px;
+  min-height: 180px;
+  padding: 10px;
   overflow: hidden;
-  background: #fff;
+  background: #f8fafc;
   border-right: 1px solid #f0f0f0;
 }
 
 .preview-img {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: left;
+  max-height: 180px;
+  object-fit: contain;
+  object-position: center;
   transition: transform 0.3s;
 }
 
@@ -408,6 +427,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 12px;
   justify-content: space-between;
+  min-width: 0;
   padding: 16px 20px;
 }
 

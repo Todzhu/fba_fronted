@@ -18,7 +18,6 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 import { openWindow } from '@vben/utils';
 
-import { router } from '#/router';
 import { getTaskCenterPath } from '#/utils/route-helpers';
 import { $t } from '#/locales';
 import { useAuthStore } from '#/store';
@@ -220,7 +219,13 @@ async function handleNoticeRead(item: NotificationItem) {
   if (item.relatedId) {
     messageModalApi.close();
     // 使用 replace 替换当前路由，避免创建重复标签
-    router.replace(getTaskCenterPath(router));
+    router.replace({
+      path: getTaskCenterPath(router),
+      query: {
+        task_id: String(item.relatedId),
+        from_message: '1',
+      },
+    });
   }
 }
 
@@ -339,4 +344,3 @@ watch(
     </div>
   </MessageModal>
 </template>
-

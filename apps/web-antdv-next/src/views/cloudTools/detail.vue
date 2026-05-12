@@ -10,6 +10,7 @@ import type { AnalysisTool, TaskStatusResponse } from '#/api/analysis-tools';
 
 import { computed, onMounted, ref, toRaw, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import MarkdownIt from 'markdown-it';
 
 import { Page } from '@vben/common-ui';
 import { useTabs } from '@vben/hooks';
@@ -34,10 +35,16 @@ import {
   getTaskStatus,
 } from '#/api/analysis-tools';
 
-import { getTaskCenterPath } from '#/utils/route-helpers';
+import { getAnalysisToolsPath, getTaskCenterPath } from '#/utils/route-helpers';
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
 import ResultRenderer from './components/ResultRenderer.vue';
+
+const markdown = new MarkdownIt({
+  breaks: false,
+  html: false,
+  linkify: true,
+});
 
 const route = useRoute();
 const router = useRouter();
@@ -55,6 +62,100 @@ const getFullImageUrl = (url: null | string | undefined) => {
   return `${apiBaseUrl}${url}`;
 };
 
+const normalizeParamSchema = (rawSchema: unknown) => {
+  if (!rawSchema) return null;
+
+  let schema: any = rawSchema;
+  if (typeof schema === 'string') {
+    try {
+      schema = JSON.parse(schema);
+    } catch {
+      return null;
+    }
+  }
+
+  const sourceProperties = Array.isArray(schema?.properties)
+    ? schema.properties
+    : Array.isArray(schema?.param_items)
+      ? schema.param_items
+      : schema?.properties;
+
+  if (Array.isArray(sourceProperties)) {
+    const properties: Record<string, any> = {};
+    const order: string[] = [];
+
+    for (const rawItem of sourceProperties) {
+      const item = { ...rawItem };
+      const key = item.key;
+      if (!key) continue;
+
+      const typeWidget = item.typeWidget;
+      delete item.key;
+      delete item.typeWidget;
+
+      if (Array.isArray(typeWidget)) {
+        item.type = item.type ?? typeWidget[0];
+        item.widget = item.widget ?? typeWidget[1];
+      }
+      if (item.enum === '') {
+        delete item.enum;
+      } else if (typeof item.enum === 'string') {
+        item.enum = item.enum
+          .split(',')
+          .map((value: string) => value.trim())
+          .filter(Boolean);
+      }
+
+      properties[key] = item;
+      order.push(key);
+    }
+
+    return {
+      ...schema,
+      type: 'object',
+      properties,
+      order: Array.isArray(schema?.order) ? schema.order : order,
+    };
+  }
+
+  if (sourceProperties && typeof sourceProperties === 'object') {
+    const properties: Record<string, any> = {};
+    const order = Array.isArray(schema?.order)
+      ? schema.order.filter((key: string) => key in sourceProperties)
+      : Object.keys(sourceProperties);
+
+    for (const [key, rawItem] of Object.entries(sourceProperties)) {
+      const item = { ...(rawItem as Record<string, unknown>) };
+      const typeWidget = item.typeWidget;
+      delete item.typeWidget;
+
+      if (Array.isArray(typeWidget)) {
+        item.type = item.type ?? typeWidget[0];
+        item.widget = item.widget ?? typeWidget[1];
+      }
+      if (item.enum === '') {
+        delete item.enum;
+      } else if (typeof item.enum === 'string') {
+        item.enum = item.enum
+          .split(',')
+          .map((value: string) => value.trim())
+          .filter(Boolean);
+      }
+
+      properties[key] = item;
+    }
+
+    return {
+      ...schema,
+      type: 'object',
+      properties,
+      order,
+    };
+  }
+
+  return null;
+};
+
 // ========== 工具信息 ==========
 const toolId = computed(() => Number(route.params.id));
 const tool = ref<AnalysisTool | null>(null);
@@ -69,7 +170,7 @@ const hasInputSchema = computed(() => {
 });
 
 const hasParamSchema = computed(() => {
-  const schema = tool.value?.param_schema as null | { properties?: object };
+  const schema = normalizeParamSchema(tool.value?.param_schema);
   return schema?.properties && Object.keys(schema.properties).length > 0;
 });
 
@@ -78,99 +179,11 @@ const hasOutputConfig = computed(() => {
   return config?.outputs && config.outputs.length > 0;
 });
 
-// 简单的 Markdown 转 HTML 函数
-function simpleMarkdownToHtml(md: string): string {
-  // 首先处理表格（需要在其他替换之前处理）
-  // 使用更灵活的正则，支持表格前有空白行或直接在文本后
-  const tableRegex =
-    /(?:^|\n\n?)((?:\|[^\n]+\|\n)+?\|[-:\s|]+\|\n(?:\|[^\n]+\|(?:\n|$))+)/gm;
-  md = md.replaceAll(tableRegex, (_match, table) => {
-    const lines = table.trim().split('\n');
-    if (lines.length < 2) return _match;
-
-    // 找到分隔行（包含 - 和可能的 : 用于对齐）
-    let separatorIndex = -1;
-    for (const [i, line] of lines.entries()) {
-      if (/^\|[\s\-:|]+\|$/.test(line.trim())) {
-        separatorIndex = i;
-        break;
-      }
-    }
-
-    if (separatorIndex === -1 || separatorIndex === 0) return _match;
-
-    // 表头是分隔行之前的所有行（通常只有一行）
-    const headerLine = lines[separatorIndex - 1];
-    // 表体是分隔行之后的所有行
-    const bodyLines = lines.slice(separatorIndex + 1);
-
-    // 解析表头
-    const headers = headerLine
-      .split('|')
-      .filter((cell: string) => cell.trim() !== '')
-      .map((cell: string) => `<th>${cell.trim()}</th>`)
-      .join('');
-
-    // 解析表体
-    const rows = bodyLines
-      .filter((row: string) => row.trim() !== '')
-      .map((row: string) => {
-        const cells = row
-          .split('|')
-          .filter((cell: string) => cell.trim() !== '')
-          .map((cell: string) => `<td>${cell.trim()}</td>`)
-          .join('');
-        return `<tr>${cells}</tr>`;
-      })
-      .join('');
-
-    return `\n<table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>\n`;
-  });
-
-  return (
-    md
-      // 标题（从多到少，避免被提前匹配）
-      .replaceAll(/^###### (.*$)/gm, '<h6>$1</h6>')
-      .replaceAll(/^##### (.*$)/gm, '<h5>$1</h5>')
-      .replaceAll(/^#### (.*$)/gm, '<h4>$1</h4>')
-      .replaceAll(/^### (.*$)/gm, '<h3>$1</h3>')
-      .replaceAll(/^## (.*$)/gm, '<h2>$1</h2>')
-      .replaceAll(/^# (.*$)/gm, '<h1>$1</h1>')
-      // 粗体和斜体
-      .replaceAll(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
-      .replaceAll(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replaceAll(/\*(.+?)\*/g, '<em>$1</em>')
-      // 代码块
-      .replaceAll(/```[\s\S]*?```/g, (match) => {
-        const code = match.replaceAll(/```\w*\n?/g, '').replaceAll(/```$/g, '');
-        return `<pre><code>${code}</code></pre>`;
-      })
-      // 行内代码
-      .replaceAll(/`([^`]+)`/g, '<code>$1</code>')
-      // 无序列表
-      .replaceAll(/^\s*[-*+] (.*)$/gm, '<li>$1</li>')
-      // 有序列表
-      .replaceAll(/^\s*\d+\. (.*)$/gm, '<li>$1</li>')
-      // 引用
-      .replaceAll(/^> (.*)$/gm, '<blockquote>$1</blockquote>')
-      // 链接
-      .replaceAll(
-        /\[([^\]]+)\]\(([^)]+)\)/g,
-        '<a href="$2" target="_blank">$1</a>',
-      )
-      // 水平线
-      .replaceAll(/^---$/gm, '<hr>')
-      // 换行
-      .replaceAll('\n\n', '</p><p>')
-      .replaceAll('\n', '<br>')
-  );
-}
-
 // 渲染 guide_doc
 const renderedGuideHtml = computed(() => {
   const doc = tool.value?.guide_doc;
   if (!doc) return '';
-  return `<p>${simpleMarkdownToHtml(doc)}</p>`;
+  return markdown.render(doc);
 });
 
 // ========== 表单状态 ==========
@@ -189,7 +202,9 @@ const dynamicParamSchema = computed(() => {
 
   // 深拷贝原始 schema 以免污染原始数据
   // 注意：需要使用 toRaw 解包 Vue 响应式 Proxy，否则 structuredClone 会报错
-  const schema = structuredClone(toRaw(tool.value.param_schema));
+  const normalizedSchema = normalizeParamSchema(toRaw(tool.value.param_schema));
+  if (!normalizedSchema) return null;
+  const schema = structuredClone(normalizedSchema);
 
   if (schema.properties) {
     for (const [, prop] of Object.entries(schema.properties) as any) {
@@ -198,11 +213,15 @@ const dynamicParamSchema = computed(() => {
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
         const fileKey =
           prop.fileKey || tool.value.example_data?.[0]?.key || 'data_input';
-        const headers = currentHeaders.value[fileKey] || [];
+        const headers =
+          currentHeaders.value[fileKey] ||
+          Object.values(currentHeaders.value).find((items) => items.length > 0) ||
+          [];
 
         if (headers.length > 0) {
           prop.type = 'string';
           prop.enum = headers;
+          prop.widget = 'select';
         }
       }
 
@@ -259,7 +278,11 @@ const { renderEcharts } = useEcharts(chartRef);
 const fetchTool = async () => {
   loading.value = true;
   try {
-    tool.value = await getAnalysisTool(toolId.value);
+    const fetchedTool = await getAnalysisTool(toolId.value);
+    tool.value = {
+      ...fetchedTool,
+      param_schema: normalizeParamSchema(fetchedTool.param_schema),
+    };
     // 动态更新页签标题为工具名称
     if (tool.value?.title) {
       document.title = `${tool.value.title} - ${import.meta.env.VITE_APP_TITLE}`;
@@ -417,7 +440,7 @@ watch(
   { deep: true },
 );
 
-const goBack = () => router.push('/analysis/tools');
+const goBack = () => router.push(getAnalysisToolsPath(router));
 
 const showGuide = ref(true);
 const openGuide = () => {
@@ -1126,8 +1149,8 @@ onMounted(async () => {
   color: #334155;
 }
 
-/* h1 → h4 风格 */
-.guide-md-content h1 {
+/* v-html 生成的 Markdown 子节点需要 deep selector 才能命中 scoped 样式 */
+:deep(.guide-md-content h1) {
   padding-bottom: 8px;
   margin-top: 0;
   margin-bottom: 12px;
@@ -1137,8 +1160,7 @@ onMounted(async () => {
   border-bottom: 1px solid #e2e8f0;
 }
 
-/* h2 → h5 风格 */
-.guide-md-content h2 {
+:deep(.guide-md-content h2) {
   margin-top: 16px;
   margin-bottom: 8px;
   font-size: 14px;
@@ -1146,8 +1168,7 @@ onMounted(async () => {
   color: #1e293b;
 }
 
-/* h3 → h6 风格 */
-.guide-md-content h3 {
+:deep(.guide-md-content h3) {
   margin-top: 12px;
   margin-bottom: 6px;
   font-size: 13px;
@@ -1155,8 +1176,7 @@ onMounted(async () => {
   color: #475569;
 }
 
-/* h4 样式（当前主标题） */
-.guide-md-content h4 {
+:deep(.guide-md-content h4) {
   padding-bottom: 8px;
   margin-top: 0;
   margin-bottom: 12px;
@@ -1166,8 +1186,7 @@ onMounted(async () => {
   border-bottom: 1px solid #e2e8f0;
 }
 
-/* h5 样式（二级标题） */
-.guide-md-content h5 {
+:deep(.guide-md-content h5) {
   margin-top: 16px;
   margin-bottom: 8px;
   font-size: 14px;
@@ -1175,8 +1194,7 @@ onMounted(async () => {
   color: #1e293b;
 }
 
-/* h6 样式（三级标题） */
-.guide-md-content h6 {
+:deep(.guide-md-content h6) {
   margin-top: 12px;
   margin-bottom: 6px;
   font-size: 13px;
@@ -1184,28 +1202,28 @@ onMounted(async () => {
   color: #475569;
 }
 
-.guide-md-content p {
+:deep(.guide-md-content p) {
   margin-bottom: 12px;
 }
 
-.guide-md-content ul,
-.guide-md-content ol {
+:deep(.guide-md-content ul),
+:deep(.guide-md-content ol) {
   padding-left: 24px;
   margin-bottom: 12px;
 }
 
-.guide-md-content li {
+:deep(.guide-md-content li) {
   margin-bottom: 6px;
 }
 
-.guide-md-content code {
+:deep(.guide-md-content code) {
   padding: 2px 6px;
   font-size: 13px;
   background: #f1f5f9;
   border-radius: 4px;
 }
 
-.guide-md-content pre {
+:deep(.guide-md-content pre) {
   padding: 16px;
   margin-bottom: 12px;
   overflow-x: auto;
@@ -1214,29 +1232,57 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
-.guide-md-content blockquote {
+:deep(.guide-md-content pre code) {
+  display: block;
+  padding: 0;
+  overflow-x: auto;
+  line-height: 1.7;
+  white-space: pre;
+  background: transparent;
+  border-radius: 0;
+}
+
+:deep(.guide-md-content blockquote) {
   padding-left: 16px;
   margin: 12px 0;
   color: #64748b;
   border-left: 4px solid #3b82f6;
 }
 
-.guide-md-content table {
+:deep(.guide-md-content table) {
   width: 100%;
   margin-bottom: 12px;
   border-collapse: collapse;
+  overflow: hidden;
+  font-size: 13px;
+  border-radius: 6px;
 }
 
-.guide-md-content th,
-.guide-md-content td {
+:deep(.guide-md-content th),
+:deep(.guide-md-content td) {
   padding: 8px 12px;
   text-align: left;
   border: 1px solid #e2e8f0;
 }
 
-.guide-md-content th {
+:deep(.guide-md-content th) {
   font-weight: 600;
   background: #f8fafc;
+}
+
+:deep(.guide-md-content a) {
+  color: #1677ff;
+  text-decoration: none;
+}
+
+:deep(.guide-md-content a:hover) {
+  text-decoration: underline;
+}
+
+:deep(.guide-md-content hr) {
+  margin: 18px 0;
+  border: none;
+  border-top: 1px solid #e2e8f0;
 }
 
 .loading-state,

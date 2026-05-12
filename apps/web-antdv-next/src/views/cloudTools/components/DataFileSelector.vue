@@ -8,12 +8,13 @@
  * - 文件导入/清空/模式切换
  * - 示例数据按 key 匹配加载
  */
-import { previewRdsFile } from '#/api/analysis-tools';
-import { uploadFile, uploadTempFile } from '#/api/user-file';
+import { uploadTempFile } from '#/api/user-file';
 import { computed, ref, watch } from 'vue';
 
+import { useAccessStore } from '@vben/stores';
+
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Space, Spin, Tabs, Upload, Dropdown, Menu, Table} from 'antdv-next';
+import { Button, Input, message, Space, Spin, Tabs, TabPane, Upload, Dropdown, Menu, Table} from 'antdv-next';
 
 import { baseRequestClient } from '../../../api/request';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
@@ -69,6 +70,8 @@ const fileConfigs = computed<FileConfig[]>(() => {
     props.schema?.files ?? [{ key: 'data', label: '数据表', required: true }]
   );
 });
+
+const firstFileKey = computed(() => fileConfigs.value[0]?.key ?? '');
 
 // 当前激活的 Tab
 const activeTab = ref<string>('');
@@ -166,17 +169,35 @@ const rdsPreview = ref<{
   }>;
 } | null>(null);
 const rdsPreviewLoading = ref(false);
-// RDS 元数据表格列定义
+const rdsPreviewRows = computed(() =>
+  (rdsPreview.value?.columns ?? []).map((col: any) => ({
+    ...col,
+    key: col.name,
+    examples_text: Array.isArray(col.examples)
+      ? col.examples.join(', ')
+      : col.examples,
+  })),
+);
+
+const emitRdsHeaders = (fileKey?: string) => {
+  if (!fileKey || !rdsPreview.value?.columns?.length) return;
+  const headers = rdsPreview.value.columns
+    .map((col) => col.name)
+    .filter(Boolean);
+  emit('headers-change', { [fileKey]: headers });
+};
+
+// RDS/H5AD metadata 表格列定义
 const rdsMetaColumns = [
-  { title: '列名', dataIndex: 'name', width: 140, customRender: ({ text }: any) => text },
+  { title: 'Feature', dataIndex: 'name', width: 150, customRender: ({ text }: any) => text },
   { title: '类型', dataIndex: 'type', width: 100 },
   { title: '唯一值', dataIndex: 'n_unique', width: 80, align: 'center' as const },
-  { title: '示例值', dataIndex: 'examples_text', ellipsis: true },
+  { title: '取值示例 / 范围', dataIndex: 'examples_text', ellipsis: true },
 ];
 
 
 // 触发 RDS 预览
-const triggerRdsPreview = async (fileUrl: string) => {
+const triggerRdsPreview = async (fileUrl: string, fileKey?: string) => {
   console.log('[RDS] triggerRdsPreview called with:', fileUrl);
   rdsPreviewLoading.value = true;
   rdsPreview.value = null;
@@ -195,6 +216,7 @@ const triggerRdsPreview = async (fileUrl: string) => {
     console.log('[RDS] previewData keys:', previewData ? Object.keys(previewData) : 'null');
     if (previewData && previewData.n_cells !== undefined) {
       rdsPreview.value = previewData;
+      emitRdsHeaders(fileKey);
       console.log('[RDS] preview SET:', previewData.n_cells, 'cells');
     } else {
       console.warn('[RDS] previewData missing n_cells, full resp:', JSON.stringify(json).substring(0, 500));
@@ -212,6 +234,37 @@ const DEFAULT_EXAMPLE: string[][] = [
   ['DNASE1L3', '-2.10', '1.65E-17'],
   ['SLC4A10', '-1.98', '5.77E-10'],
 ];
+
+const parseDelimitedText = (content: string): string[][] => {
+  const normalized = content.replace(/^\uFEFF/, '');
+  return normalized
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .map((line) => line.split(line.includes('\t') ? '\t' : ','));
+};
+
+const getResponseText = async (response: any): Promise<string> => {
+  const data = response?.data ?? response;
+  if (typeof data === 'string') return data;
+  if (data instanceof Blob) return await data.text();
+  if (data instanceof ArrayBuffer) return new TextDecoder().decode(data);
+  return String(data ?? '');
+};
+
+const fetchAuthenticatedText = async (url: string): Promise<string> => {
+  const accessStore = useAccessStore();
+  const response = await fetch(url, {
+    headers: {
+      Authorization: accessStore.accessToken
+        ? `Bearer ${accessStore.accessToken}`
+        : '',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`下载文件失败: ${response.status}`);
+  }
+  return await response.text();
+};
 
 // 根据 key 获取对应的示例数据配置
 const getExampleByKey = (key: string): ExampleDataConfig | undefined => {
@@ -283,15 +336,14 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       console.log(`Loaded binary example for ${key}: ${displayName}`);
       // 如果是 RDS 文件，先加载预览再标记为完成
       if ((urlFileName.toLowerCase().endsWith('.rds') || urlFileName.toLowerCase().endsWith('.h5ad') || example.url?.toLowerCase().includes('.rds') || example.url?.toLowerCase().includes('.h5ad')) && example.url) {
-        await triggerRdsPreview(example.url);
+        await triggerRdsPreview(example.url, key);
       }
       updateFileId(key, Date.now());
     } else {
       // 表格文件：解析 CSV/TSV
       const response = await baseRequestClient.get(example.url);
-      const content = response.data as string;
-      const lines = content.split('\n').filter((line) => line.trim());
-      const data = lines.map((line) => line.split(/[,\t]/));
+      const content = await getResponseText(response);
+      const data = parseDelimitedText(content);
 
       fileData.data = data;
       fileData.fileName = displayName;
@@ -365,8 +417,7 @@ const handleImportForKey = async (key: string, file: File) => {
 
   try {
     const content = await file.text();
-    const lines = content.split('\n').filter((line) => line.trim());
-    const data = lines.map((line) => line.split(/[,\t]/));
+    const data = parseDelimitedText(content);
 
     fileData.data = data;
     fileData.fileName = file.name;
@@ -425,7 +476,7 @@ const handleBinaryImportForKey = async (key: string, file: File) => {
       if (tempPath) {
         const fileUrl = tempPath;
         fileData.fileUrl = fileUrl;
-        await triggerRdsPreview(fileUrl);
+        await triggerRdsPreview(fileUrl, key);
         message.success({ content: `${file.name} 已加载`, key: 'fileUploadPreview' });
       } else {
         rdsPreviewLoading.value = false;
@@ -451,6 +502,10 @@ const handleClearForKey = (key: string) => {
 
   fileData.data = [];
   fileData.fileName = '';
+  if (fileData.fileType === 'binary') {
+    rdsPreview.value = null;
+    rdsPreviewLoading.value = false;
+  }
   spreadsheetRefs.value[key]?.clearData();
   updateFileId(key, null);
   message.info('数据已清空');
@@ -469,6 +524,10 @@ const updateFileId = (key: string, fileId: null | number) => {
       if (headers.length > 0) {
         allHeaders[fileKey] = headers;
       }
+    } else if (fileData.fileType === 'binary' && rdsPreview.value?.columns?.length) {
+      allHeaders[fileKey] = rdsPreview.value.columns
+        .map((col) => col.name)
+        .filter(Boolean);
     }
   }
   emit('headers-change', allHeaders);
@@ -542,9 +601,7 @@ const setFileContents = (contents: Record<string, string>) => {
   for (const [key, csvContent] of Object.entries(contents)) {
     if (!csvContent) continue;
     
-    // 解析 CSV 内容
-    const lines = csvContent.split('\n').filter((line) => line.trim());
-    const data = lines.map((line) => line.split(/[\t,]/));
+    const data = parseDelimitedText(csvContent);
     
     // 确保 fileDataMap[key] 存在
     if (!fileDataMap.value[key]) {
@@ -602,7 +659,7 @@ const handlePlatformFileSelect = async (file: any) => {
     fileDataMap.value[key]!.fileUrl = fileUrl;
     message.loading({ content: '正在解析文件元数据...', key: 'platformFilePreview', duration: 0 });
     try {
-      await triggerRdsPreview(fileUrl);
+      await triggerRdsPreview(fileUrl, key);
       message.success({ content: `${file.name} 已加载`, key: 'platformFilePreview' });
     } catch (e) {
       rdsPreviewLoading.value = false;
@@ -612,8 +669,32 @@ const handlePlatformFileSelect = async (file: any) => {
     if (isRds) rdsPreviewLoading.value = false;
     message.success(`已选择文件: ${file.name}`);
   }
-  
-  updateFileId(key, Date.now()); // 触发更新
+
+  if (!fileDataMap.value[key]) {
+    fileDataMap.value[key] = {
+      data: [],
+      fileName: '',
+      loading: false,
+      fileType: 'tabular',
+    };
+  }
+
+  if (!binaryExts.includes(ext)) {
+    try {
+      fileDataMap.value[key]!.loading = true;
+      const fileUrl = `/api/v1/sys/my-data/download/${file.id}`;
+      const content = await fetchAuthenticatedText(fileUrl);
+      fileDataMap.value[key]!.data = parseDelimitedText(content);
+      fileDataMap.value[key]!.fileUrl = fileUrl;
+    } catch (e) {
+      console.error('Parse platform table failed:', e);
+      message.warning('已选择文件，但未能解析表头；请确认文件是 CSV/TSV/TXT 文本表格');
+    } finally {
+      fileDataMap.value[key]!.loading = false;
+    }
+  }
+
+  updateFileId(key, Number(file.id) || Date.now()); // 触发更新并提取表头
 };
 
 // 获取二进制文件的 URL（用于示例数据等）和 ID
@@ -710,21 +791,49 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
         </div>
       </div>
 
+      <!-- RDS/H5AD metadata 预览 -->
+      <div v-if="rdsPreviewLoading" class="rds-loading-card">
+        <Spin size="small" />
+        <span>正在解析 RDS/H5AD metadata...</span>
+      </div>
+      <div v-if="rdsPreview && !rdsPreviewLoading" class="rds-preview-card">
+        <div class="rds-preview-header">
+          <div>
+            <div class="rds-preview-title">Metadata 表格</div>
+            <div class="rds-preview-subtitle">
+              可用于后续参数选择的细胞 feature 和典型取值
+            </div>
+          </div>
+          <span class="rds-summary-text">
+            {{ rdsPreview.n_cells.toLocaleString() }} 细胞 ·
+            {{ rdsPreview.n_genes.toLocaleString() }} 基因 ·
+            {{ rdsPreview.n_columns }} metadata 列
+          </span>
+        </div>
+        <Table
+          :columns="rdsMetaColumns"
+          :data-source="rdsPreviewRows"
+          :pagination="rdsPreviewRows.length > 8 ? { pageSize: 8, size: 'small' } : false"
+          size="small"
+          bordered
+        />
+      </div>
+
       <!-- 二进制文件状态卡片 -->
       <div 
         class="binary-file-card" 
-        :class="{ 'card-success': fileDataMap[fileConfigs[0]?.key]?.fileName && !rdsPreviewLoading }"
+        :class="{ 'card-success': fileDataMap[firstFileKey]?.fileName && !rdsPreviewLoading }"
       >
         <Icon 
-          :icon="fileDataMap[fileConfigs[0]?.key]?.fileName ? 'mdi:check-circle' : 'mdi:file-document-outline'" 
+          :icon="fileDataMap[firstFileKey]?.fileName ? 'mdi:check-circle' : 'mdi:file-document-outline'" 
           class="file-card-icon" 
         />
         <div class="file-card-info">
           <div class="file-card-name">
-            {{ fileDataMap[fileConfigs[0]?.key]?.fileName || '请选择数据文件' }}
+            {{ fileDataMap[firstFileKey]?.fileName || '请选择数据文件' }}
           </div>
           <div class="file-card-hint">
-            {{ fileDataMap[fileConfigs[0]?.key]?.fileName 
+            {{ fileDataMap[firstFileKey]?.fileName 
               ? '文件已选择，可以进行下一步' 
               : '点击「示例」按钮或「上传」按钮选择 RDS/H5AD 文件' 
             }}
@@ -732,25 +841,6 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
         </div>
 
       </div>
-
-    <!-- RDS 元数据预览 - 独立展示区域 -->
-    <div v-if="rdsPreviewLoading" class="rds-loading-card">
-      <Spin size="small" />
-      <span>正在解析 RDS 文件元数据...</span>
-    </div>
-    <div v-if="rdsPreview && !rdsPreviewLoading" class="rds-preview-card">
-      <div class="rds-preview-header">
-        <span>📋 Metadata 概览</span>
-        <span class="rds-summary-text">{{ rdsPreview.n_cells.toLocaleString() }} 细胞 · {{ rdsPreview.n_genes.toLocaleString() }} 基因 · {{ rdsPreview.n_columns }} 列</span>
-      </div>
-      <Table
-          :columns="rdsMetaColumns"
-          :data-source="rdsPreview.columns.map((col: any) => ({ ...col, key: col.name, examples_text: Array.isArray(col.examples) ? col.examples.join(', ') : col.examples }))"
-          :pagination="false"
-          size="small"
-          bordered
-        />
-    </div>
 
     </template>
 
@@ -798,7 +888,7 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
       <!-- 多文件 Tab -->
       <div class="table-tabs">
         <Tabs v-model:active-key="activeTab" size="small">
-          <Tabs.TabPane
+          <TabPane
             v-for="config in fileConfigs"
             :key="config.key"
             :tab="config.label || config.key"
@@ -818,7 +908,7 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
               <Icon icon="mdi:file-document-outline" class="file-card-icon" />
               <div class="file-card-info">
                 <div class="file-card-name">{{ fileDataMap[config.key]?.fileName }}</div>
-                <div class="file-card-hint">该文件为特殊格式（如 RDS、H5AD），无法在线预览</div>
+                <div class="file-card-hint">该文件为 RDS/H5AD 等格式，metadata 信息见下方表格</div>
               </div>
               <a
                 v-if="fileDataMap[config.key]?.fileUrl"
@@ -843,6 +933,34 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
             />
           </template>
         </Spin>
+      </div>
+
+      <!-- 普通模式下选择 RDS/H5AD 时，也展示 metadata 表格 -->
+      <div v-if="rdsPreviewLoading" class="rds-loading-card">
+        <Spin size="small" />
+        <span>正在解析 RDS/H5AD metadata...</span>
+      </div>
+      <div v-if="rdsPreview && !rdsPreviewLoading" class="rds-preview-card">
+        <div class="rds-preview-header">
+          <div>
+            <div class="rds-preview-title">Metadata 表格</div>
+            <div class="rds-preview-subtitle">
+              可用于后续参数选择的细胞 feature 和典型取值
+            </div>
+          </div>
+          <span class="rds-summary-text">
+            {{ rdsPreview.n_cells.toLocaleString() }} 细胞 ·
+            {{ rdsPreview.n_genes.toLocaleString() }} 基因 ·
+            {{ rdsPreview.n_columns }} metadata 列
+          </span>
+        </div>
+        <Table
+          :columns="rdsMetaColumns"
+          :data-source="rdsPreviewRows"
+          :pagination="rdsPreviewRows.length > 8 ? { pageSize: 8, size: 'small' } : false"
+          size="small"
+          bordered
+        />
       </div>
     </template>
 
@@ -1076,5 +1194,62 @@ defineExpose({ fillAllExamples, getFileContents, setFileContents, getFileUrls, g
 .file-card-hint {
   font-size: 13px;
   color: #64748b;
+}
+
+.rds-loading-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.rds-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+}
+
+.rds-preview-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.rds-preview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.rds-preview-subtitle {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.rds-summary-text {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-radius: 999px;
+}
+
+.rds-preview-card :deep(.ant-table-wrapper) {
+  overflow: hidden;
+}
+
+.rds-preview-card :deep(.ant-table-cell) {
+  font-size: 12px;
 }
 </style>

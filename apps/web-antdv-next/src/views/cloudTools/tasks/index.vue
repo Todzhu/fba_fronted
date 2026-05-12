@@ -5,7 +5,7 @@
 import type { TaskStatusResponse } from '#/api/analysis-tools';
 
 import { computed, nextTick, onActivated, onMounted, onUnmounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
 import { useAccessStore } from '@vben/stores';
@@ -27,9 +27,16 @@ import {
   Tooltip,
 } from 'antdv-next';
 
-import { deleteTask, deleteTasksBatch, getTaskList, updateTaskName } from '#/api/analysis-tools';
+import {
+  deleteTask,
+  deleteTasksBatch,
+  getTaskList,
+  getTaskStatus,
+  updateTaskName,
+} from '#/api/analysis-tools';
 
 const router = useRouter();
+const route = useRoute();
 const { apiURL } = useAppConfig(import.meta.env, import.meta.env.PROD);
 
 // 状态
@@ -88,6 +95,23 @@ const fetchTasks = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const openTaskFromQuery = async () => {
+  const rawTaskId = route.query.task_id;
+  const taskId = Number(Array.isArray(rawTaskId) ? rawTaskId[0] : rawTaskId);
+  if (!taskId || logModalVisible.value) return;
+
+  let task = tasks.value.find((item) => item.id === taskId);
+  if (!task) {
+    try {
+      task = await getTaskStatus(taskId);
+    } catch {
+      message.error('任务不存在或已被删除');
+      return;
+    }
+  }
+  viewTaskLog(task);
 };
 
 // 查看任务结果
@@ -258,8 +282,15 @@ const stopAutoRefresh = () => {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
 };
 
-onMounted(() => { fetchTasks(); startAutoRefresh(); });
-onActivated(() => { fetchTasks(); });
+onMounted(async () => {
+  await fetchTasks();
+  await openTaskFromQuery();
+  startAutoRefresh();
+});
+onActivated(async () => {
+  await fetchTasks();
+  await openTaskFromQuery();
+});
 onUnmounted(() => { stopAutoRefresh(); stopLogPoll(); });
 </script>
 
@@ -316,12 +347,12 @@ onUnmounted(() => { stopAutoRefresh(); stopLogPoll(); });
           <template v-else-if="column.key === 'action'">
             <Space>
               <Tooltip title="查看结果">
-                <Button type="link" size="small" :disabled="record.status !== 'completed'" @click="viewTask(record as TaskStatusResponse)">
+                <Button type="link" size="small" :disabled="record.status !== 'completed'" @click.stop="viewTask(record as TaskStatusResponse)">
                   <Icon icon="mdi:eye-outline" style="font-size: 18px" />
                 </Button>
               </Tooltip>
               <Tooltip title="查看日志">
-                <Button type="link" size="small" @click="viewTaskLog(record as TaskStatusResponse)">
+                <Button type="link" size="small" @click.stop="viewTaskLog(record as TaskStatusResponse)">
                   <Icon icon="mdi:file-document-outline" style="font-size: 18px" />
                 </Button>
               </Tooltip>
@@ -340,7 +371,7 @@ onUnmounted(() => { stopAutoRefresh(); stopLogPoll(); });
 
     <!-- 日志抽屉 -->
     <Drawer
-      v-model:visible="logModalVisible"
+      v-model:open="logModalVisible"
       :title="`任务日志 - ${currentLogTask?.task_name || '任务 #' + currentLogTask?.id}`"
       placement="right" width="600" :body-style="{ padding: '16px', display: 'flex', flexDirection: 'column' }"
     >

@@ -3,19 +3,17 @@
  * DynamicForm - 根据 JSON Schema 动态生成表单
  *
  * 参照 Hiplot 设计:
- *   - 可折叠分组 (Collapse)
+ *   - 分组参数布局
  *   - 滑块+数字输入框组合
  *   - 开关在右侧
  *   - 支持 widget: slider, select, switch, number, text, color
  */
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 
 // @ts-ignore
 import { Icon } from '@iconify/vue';
 import {
   Button,
-  Collapse,
-  CollapsePanel,
   Input,
   InputNumber,
   Select,
@@ -41,6 +39,8 @@ interface SchemaProperty {
   required?: boolean; // 支持属性内部的 required 标记
   depends_on?: string; // 依赖的参数 key（用于 metadata_value_select 等联动）
   fileKey?: string; // 绑定的输入文件 key（用于 column_select）
+  key?: string;
+  typeWidget?: string[];
 }
 
 interface SchemaPropertyWithKey extends SchemaProperty {
@@ -49,7 +49,8 @@ interface SchemaPropertyWithKey extends SchemaProperty {
 
 interface ParamSchema {
   type: 'object';
-  properties?: Record<string, SchemaProperty>;
+  param_items?: SchemaPropertyWithKey[];
+  properties?: Record<string, SchemaProperty> | SchemaPropertyWithKey[];
   required?: string[];
   order?: string[]; // 参数顺序
 }
@@ -73,21 +74,66 @@ const emit = defineEmits<{
   (e: 'submit'): void;
 }>();
 
+const normalizeProperty = (key: string, rawProp: SchemaProperty) => {
+  const prop = { ...rawProp };
+  if (Array.isArray(prop.typeWidget)) {
+    prop.type = prop.type ?? prop.typeWidget[0];
+    prop.widget = prop.widget ?? prop.typeWidget[1];
+  }
+  const rawEnum = prop.enum as unknown;
+  if (rawEnum === '') {
+    delete prop.enum;
+  } else if (typeof rawEnum === 'string') {
+    prop.enum = rawEnum
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  delete prop.typeWidget;
+  return {
+    key,
+    ...prop,
+  };
+};
+
+const normalizedProperties = computed<Record<string, SchemaProperty>>(() => {
+  const rawProperties = props.schema?.properties;
+  const rawItems = Array.isArray(rawProperties)
+    ? rawProperties
+    : Array.isArray(props.schema?.param_items)
+      ? props.schema.param_items
+      : null;
+
+  if (rawItems) {
+    const result: Record<string, SchemaProperty> = {};
+    for (const item of rawItems) {
+      if (!item.key) continue;
+      const { key, ...prop } = item;
+      result[key] = prop;
+    }
+    return result;
+  }
+
+  if (rawProperties && !Array.isArray(rawProperties)) {
+    return rawProperties;
+  }
+
+  return {};
+});
+
 // 解析 schema 属性列表（按 order 数组排序）
 const properties = computed(() => {
-  if (!props.schema?.properties) return [];
-  const allKeys = Object.keys(props.schema.properties);
+  const schemaProperties = normalizedProperties.value;
+  const allKeys = Object.keys(schemaProperties);
+  if (allKeys.length === 0) return [];
   // 按 order 数组排序，未在 order 中的放到最后
-  const orderedKeys = props.schema.order
+  const orderedKeys = props.schema?.order
     ? [
         ...props.schema.order.filter((k) => allKeys.includes(k)),
         ...allKeys.filter((k) => !props.schema!.order!.includes(k)),
       ]
     : allKeys;
-  return orderedKeys.map((key) => ({
-    key,
-    ...props.schema!.properties![key],
-  }));
+  return orderedKeys.map((key) => normalizeProperty(key, schemaProperties[key]!));
 });
 
 // 按分组整理属性
@@ -129,24 +175,13 @@ const groupedProperties = computed(() => {
   );
 });
 
-// 默认展开所有分组
-const activeKeys = ref<string[]>([]);
-
-watch(
-  groupedProperties,
-  (groups) => {
-    activeKeys.value = groups.map(([name]) => name);
-  },
-  { immediate: true },
-);
-
 // 初始化默认值
 watch(
   () => props.schema,
   (schema) => {
-    if (!schema?.properties) return;
+    if (!schema) return;
     const defaults: Record<string, unknown> = {};
-    for (const [key, prop] of Object.entries(schema.properties)) {
+    for (const [key, prop] of Object.entries(normalizedProperties.value)) {
       // 使用 || 让空字符串也能被默认值替换
       if (prop.default !== undefined && !props.modelValue[key]) {
         defaults[key] = prop.default;
@@ -162,6 +197,17 @@ watch(
 // 更新单个字段
 const updateField = (key: string, value: unknown) => {
   emit('update:modelValue', { ...props.modelValue, [key]: value });
+};
+
+const getEnumOptions = (prop: SchemaPropertyWithKey): string[] => {
+  return Array.isArray(prop.enum) ? prop.enum : [];
+};
+
+const getSelectOptions = (prop: SchemaPropertyWithKey) => {
+  return getEnumOptions(prop).map((value) => ({
+    label: value,
+    value,
+  }));
 };
 
 // 确定渲染的组件类型
@@ -212,17 +258,14 @@ const handleSubmit = () => {
 
 <template>
   <div v-if="schema" class="dynamic-form">
-    <!-- 可折叠分组 -->
-    <Collapse
-      v-model:active-key="activeKeys"
-      :bordered="false"
-      expand-icon-position="start"
-    >
-      <CollapsePanel
+    <!-- 参数分组 -->
+    <div class="param-groups">
+      <section
         v-for="[groupName, items] in groupedProperties"
         :key="groupName"
-        :header="groupName"
+        class="param-group"
       >
+        <h4 class="param-group-title">{{ groupName }}</h4>
         <div class="param-grid">
           <div v-for="prop in items" :key="prop.key" class="param-item">
             <!-- 标签 -->
@@ -285,7 +328,9 @@ const handleSubmit = () => {
                     (modelValue[prop.key] as string) ?? prop.default ?? 'pal2'
                   "
                   :options="
-                    prop.enum || ['pal1', 'pal2', 'pal3', 'pal4', 'pal5']
+                    getEnumOptions(prop).length > 0
+                      ? getEnumOptions(prop)
+                      : ['pal1', 'pal2', 'pal3', 'pal4', 'pal5']
                   "
                   @update:model-value="(val) => updateField(prop.key, val)"
                 />
@@ -301,16 +346,11 @@ const handleSubmit = () => {
                 <Select
                   :value="(modelValue[prop.key] as string) ?? prop.default"
                   class="select-input"
+                  style="width: 100%"
+                  :options="getSelectOptions(prop)"
+                  :placeholder="getEnumOptions(prop).length > 0 ? '请选择' : '请先加载数据文件'"
                   @change="(val) => updateField(prop.key, val)"
-                >
-                  <Select.Option
-                    v-for="opt in prop.enum"
-                    :key="opt"
-                    :value="opt"
-                  >
-                    {{ opt }}
-                  </Select.Option>
-                </Select>
+                />
               </template>
 
               <!-- 多选下拉（值以逗号分隔字符串存储，兼容 R 脚本） -->
@@ -320,19 +360,13 @@ const handleSubmit = () => {
                 <Select
                   :value="typeof modelValue[prop.key] === 'string' && modelValue[prop.key] ? (modelValue[prop.key] as string).split(',') : (Array.isArray(modelValue[prop.key]) ? modelValue[prop.key] : [])"
                   class="select-input"
+                  style="width: 100%"
                   mode="multiple"
+                  :options="getSelectOptions(prop)"
                   :max-tag-count="3"
                   placeholder="请选择（可多选）"
                   @change="(val) => updateField(prop.key, Array.isArray(val) ? val.join(',') : val)"
-                >
-                  <Select.Option
-                    v-for="opt in prop.enum"
-                    :key="opt"
-                    :value="opt"
-                  >
-                    {{ opt }}
-                  </Select.Option>
-                </Select>
+                />
               </template>
 
               <!-- 开关 -->
@@ -419,8 +453,8 @@ const handleSubmit = () => {
             </div>
           </div>
         </div>
-      </CollapsePanel>
-    </Collapse>
+      </section>
+    </div>
 
     <!-- 底部操作按钮 -->
     <div v-if="showActions" class="form-actions">
@@ -478,23 +512,27 @@ const handleSubmit = () => {
   border-bottom: 2px solid #09f;
 }
 
-/* 可折叠面板样式 */
-:deep(.ant-collapse) {
-  background: transparent;
+/* 参数分组 */
+.param-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-:deep(.ant-collapse-item) {
-  border-bottom: 1px solid #e2e8f0 !important;
+.param-group {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-:deep(.ant-collapse-header) {
-  padding: 0 0 8px !important; /* 减少标题上下间距 */
-  font-weight: 500;
-  color: #334155 !important;
+.param-group:last-child {
+  border-bottom: none;
 }
 
-:deep(.ant-collapse-content-box) {
-  padding: 8px 0 !important; /* 减少内容区域内边距 */
+.param-group-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
 }
 
 /* ========== 参数网格布局（响应式） ========== */

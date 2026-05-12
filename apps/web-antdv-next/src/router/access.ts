@@ -107,6 +107,34 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
     }
   });
 
+  const analysisHiddenRoutes = [
+    {
+      name: 'AnalysisToolDetail',
+      path: 'analysis/tool/:id',
+      component: () => import('#/views/cloudTools/detail.vue'),
+      meta: {
+        title: '工具详情',
+        hideInMenu: true,
+      },
+    },
+    {
+      name: 'TaskDetail',
+      path: 'analysis/tasks/:taskId',
+      component: () => import('#/views/cloudTools/tasks/TaskDetail.vue'),
+      meta: {
+        title: '任务详情',
+        hideInMenu: true,
+        alwaysAccessible: true,
+      },
+    },
+  ];
+
+  analysisHiddenRoutes.forEach((route) => {
+    if (!options.router.hasRoute(route.name)) {
+      options.router.addRoute('Root', route);
+    }
+  });
+
   return result;
 }
 

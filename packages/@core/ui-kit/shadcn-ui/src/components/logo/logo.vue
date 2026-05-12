@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import { VbenAvatar } from '../avatar';
-
 interface Props {
   /**
    * @zh_CN 是否收起文本
@@ -72,13 +70,16 @@ const logoSrc = computed(() => {
       :href="href"
       class="flex h-full items-center gap-2 overflow-hidden px-3 text-lg leading-normal transition-all duration-500"
     >
-      <VbenAvatar
+      <img
         v-if="logoSrc"
         :alt="text"
         :src="logoSrc"
-        :size="logoSize"
-        :fit="fit"
-        class="relative rounded-none bg-transparent"
+        :style="{
+          height: `${logoSize}px`,
+          objectFit: fit,
+          width: `${logoSize}px`,
+        }"
+        class="relative block flex-shrink-0 rounded-none bg-transparent"
       />
       <template v-if="!collapsed">
         <slot name="text">

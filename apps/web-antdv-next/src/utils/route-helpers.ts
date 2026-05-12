@@ -9,29 +9,63 @@ import type { Router } from 'vue-router';
 export function getTaskCenterPath(router: Router): string {
     const routes = router.getRoutes();
 
-    for (const route of routes) {
-        // 策略1: 匹配后端菜单注册的路由（meta.component 包含组件路径）
+    // 策略1: 优先匹配后端菜单注册的真实路由，例如 /my-task
+    const backendMenuRoute = routes.find((route) => {
         const meta = route.meta as Record<string, any> | undefined;
-        if (meta?.component && typeof meta.component === 'string') {
-            if (meta.component.includes('cloudTools/tasks')) {
-                return route.path;
-            }
-        }
-
-        // 策略2: 匹配路由名称（前端定义的路由）
-        if (route.name === 'AnalysisTasks') {
-            return route.path;
-        }
-
-        // 策略3: 匹配路由 path 中包含 tasks 且排除详情页的
-        if (
-            route.path.endsWith('/tasks') &&
-            route.components?.default
-        ) {
-            return route.path;
-        }
+        return (
+            typeof meta?.component === 'string' &&
+            meta.component.includes('cloudTools/tasks')
+        );
+    });
+    if (backendMenuRoute) {
+        return backendMenuRoute.path;
     }
 
-    // 最终 fallback
-    return '/tasks';
+    // 策略2: 匹配任务列表路径，排除详情页
+    const taskPathRoute = routes.find(
+        (route) =>
+            route.path.endsWith('/tasks') &&
+            !route.path.includes(':') &&
+            route.components?.default,
+    );
+    if (taskPathRoute) {
+        return taskPathRoute.path;
+    }
+
+    // 策略3: 兼容前端静态路由
+    const namedRoute = routes.find((route) => route.name === 'AnalysisTasks');
+    return namedRoute?.path || '/my-task';
+}
+
+/**
+ * 动态查找分析工具列表路由路径。
+ *
+ * 后台菜单可把工具列表配置为 /tools、/analysis/tools 等不同路径，
+ * 详情页返回时不能硬编码固定地址。
+ */
+export function getAnalysisToolsPath(router: Router): string {
+    const routes = router.getRoutes();
+
+    const backendMenuRoute = routes.find((route) => {
+        const meta = route.meta as Record<string, any> | undefined;
+        return (
+            typeof meta?.component === 'string' &&
+            meta.component.includes('cloudTools/index')
+        );
+    });
+    if (backendMenuRoute) {
+        return backendMenuRoute.path;
+    }
+
+    const toolsPathRoute = routes.find(
+        (route) =>
+            (route.path === '/tools' || route.path.endsWith('/tools')) &&
+            route.components?.default,
+    );
+    if (toolsPathRoute) {
+        return toolsPathRoute.path;
+    }
+
+    const namedRoute = routes.find((route) => route.name === 'AnalysisTools');
+    return namedRoute?.path || '/tools';
 }
