@@ -52,6 +52,10 @@ export const useAuthStore = defineStore('auth', () => {
     let userInfo: MyUserInfo | null = null;
     try {
       loginLoading.value = true;
+      accessStore.setAccessCodes([]);
+      accessStore.setAccessMenus([]);
+      accessStore.setAccessRoutes([]);
+      accessStore.setIsAccessChecked(false);
       const { access_token, session_uuid } = await loginApi(
         params as LoginParams,
       );
