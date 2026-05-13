@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { message } from 'ant-design-vue';
-import { ArrowRight, Github, Lock, User, X } from 'lucide-vue-next';
+import { ArrowRight, Lock, User, X } from 'lucide-vue-next';
 
 import { useAuthStore } from '#/store';
 
@@ -91,30 +91,33 @@ const handleSubmit = async () => {
     >
       <!-- Backdrop -->
       <div
-        class="absolute inset-0 bg-slate-900/30 backdrop-blur-sm transition-opacity"
+        class="absolute inset-0 bg-slate-950/40 backdrop-blur-md transition-opacity"
         @click="handleClose"
       ></div>
 
       <!-- Modal Content -->
       <div
-        class="relative w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl transition-all"
+        class="auth-modal-card relative w-full max-w-[460px] overflow-hidden bg-white transition-all"
         @click.stop
       >
+        <div class="auth-modal-glow"></div>
+
         <!-- Close Button -->
         <button
+          class="absolute right-5 top-5 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-slate-200/80 bg-white/85 text-slate-500 shadow-sm backdrop-blur transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800 active:scale-95"
+          aria-label="关闭弹窗"
           @click="handleClose"
-          class="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 active:scale-95"
         >
           <X class="h-4 w-4" />
         </button>
 
-        <div class="p-8">
+        <div class="relative p-7 sm:p-9">
           <!-- Header -->
-          <div class="mb-8 text-center">
-            <h2 class="text-2xl font-bold text-slate-900">
+          <div class="mb-7 text-center">
+            <h2 class="text-[28px] font-bold leading-tight text-slate-950">
               {{ isLogin ? '欢迎回来' : '创建账号' }}
             </h2>
-            <p class="mt-2 text-sm text-slate-500">
+            <p class="mt-2 text-sm leading-6 text-slate-500">
               {{
                 isLogin
                   ? '登录以继续您的生物信息分析之旅'
@@ -124,12 +127,14 @@ const handleSubmit = async () => {
           </div>
 
           <!-- Tabs -->
-          <div class="mb-8 flex rounded-xl bg-slate-100 p-1">
+          <div
+            class="auth-tabs mb-7 grid grid-cols-2 gap-1 rounded-2xl bg-slate-100/90 p-1"
+          >
             <button
-              class="flex-1 rounded-lg py-2 text-sm font-semibold transition-all"
+              class="auth-tab"
               :class="
                 isLogin
-                  ? 'bg-white text-slate-900 shadow-sm'
+                  ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               "
               @click="isLogin = true"
@@ -137,10 +142,10 @@ const handleSubmit = async () => {
               登录
             </button>
             <button
-              class="flex-1 rounded-lg py-2 text-sm font-semibold transition-all"
+              class="auth-tab"
               :class="
                 !isLogin
-                  ? 'bg-white text-slate-900 shadow-sm'
+                  ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               "
               @click="isLogin = false"
@@ -156,32 +161,32 @@ const handleSubmit = async () => {
             autocomplete="off"
           >
             <div v-if="!isLogin">
-              <label class="mb-1 block text-sm font-medium text-slate-700"
-                >用户名</label
-              >
-              <div class="relative">
+              <label class="mb-2 block text-sm font-semibold text-slate-700">
+                用户名
+              </label>
+              <div class="auth-input-wrap">
                 <div
-                  class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                 >
                   <User class="h-4 w-4" />
                 </div>
                 <input
-                  v-model="formData.username"
+                  v-model="formData.registerUsername"
                   type="text"
                   autocomplete="off"
-                  class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                  class="auth-input"
                   placeholder="您的称呼"
                 />
               </div>
             </div>
 
             <div>
-              <label class="mb-1 block text-sm font-medium text-slate-700"
-                >用户名</label
-              >
-              <div class="relative">
+              <label class="mb-2 block text-sm font-semibold text-slate-700">
+                用户名
+              </label>
+              <div class="auth-input-wrap">
                 <div
-                  class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                 >
                   <User class="h-4 w-4" />
                 </div>
@@ -189,19 +194,19 @@ const handleSubmit = async () => {
                   v-model="formData.username"
                   type="text"
                   autocomplete="off"
-                  class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                  class="auth-input"
                   placeholder="输入用户名或邮箱"
                 />
               </div>
             </div>
 
             <div>
-              <label class="mb-1 block text-sm font-medium text-slate-700"
-                >密码</label
-              >
-              <div class="relative">
+              <label class="mb-2 block text-sm font-semibold text-slate-700">
+                密码
+              </label>
+              <div class="auth-input-wrap">
                 <div
-                  class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                 >
                   <Lock class="h-4 w-4" />
                 </div>
@@ -209,7 +214,7 @@ const handleSubmit = async () => {
                   v-model="formData.password"
                   type="password"
                   autocomplete="new-password"
-                  class="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                  class="auth-input"
                   placeholder="输入密码"
                 />
               </div>
@@ -218,7 +223,7 @@ const handleSubmit = async () => {
             <!-- 错误提示 -->
             <div
               v-if="errorMsg"
-              class="rounded-lg bg-red-50 p-3 text-sm text-red-600"
+              class="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600"
             >
               {{ errorMsg }}
             </div>
@@ -226,8 +231,11 @@ const handleSubmit = async () => {
             <button
               type="submit"
               :disabled="loading"
-              class="group relative mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/30 transition-all hover:bg-blue-700 hover:shadow-blue-500/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+              class="group relative mt-6 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-500 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 transition-all hover:-translate-y-0.5 hover:shadow-xl hover:shadow-cyan-500/30 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
             >
+              <span
+                class="absolute inset-0 bg-white/0 transition group-hover:bg-white/10"
+              ></span>
               <span v-if="loading" class="flex items-center gap-2">
                 <svg
                   class="h-4 w-4 animate-spin"
@@ -258,21 +266,6 @@ const handleSubmit = async () => {
               </template>
             </button>
           </form>
-
-          <!-- Divider -->
-          <div class="my-6 flex items-center gap-4">
-            <div class="h-px flex-1 bg-slate-100"></div>
-            <span class="text-xs text-slate-400">或者使用</span>
-            <div class="h-px flex-1 bg-slate-100"></div>
-          </div>
-
-          <!-- Social Login -->
-          <button
-            class="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-95"
-          >
-            <Github class="h-4 w-4" />
-            GitHub
-          </button>
         </div>
       </div>
     </div>
@@ -285,8 +278,97 @@ const handleSubmit = async () => {
   transition: opacity 0.2s ease;
 }
 
+.fade-enter-active .auth-modal-card,
+.fade-leave-active .auth-modal-card {
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+}
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.fade-enter-from .auth-modal-card,
+.fade-leave-to .auth-modal-card {
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+}
+
+.auth-modal-card {
+  border: 1px solid rgb(226 232 240 / 95%);
+  border-radius: 28px;
+  box-shadow:
+    0 28px 80px rgb(15 23 42 / 22%),
+    0 0 0 1px rgb(255 255 255 / 70%) inset;
+}
+
+.auth-modal-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 0%, rgb(34 211 238 / 20%), transparent 34%),
+    radial-gradient(circle at 88% 10%, rgb(59 130 246 / 16%), transparent 32%),
+    linear-gradient(
+      180deg,
+      rgb(248 250 252 / 96%) 0%,
+      rgb(255 255 255 / 0%) 42%
+    );
+}
+
+.auth-tab {
+  min-height: 46px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 14px;
+  transition:
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.auth-tab:active {
+  transform: scale(0.98);
+}
+
+.auth-input-wrap {
+  position: relative;
+}
+
+.auth-input {
+  width: 100%;
+  height: 50px;
+  padding: 0 16px 0 44px;
+  font-size: 14px;
+  color: rgb(15 23 42);
+  outline: none;
+  background: rgb(248 250 252 / 82%);
+  border: 1px solid rgb(226 232 240);
+  border-radius: 16px;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.auth-input::placeholder {
+  color: rgb(148 163 184);
+}
+
+.auth-input:focus {
+  background: rgb(255 255 255);
+  border-color: rgb(6 182 212);
+  box-shadow:
+    0 0 0 4px rgb(6 182 212 / 12%),
+    0 12px 26px rgb(15 23 42 / 6%);
+}
+
+@media (max-width: 480px) {
+  .auth-modal-card {
+    border-radius: 24px;
+  }
 }
 </style>
