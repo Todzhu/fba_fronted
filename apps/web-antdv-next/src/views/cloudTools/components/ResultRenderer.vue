@@ -7,7 +7,7 @@
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import { useAccessStore } from '@vben/stores';
@@ -16,15 +16,7 @@ import { useAppConfig } from '@vben/hooks';
 
 // @ts-ignore
 import { Icon } from '@iconify/vue';
-import {
-  Button,
-  Empty,
-  message,
-  Space,
-  Spin,
-  Table,
-  Tabs,
-} from 'antdv-next';
+import { Button, Empty, message, Space, Spin, Table, Tabs } from 'antdv-next';
 
 import { getTaskFileUrl } from '#/api/analysis-tools';
 
@@ -55,6 +47,40 @@ const fetchErrors = ref<Record<string, string>>({}); // 存储加载错误信息
 
 // ECharts refs
 const chartRefs = ref<Record<string, EchartsUIType>>({});
+
+const outputTitleFallbacks: Record<string, string> = {
+  boxplot: '分组箱线图',
+  scores_table: '分化潜能评分表',
+  umap_phenotype: 'UMAP 表型分布图',
+  umap_potency: 'UMAP 潜能分布图',
+  umap_relative: 'UMAP 相对评分图',
+  umap_score: 'UMAP 评分分布图',
+};
+
+const fixMojibake = (value: string | undefined, key: string) => {
+  if (!value || !/[ÃÂÅåæçèéäöü]/.test(value)) {
+    return value || '';
+  }
+
+  if (outputTitleFallbacks[key]) {
+    return outputTitleFallbacks[key];
+  }
+
+  try {
+    const bytes = Uint8Array.from(value, (char) => char.charCodeAt(0) & 0xff);
+    const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return /[\u4e00-\u9fff]/.test(decoded) ? decoded : value;
+  } catch {
+    return value;
+  }
+};
+
+const displayOutputs = computed(() =>
+  (props.config?.outputs || []).map((output) => ({
+    ...output,
+    displayTitle: fixMojibake(output.title, output.key) || output.key,
+  })),
+);
 
 // 构建文件 URL
 const buildFileUrl = (filePath: string): string => {
@@ -126,14 +152,15 @@ const fetchOutputData = async () => {
           // No default
         }
       } catch (error: any) {
-        fetchErrors.value[output.key] = `加载失败 (${error?.message || '未知错误'})`;
+        fetchErrors.value[output.key] =
+          `加载失败 (${error?.message || '未知错误'})`;
         console.error(`Fetch error for ${output.path}:`, error);
       }
     }
 
     // 设置默认 Tab
-    if (props.config.outputs.length > 0) {
-      activeKey.value = props.config.outputs[0]?.key ?? '';
+    if (displayOutputs.value.length > 0) {
+      activeKey.value = displayOutputs.value[0]?.key ?? '';
     }
   } catch (error) {
     console.error('Failed to fetch output:', error);
@@ -183,14 +210,17 @@ const parseCSV = (text: string): { columns: any[]; data: any[] } => {
     width: 150,
   }));
 
-  const data = lines.slice(1).filter(l => l.trim()).map((line, idx) => {
-    const values = parseLine(line);
-    const row: Record<string, number | string> = { key: idx };
-    headers.forEach((h, i) => {
-      row[h] = values[i] ?? '';
+  const data = lines
+    .slice(1)
+    .filter((l) => l.trim())
+    .map((line, idx) => {
+      const values = parseLine(line);
+      const row: Record<string, number | string> = { key: idx };
+      headers.forEach((h, i) => {
+        row[h] = values[i] ?? '';
+      });
+      return row;
     });
-    return row;
-  });
 
   return { columns, data };
 };
@@ -223,7 +253,7 @@ watch(
 );
 
 watch(activeKey, (key) => {
-  const output = props.config?.outputs?.find((o) => o.key === key);
+  const output = displayOutputs.value.find((o) => o.key === key);
   if (output?.type === 'echarts') {
     setTimeout(() => renderChart(key), 100);
   }
@@ -239,12 +269,12 @@ onMounted(() => {
 <template>
   <div class="result-renderer">
     <Spin :spinning="loading">
-      <template v-if="config?.outputs?.length">
+      <template v-if="displayOutputs.length">
         <Tabs v-model:active-key="activeKey" size="small">
           <Tabs.TabPane
-            v-for="output in config.outputs"
+            v-for="output in displayOutputs"
             :key="output.key"
-            :tab="output.title || output.key"
+            :tab="output.displayTitle"
           >
             <!-- ECharts -->
             <div v-if="output.type === 'echarts'" class="chart-container">
@@ -262,7 +292,7 @@ onMounted(() => {
               <img
                 v-if="imageBlobUrls[output.key]"
                 :src="imageBlobUrls[output.key]"
-                :alt="output.title || output.key"
+                :alt="output.displayTitle"
                 class="result-image"
               />
               <div v-else-if="fetchErrors[output.key]" class="error-state">
@@ -293,7 +323,7 @@ onMounted(() => {
                 <Icon icon="mdi:file-download" class="download-icon" />
                 <Button type="primary" @click="downloadFile(output)">
                   <Icon icon="mdi:download" />
-                  下载 {{ output.title || output.key }}
+                  下载 {{ output.displayTitle }}
                 </Button>
               </Space>
             </div>

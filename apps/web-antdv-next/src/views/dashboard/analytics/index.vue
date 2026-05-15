@@ -19,10 +19,7 @@ import {
 import { preferences } from '@vben/preferences';
 import { useUserStore } from '@vben/stores';
 
-import {
-  getTaskList,
-  type TaskStatusResponse,
-} from '#/api/analysis-tools';
+import { getTaskList, type TaskStatusResponse } from '#/api/analysis-tools';
 import { Modal } from 'antdv-next';
 
 const userStore = useUserStore();
@@ -128,6 +125,21 @@ const taskStats = ref({ total: 0, completed: 0, running: 0, failed: 0 });
 
 const router = useRouter();
 
+function formatLastLoginTime(time?: null | string): string {
+  if (!time) return '暂无记录';
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) return time;
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
 function navTo(nav: WorkbenchProjectItem | WorkbenchQuickNavItem) {
   if ('url' in nav && nav.url === '/analysis') {
     Modal.info({
@@ -172,21 +184,27 @@ onMounted(async () => {
     const tasks = res.items || [];
     taskStats.value = {
       total: res.total || 0,
-      completed: tasks.filter((t: TaskStatusResponse) => t.status === 'completed').length,
-      running: tasks.filter((t: TaskStatusResponse) => t.status === 'running').length,
-      failed: tasks.filter((t: TaskStatusResponse) => t.status === 'failed').length,
+      completed: tasks.filter(
+        (t: TaskStatusResponse) => t.status === 'completed',
+      ).length,
+      running: tasks.filter((t: TaskStatusResponse) => t.status === 'running')
+        .length,
+      failed: tasks.filter((t: TaskStatusResponse) => t.status === 'failed')
+        .length,
     };
     trendItems.value = tasks.map((task: TaskStatusResponse) => ({
-      avatar: task.status === 'completed'
-        ? 'svg:avatar-1'
-        : task.status === 'running'
-          ? 'svg:avatar-2'
-          : task.status === 'failed'
-            ? 'svg:avatar-3'
-            : 'svg:avatar-4',
+      avatar:
+        task.status === 'completed'
+          ? 'svg:avatar-1'
+          : task.status === 'running'
+            ? 'svg:avatar-2'
+            : task.status === 'failed'
+              ? 'svg:avatar-3'
+              : 'svg:avatar-4',
       content: `使用 <a>${task.tool_name}</a> ${statusText[task.status] || task.status}了任务 <a>${task.task_name}</a>`,
       date: relativeTime(task.created_time),
-      title: userStore.userInfo?.realName || userStore.userInfo?.nickname || '用户',
+      title:
+        userStore.userInfo?.realName || userStore.userInfo?.nickname || '用户',
     }));
   } catch (e) {
     console.error('Failed to load recent tasks', e);
@@ -200,10 +218,17 @@ onMounted(async () => {
       :avatar="userStore.userInfo?.avatar || preferences.app.defaultAvatar"
     >
       <template #title>
-        欢迎回来, {{ userStore.userInfo?.realName || userStore.userInfo?.nickname || '用户' }}！开始您的数据分析之旅
+        欢迎回来,
+        {{
+          userStore.userInfo?.realName ||
+          userStore.userInfo?.nickname ||
+          '用户'
+        }}！
       </template>
       <template #description>
-        CWMDA 多组学数据分析平台 — 一站式生物信息分析解决方案
+        上次登录时间：{{
+          formatLastLoginTime(userStore.userInfo?.last_login_time)
+        }}
       </template>
       <template #extra>
         <div class="flex flex-col justify-center text-right">
@@ -223,8 +248,16 @@ onMounted(async () => {
 
     <div class="mt-5 flex flex-col lg:flex-row">
       <div class="mr-4 w-full lg:w-3/5">
-        <WorkbenchProject :items="projectItems" title="平台分析工具" @click="navTo" />
-        <WorkbenchTrends :items="trendItems" class="mt-5" title="最近分析动态" />
+        <WorkbenchProject
+          :items="projectItems"
+          title="平台分析工具"
+          @click="navTo"
+        />
+        <WorkbenchTrends
+          :items="trendItems"
+          class="mt-5"
+          title="最近分析动态"
+        />
       </div>
       <div class="w-full lg:w-2/5">
         <WorkbenchQuickNav

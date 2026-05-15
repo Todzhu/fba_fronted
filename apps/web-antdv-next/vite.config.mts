@@ -14,13 +14,13 @@ export default defineConfig(async () => {
           '/api': {
             changeOrigin: true,
             // 真实后端地址
-            target: 'http://127.0.0.1:8000',
+            target: 'http://127.0.0.1:8001',
             ws: true,
           },
           '/static': {
             changeOrigin: true,
             // 静态资源代理到后端
-            target: 'http://172.30.10.205:8000',
+            target: 'http://127.0.0.1:8001',
           },
         },
       },
