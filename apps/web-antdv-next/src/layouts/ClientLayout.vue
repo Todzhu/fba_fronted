@@ -81,7 +81,11 @@ const isAdmin = computed(() => {
 
 const openAdminDashboard = () => {
   isUserMenuOpen.value = false;
-  window.open('/dashboard', '_blank');
+  const href = router.resolve({ path: '/analytics' }).href;
+  const adminUrl = href.startsWith('/')
+    ? `${window.location.origin}${href}`
+    : `${window.location.origin}/${href}`;
+  window.open(adminUrl, '_blank');
 };
 
 const handleLogin = () => {

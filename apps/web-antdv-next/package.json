@@ -41,6 +41,7 @@
     "@vben/types": "workspace:*",
     "@vben/utils": "workspace:*",
     "@vueuse/core": "catalog:",
+    "@iconify/vue": "catalog:",
     "ant-design-vue": "catalog:",
     "antdv-next": "catalog:",
     "croner": "catalog:",

@@ -67,12 +67,13 @@ const handleCancel = () => {
   }
 };
 
-// 文件大小限制：500MB
-const MAX_FILE_SIZE = 500 * 1024 * 1024;
+// 文件大小限制：5GB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
+const MAX_FILE_SIZE_LABEL = '5GB';
 
 const beforeUpload = (file: File) => {
   if (file.size > MAX_FILE_SIZE) {
-    message.error(`文件 "${file.name}" 超过 500MB 限制`);
+    message.error(`文件 "${file.name}" 超过 ${MAX_FILE_SIZE_LABEL} 限制`);
     return Upload.LIST_IGNORE;
   }
   return false; // 阻止自动上传，手动上传
@@ -116,7 +117,7 @@ const customRequest = ({ onSuccess }: any) => {
           />
         </p>
         <p class="ant-upload-text">点击或拖拽文件到此处上传</p>
-        <p class="ant-upload-hint">支持多文件上传，单文件最大支持 500MB</p>
+        <p class="ant-upload-hint">支持多文件上传，单文件最大支持 {{ MAX_FILE_SIZE_LABEL }}</p>
       </Upload.Dragger>
 
       <!-- 上传进度区域 -->

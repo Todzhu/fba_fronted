@@ -1,10 +1,12 @@
-FROM guergeiro/pnpm:lts-latest-slim AS build
+FROM node:20-bookworm-slim AS build
 
 WORKDIR /fba_ui
 
 COPY . .
 
-RUN pnpm install \
+RUN npm install -g pnpm@10.28.2 \
+    && pnpm install \
+    && pnpm --filter "@vben-core/*" --if-present build \
     && pnpm --filter "./apps/web-antdv-next" build
 
 FROM nginx

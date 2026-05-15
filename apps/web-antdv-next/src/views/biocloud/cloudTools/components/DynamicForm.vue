@@ -162,6 +162,29 @@ const updateField = (key: string, value: unknown) => {
   emit('update:modelValue', { ...props.modelValue, [key]: value });
 };
 
+const splitPairValue = (value: unknown): [string, string] => {
+  if (typeof value !== 'string' || !value) return ['', ''];
+  const parts = value.split(',', 2).map((item) => item.trim());
+  return [parts[0] || '', parts[1] || ''];
+};
+
+const updatePairValue = (key: string, side: 0 | 1, value: unknown) => {
+  const pair = splitPairValue(props.modelValue[key]);
+  pair[side] = typeof value === 'string' ? value : '';
+
+  const otherSide = side === 0 ? 1 : 0;
+  if (pair[side] && pair[side] === pair[otherSide]) {
+    pair[otherSide] = '';
+  }
+
+  if (!pair[0] && !pair[1]) {
+    updateField(key, '');
+    return;
+  }
+
+  updateField(key, `${pair[0]},${pair[1]}`);
+};
+
 // 确定渲染的组件类型
 const getWidgetType = (prop: SchemaPropertyWithKey): string => {
   if (prop.widget) return prop.widget;
@@ -330,6 +353,61 @@ const handleSubmit = () => {
                     {{ opt }}
                   </Select.Option>
                 </Select>
+              </template>
+
+              <!-- 成对比较选择器（如 CellChat 指定比较组合） -->
+              <template
+                v-else-if="getWidgetType(prop) === 'metadata_pair_select'"
+              >
+                <div class="pair-select-control">
+                  <Select
+                    :value="
+                      splitPairValue(modelValue[prop.key])[0] || undefined
+                    "
+                    allow-clear
+                    class="pair-select-input"
+                    placeholder="选择分组 A"
+                    :disabled="!prop.enum || prop.enum.length < 2"
+                    @change="
+                      (val: any) => updatePairValue(prop.key, 0, val)
+                    "
+                  >
+                    <Select.Option
+                      v-for="opt in prop.enum"
+                      :key="opt"
+                      :value="opt"
+                      :disabled="
+                        splitPairValue(modelValue[prop.key])[1] === opt
+                      "
+                    >
+                      {{ opt }}
+                    </Select.Option>
+                  </Select>
+                  <span class="pair-select-arrow">vs</span>
+                  <Select
+                    :value="
+                      splitPairValue(modelValue[prop.key])[1] || undefined
+                    "
+                    allow-clear
+                    class="pair-select-input"
+                    placeholder="选择分组 B"
+                    :disabled="!prop.enum || prop.enum.length < 2"
+                    @change="
+                      (val: any) => updatePairValue(prop.key, 1, val)
+                    "
+                  >
+                    <Select.Option
+                      v-for="opt in prop.enum"
+                      :key="opt"
+                      :value="opt"
+                      :disabled="
+                        splitPairValue(modelValue[prop.key])[0] === opt
+                      "
+                    >
+                      {{ opt }}
+                    </Select.Option>
+                  </Select>
+                </div>
               </template>
 
               <!-- 开关 -->
@@ -596,6 +674,24 @@ const handleSubmit = () => {
 .select-input {
   flex: 1;
   min-width: 200px;
+}
+
+.pair-select-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.pair-select-input {
+  min-width: 0;
+}
+
+.pair-select-arrow {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
 }
 
 .number-input-only {

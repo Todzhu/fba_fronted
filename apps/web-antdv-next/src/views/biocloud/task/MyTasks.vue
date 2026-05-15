@@ -171,6 +171,10 @@ const goToTaskResult = (task: TaskItem) => {
   router.push({ name: 'TaskDetail', params: { taskId: String(task.id) } });
 };
 
+const canViewTaskLog = (task: TaskItem) =>
+  task.tool_name !== '单细胞分析流程' &&
+  (task.status === 'running' || task.status === 'failed');
+
 // ========== Delete ==========
 const showDeleteModal = ref(false);
 const deleteTarget = ref<null | { ids: number[]; type: 'batch' | 'single' }>(
@@ -199,6 +203,8 @@ const logContainerRef = ref<HTMLElement | null>(null);
 
 // 打开日志抽屉
 const handleViewLog = async (task: TaskItem) => {
+  if (!canViewTaskLog(task)) return;
+
   logTask.value = task;
   logContent.value = '';
   logOffset.value = 0;
@@ -663,7 +669,7 @@ onMounted(() => {
             </button>
             <!-- 普通任务: 查看执行日志（运行中或失败时显示） -->
             <button
-               v-if="task.tool_name !== '单细胞分析流程' && (task.status === 'running' || task.status === 'failed')"
+              v-if="canViewTaskLog(task)"
               @click="handleViewLog(task)"
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-indigo-500 hover:text-white hover:shadow-md hover:shadow-indigo-500/25"
               title="查看执行日志"

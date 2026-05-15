@@ -24,7 +24,7 @@ const isLogin = ref(true); // true: Login, false: Register
 const formData = ref({
   username: '',
   password: '',
-  registerUsername: '', // 注册用的用户名
+  nickname: '',
 });
 
 // 加载状态
@@ -162,7 +162,7 @@ const handleSubmit = async () => {
           >
             <div v-if="!isLogin">
               <label class="mb-2 block text-sm font-semibold text-slate-700">
-                用户名
+                昵称
               </label>
               <div class="auth-input-wrap">
                 <div
@@ -171,18 +171,18 @@ const handleSubmit = async () => {
                   <User class="h-4 w-4" />
                 </div>
                 <input
-                  v-model="formData.registerUsername"
+                  v-model="formData.nickname"
                   type="text"
                   autocomplete="off"
                   class="auth-input"
-                  placeholder="您的称呼"
+                  placeholder="请输入昵称"
                 />
               </div>
             </div>
 
             <div>
               <label class="mb-2 block text-sm font-semibold text-slate-700">
-                用户名
+                {{ isLogin ? '用户名' : '账号' }}
               </label>
               <div class="auth-input-wrap">
                 <div
@@ -195,7 +195,7 @@ const handleSubmit = async () => {
                   type="text"
                   autocomplete="off"
                   class="auth-input"
-                  placeholder="输入用户名或邮箱"
+                  :placeholder="isLogin ? '输入用户名或邮箱' : '输入邮箱作为登录账号'"
                 />
               </div>
             </div>

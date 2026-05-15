@@ -15,9 +15,7 @@ import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import {
   Button,
-  Dropdown,
   Input,
-  Menu,
   message,
   Space,
   Spin,
@@ -112,6 +110,16 @@ const BINARY_EXTENSIONS = new Set([
   'zarr',
 ]);
 
+const MANAGED_BINARY_EXTENSIONS = new Set(['h5ad', 'rds']);
+
+const normalizeExtension = (extension: string): string =>
+  extension.trim().replace(/^\./, '').toLowerCase();
+
+const requiresPlatformFileSelection = (config: FileConfig): boolean =>
+  config.extensions?.some((extension) =>
+    MANAGED_BINARY_EXTENSIONS.has(normalizeExtension(extension)),
+  ) ?? false;
+
 // 判断是否为二进制文件
 const isBinaryFile = (filename: string): boolean => {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
@@ -120,6 +128,8 @@ const isBinaryFile = (filename: string): boolean => {
 
 // 判断是否全部为二进制文件模式（隐藏表格区域）
 const allBinaryMode = computed(() => {
+  if (props.schema?.files?.some(requiresPlatformFileSelection)) return true;
+
   const examples = props.exampleData;
   if (!examples || examples.length === 0) return false;
 
@@ -143,6 +153,37 @@ interface MetadataInfo {
 }
 const metadataMap = ref<Record<string, MetadataInfo>>({});
 const metadataLoading = ref(false);
+const metadataPage = ref(1);
+const metadataPageSize = ref(8);
+
+const currentMetadataKey = computed(() => fileConfigs.value[0]?.key ?? '');
+const currentMetadata = computed(
+  () => metadataMap.value[currentMetadataKey.value],
+);
+const currentMetadataSummary = computed(
+  () => currentMetadata.value?.summary ?? [],
+);
+const metadataTablePagination = computed(() => ({
+  current: metadataPage.value,
+  pageSize: metadataPageSize.value,
+  pageSizeOptions: ['8', '15', '30'],
+  showSizeChanger: true,
+  showTotal: (total: number, range: [number, number]) =>
+    `第 ${range[0]}-${range[1]} 项 / 共 ${total} 项`,
+  total: currentMetadataSummary.value.length,
+  onChange: (page: number, pageSize: number) => {
+    metadataPage.value = page;
+    metadataPageSize.value = pageSize;
+  },
+  onShowSizeChange: (_current: number, size: number) => {
+    metadataPage.value = 1;
+    metadataPageSize.value = size;
+  },
+}));
+
+watch([currentMetadataKey, () => currentMetadataSummary.value.length], () => {
+  metadataPage.value = 1;
+});
 
 // 每个文件的表格数据和状态
 const fileDataMap = ref<
@@ -154,10 +195,15 @@ const fileDataMap = ref<
       fileName: string;
       fileType: 'binary' | 'tabular'; // 文件类型
       fileUrl?: string; // 二进制文件的下载 URL
+      dirty?: boolean; // 是否被用户导入或编辑过
       loading: boolean;
     }
   >
 >({});
+
+const currentBinaryFileData = computed(
+  () => fileDataMap.value[currentMetadataKey.value],
+);
 
 // 初始化文件数据
 watch(
@@ -257,6 +303,7 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.fileName = displayName;
       fileData.fileType = 'binary';
       fileData.fileUrl = example.url;
+      fileData.dirty = false;
       updateFileId(key, Date.now());
       // 自动解析 metadata
       await fetchMetadata(key, { file_url: example.url });
@@ -270,7 +317,8 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       fileData.data = data;
       fileData.fileName = displayName;
       fileData.fileType = 'tabular';
-      fileData.fileUrl = undefined;
+      fileData.fileUrl = example.url;
+      fileData.dirty = false;
       updateFileId(key, Date.now());
     }
   } catch (error) {
@@ -343,6 +391,9 @@ const handleImportForKey = async (key: string, file: File) => {
     fileData.data = data;
     fileData.fileName = file.name;
     fileData.fileType = 'tabular';
+    fileData.fileUrl = undefined;
+    fileData.fileId = undefined;
+    fileData.dirty = true;
     updateFileId(key, Date.now()); // 标记有数据
 
     // 切换到对应的 Tab
@@ -359,31 +410,6 @@ const handleImportForKey = async (key: string, file: File) => {
   return false; // 阻止默认上传
 };
 
-// 导入二进制文件（RDS/H5AD 等）- 不解析内容，只记录文件引用
-const handleBinaryImportForKey = (key: string, file: File) => {
-  // 确保 fileDataMap[key] 存在
-  if (!fileDataMap.value[key]) {
-    fileDataMap.value[key] = {
-      data: [],
-      fileName: '',
-      loading: false,
-      fileType: 'binary',
-    };
-  }
-
-  const fileData = fileDataMap.value[key]!;
-  fileData.fileName = file.name;
-  fileData.fileType = 'binary';
-  fileData.fileUrl = URL.createObjectURL(file); // 临时 URL 用于预览/下载
-  fileData.data = []; // 二进制文件不解析
-  updateFileId(key, Date.now());
-
-  // 本地上传的二进制文件目前无法直接解析（需要先上传到平台）
-  // 如果有 fileId 会在 handlePlatformFileSelect 中触发解析
-  message.success(`${file.name} 已选择`);
-  return false; // 阻止默认上传
-};
-
 // 清空指定表格
 const handleClearForKey = (key: string) => {
   const fileData = fileDataMap.value[key];
@@ -391,8 +417,13 @@ const handleClearForKey = (key: string) => {
 
   fileData.data = [];
   fileData.fileName = '';
+  fileData.fileUrl = undefined;
+  fileData.fileId = undefined;
+  fileData.dirty = false;
+  delete metadataMap.value[key];
   spreadsheetRefs.value[key]?.clearData();
   updateFileId(key, null);
+  emit('metadataChange', { ...metadataMap.value });
   message.info('数据已清空');
 };
 
@@ -420,6 +451,7 @@ const handleDataChange = (key: string, data: string[][]) => {
   if (fileData) {
     fileData.data = data;
     if (fileData?.data && fileData.data.length > 0) {
+      fileData.dirty = true;
       updateFileId(key, Date.now());
     }
   }
@@ -446,6 +478,11 @@ const getFileContents = (): Record<string, string> => {
     data = spreadsheetInstance
       ? spreadsheetInstance.getData() || []
       : fileDataMap.value[config.key]?.data || [];
+
+    const fileData = fileDataMap.value[config.key];
+    if (fileData?.fileUrl && !fileData.dirty) {
+      continue;
+    }
 
     if (data.length > 0) {
       // 将二维数组转换为 tab 分隔的 CSV
@@ -495,6 +532,8 @@ const setFileContents = (contents: Record<string, string>) => {
     fileDataMap.value[key]!.data = data;
     fileDataMap.value[key]!.fileName = `${key}.csv (历史数据)`;
     fileDataMap.value[key]!.fileType = 'tabular';
+    fileDataMap.value[key]!.fileUrl = undefined;
+    fileDataMap.value[key]!.dirty = false;
     updateFileId(key, Date.now());
   }
 };
@@ -515,6 +554,8 @@ const handlePlatformFileSelect = async (file: any) => {
   fileDataMap.value[key]!.fileName = file.name;
   fileDataMap.value[key]!.fileType = 'binary';
   fileDataMap.value[key]!.fileId = Number(file.id);
+  fileDataMap.value[key]!.fileUrl = undefined;
+  fileDataMap.value[key]!.dirty = false;
 
   // 根据后缀判断类型
   const ext = file.name.split('.').pop()?.toLowerCase();
@@ -525,7 +566,7 @@ const handlePlatformFileSelect = async (file: any) => {
     fileDataMap.value[key]!.fileType = 'tabular';
   }
 
-  updateFileId(key, Date.now());
+  updateFileId(key, Number(file.id));
   message.success(`已选择文件: ${file.name}`);
 
   // 平台文件：自动解析 metadata
@@ -534,13 +575,12 @@ const handlePlatformFileSelect = async (file: any) => {
   }
 };
 
-// 获取二进制文件的 URL（用于示例数据等）和 ID
+// 获取未修改的示例文件 URL。后端会直接引用系统文件，避免把大文件内容回传。
 const getFileUrls = (): Record<string, string> => {
   const urls: Record<string, string> = {};
   for (const config of fileConfigs.value) {
     const fileData = fileDataMap.value[config.key];
-    // 只处理二进制文件且有 fileUrl 的情况（示例文件）
-    if (fileData?.fileType === 'binary' && fileData.fileUrl) {
+    if (fileData?.fileUrl && !fileData.dirty) {
       urls[config.key] = fileData.fileUrl;
     }
   }
@@ -567,6 +607,7 @@ const fetchMetadata = async (
   try {
     const data = await inspectFile(params);
     metadataMap.value[key] = data;
+    metadataPage.value = 1;
 
     // 将 metadata 列名通过 headersChange 上报，复用 column_select 联动
     const allHeaders: Record<string, string[]> = {};
@@ -661,46 +702,24 @@ defineExpose({
         />
 
         <div class="action-buttons">
-          <Dropdown>
-            <Button type="primary" class="btn-import">
-              <Space>
-                上 传
-                <Icon icon="ant-design:down-outlined" />
-              </Space>
-            </Button>
-            <template #overlay>
-              <Menu>
-                <Menu.Item key="local">
-                  <Upload
-                    :show-upload-list="false"
-                    :before-upload="
-                      (file: File) => handleBinaryImportForKey(config.key, file)
-                    "
-                    accept=".rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5"
-                  >
-                    <div>上传本地文件</div>
-                  </Upload>
-                </Menu.Item>
-                <Menu.Item
-                  key="platform"
-                  @click="openPlatformSelector(config.key)"
-                >
-                  从我的数据选择
-                </Menu.Item>
-              </Menu>
-            </template>
-          </Dropdown>
+          <Button
+            type="primary"
+            class="btn-import"
+            @click="openPlatformSelector(config.key)"
+          >
+            从我的数据选择
+          </Button>
         </div>
       </div>
 
       <!-- 二进制文件状态卡片 -->
       <div
         class="binary-file-card"
-        :class="{ 'card-success': fileDataMap[fileConfigs[0]?.key]?.fileName }"
+        :class="{ 'card-success': currentBinaryFileData?.fileName }"
       >
         <Icon
           :icon="
-            fileDataMap[fileConfigs[0]?.key]?.fileName
+            currentBinaryFileData?.fileName
               ? 'mdi:check-circle'
               : 'mdi:file-document-outline'
           "
@@ -708,13 +727,13 @@ defineExpose({
         />
         <div class="file-card-info">
           <div class="file-card-name">
-            {{ fileDataMap[fileConfigs[0]?.key]?.fileName || '请选择数据文件' }}
+            {{ currentBinaryFileData?.fileName || '请选择数据文件' }}
           </div>
           <div class="file-card-hint">
             {{
-              fileDataMap[fileConfigs[0]?.key]?.fileName
+              currentBinaryFileData?.fileName
                 ? '文件已选择，可以进行下一步'
-                : '点击「示例」按钮或「上传」按钮选择 RDS/H5AD 文件'
+                : '请先在我的数据上传 RDS/H5AD 文件后选择'
             }}
           </div>
         </div>
@@ -723,23 +742,23 @@ defineExpose({
       <!-- Metadata 汇总表格 -->
       <Spin :spinning="metadataLoading" tip="正在解析 metadata...">
         <div
-          v-if="metadataMap[fileConfigs[0]?.key ?? '']?.summary?.length"
+          v-if="currentMetadataSummary.length"
           class="metadata-section"
         >
           <div class="metadata-header">
             <Icon icon="mdi:table-eye" style="font-size: 16px" />
             <span>Metadata 概览</span>
             <Tag color="blue">
-              {{ metadataMap[fileConfigs[0]?.key ?? '']?.n_cells?.toLocaleString() }} cells
+              {{ currentMetadata?.n_cells?.toLocaleString() }} cells
             </Tag>
             <Tag>
-              {{ metadataMap[fileConfigs[0]?.key ?? '']?.columns?.length }} columns
+              {{ currentMetadata?.columns?.length }} columns
             </Tag>
           </div>
           <Table
             :columns="metadataColumns"
-            :data-source="metadataMap[fileConfigs[0]?.key ?? '']?.summary || []"
-            :pagination="false"
+            :data-source="currentMetadataSummary"
+            :pagination="metadataTablePagination"
             size="small"
             row-key="column"
             class="metadata-table"
@@ -1156,6 +1175,14 @@ defineExpose({
   color: #475569;
 }
 
+.metadata-table :deep(.ant-pagination) {
+  margin: 12px 16px !important;
+}
+
+.metadata-table :deep(.ant-pagination-total-text) {
+  color: #64748b;
+}
+
 /* 重构 AntDV 原生的 Tag 标签色彩，抛弃廉价主色转而使用莫兰迪高级无边框填充 */
 .metadata-table :deep(.ant-tag) {
   border: none !important;
@@ -1193,4 +1220,3 @@ defineExpose({
   margin-left: 2px;
 }
 </style>
-

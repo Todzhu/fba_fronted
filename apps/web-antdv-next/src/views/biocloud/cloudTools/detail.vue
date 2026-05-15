@@ -376,6 +376,21 @@ const handleMetadataChange = (metadata: Record<string, any>) => {
   currentMetadata.value = metadata;
 };
 
+const pairSelectKeys = new Set(['compare_pairs']);
+
+watch(
+  () => formParams.value.split_by,
+  (newValue, oldValue) => {
+    if (
+      oldValue !== undefined &&
+      newValue !== oldValue &&
+      formParams.value.compare_pairs
+    ) {
+      formParams.value = { ...formParams.value, compare_pairs: '' };
+    }
+  },
+);
+
 // 动态生成参数模式（注入表头选项）
 const dynamicParamSchema = computed(() => {
   if (!tool.value?.param_schema) return null;
@@ -385,7 +400,14 @@ const dynamicParamSchema = computed(() => {
   const schema = structuredClone(toRaw(tool.value.param_schema));
 
   if (schema.properties) {
-    for (const [, prop] of Object.entries(schema.properties) as any) {
+    for (const [key, prop] of Object.entries(schema.properties) as any) {
+      const usesPairSelect =
+        pairSelectKeys.has(key) || prop.widget === 'metadata_pair_select';
+
+      if (usesPairSelect && prop.widget === 'metadata_value_select') {
+        prop.widget = 'metadata_pair_select';
+      }
+
       if (prop.widget === 'column_select') {
         // 智能获取列名选项
         // 优先使用绑定的 fileKey，否则默认使用第一个输入文件
@@ -417,7 +439,11 @@ const dynamicParamSchema = computed(() => {
           }
         }
         // metadata_value_select: 依赖另一参数选中的列，填充该列唯一值
-        if (prop.widget === 'metadata_value_select' && prop.depends_on) {
+        if (
+          (prop.widget === 'metadata_value_select' ||
+            prop.widget === 'metadata_pair_select') &&
+          prop.depends_on
+        ) {
           const selectedCol = formParams.value[prop.depends_on] as string;
           if (selectedCol) {
             const colMeta = meta.summary.find(
@@ -430,7 +456,9 @@ const dynamicParamSchema = computed(() => {
               if (values.length > 0) {
                 prop.type = 'string';
                 prop.enum = values;
-                prop.widget = 'multi-select';
+                prop.widget = usesPairSelect
+                  ? 'metadata_pair_select'
+                  : 'multi-select';
               }
             }
           }
@@ -516,6 +544,26 @@ const submitAnalysis = async () => {
         }
       }
     }
+  }
+
+  const comparePairs = formParams.value.compare_pairs;
+  if (typeof comparePairs === 'string' && comparePairs.trim()) {
+    const pair = comparePairs
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (comparePairs.includes(';') || pair.length !== 2) {
+      message.warning('指定比较组合需要同时选择两个分组，或清空以自动两两比较');
+      return;
+    }
+    if (pair[0] === pair[1]) {
+      message.warning('指定比较组合中的两个分组不能相同');
+      return;
+    }
+    formParams.value = {
+      ...formParams.value,
+      compare_pairs: `${pair[0]},${pair[1]}`,
+    };
   }
 
   analyzing.value = true;

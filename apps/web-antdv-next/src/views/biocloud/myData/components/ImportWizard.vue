@@ -54,11 +54,12 @@ const modalities = [
 
 // File upload state
 const fileList = ref<UploadProps['fileList']>([]);
-const MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024; // 50GB
+const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+const MAX_FILE_SIZE_LABEL = '5GB';
 
 const beforeUpload = (file: File) => {
   if (file.size > MAX_FILE_SIZE) {
-    message.error(`文件 "${file.name}" 超过 50GB 限制`);
+    message.error(`文件 "${file.name}" 超过 ${MAX_FILE_SIZE_LABEL} 限制`);
     return Upload.LIST_IGNORE;
   }
   return false;

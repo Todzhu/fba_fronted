@@ -26,7 +26,7 @@
     ".": {
       "types": "./src/index.ts",
       "development": "./src/index.ts",
-      "default": "./dist/index.mjs"
+      "default": "./src/index.ts"
     }
   },
   "publishConfig": {

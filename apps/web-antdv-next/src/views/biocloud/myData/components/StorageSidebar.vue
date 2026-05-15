@@ -8,6 +8,10 @@ interface Props {
 }
 
 defineProps<Props>();
+
+const emit = defineEmits<{
+  upgrade: [];
+}>();
 </script>
 
 <template>
@@ -51,7 +55,7 @@ defineProps<Props>();
         </div>
       </div>
 
-      <button class="upgrade-btn">
+      <button class="upgrade-btn" @click="emit('upgrade')">
         <IconifyIcon icon="ant-design:arrow-up-outlined" class="text-sm" />
         升级存储空间
       </button>
@@ -74,7 +78,7 @@ defineProps<Props>();
         </li>
         <li>
           <IconifyIcon icon="ant-design:check-circle-outlined" class="guide-icon" />
-          单文件最大支持 50GB 上传
+          单文件最大支持 5GB 上传
         </li>
       </ul>
     </div>

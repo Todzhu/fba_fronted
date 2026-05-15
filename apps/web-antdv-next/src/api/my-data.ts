@@ -57,8 +57,10 @@ export async function createMyDataFolder(data: {
 
 // ========== 文件上传 ==========
 
+const LARGE_UPLOAD_TIMEOUT = 2 * 60 * 60 * 1000;
+
 /**
- * 上传文件（支持大文件，超时5分钟）
+ * 上传文件（支持 5GB 大文件，超时 2 小时）
  */
 export async function uploadMyDataFile(file: File, parentId?: null | number) {
   const formData = new FormData();
@@ -67,7 +69,7 @@ export async function uploadMyDataFile(file: File, parentId?: null | number) {
   return requestClient.post<FileItem>(`${BASE_URL}/upload`, formData, {
     params,
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 300_000, // 5分钟超时
+    timeout: LARGE_UPLOAD_TIMEOUT,
   });
 }
 

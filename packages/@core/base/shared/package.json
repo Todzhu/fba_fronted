@@ -22,32 +22,32 @@
     "./constants": {
       "types": "./src/constants/index.ts",
       "development": "./src/constants/index.ts",
-      "default": "./dist/constants/index.mjs"
+      "default": "./src/constants/index.ts"
     },
     "./utils": {
       "types": "./src/utils/index.ts",
       "development": "./src/utils/index.ts",
-      "default": "./dist/utils/index.mjs"
+      "default": "./src/utils/index.ts"
     },
     "./color": {
       "types": "./src/color/index.ts",
       "development": "./src/color/index.ts",
-      "default": "./dist/color/index.mjs"
+      "default": "./src/color/index.ts"
     },
     "./cache": {
       "types": "./src/cache/index.ts",
       "development": "./src/cache/index.ts",
-      "default": "./dist/cache/index.mjs"
+      "default": "./src/cache/index.ts"
     },
     "./store": {
       "types": "./src/store.ts",
       "development": "./src/store.ts",
-      "default": "./dist/store.mjs"
+      "default": "./src/store.ts"
     },
     "./global-state": {
       "types": "./src/global-state.ts",
       "development": "./src/global-state.ts",
-      "default": "./dist/global-state.mjs"
+      "default": "./src/global-state.ts"
     }
   },
   "publishConfig": {

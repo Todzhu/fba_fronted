@@ -94,7 +94,7 @@ export async function uploadFile(file: File, folderId?: null | number) {
   }
   return requestClient.post<UserFile>('/api/v1/sys/my-data/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 5 * 60 * 1000, // 5分钟超时，支持大文件上传
+    timeout: 2 * 60 * 60 * 1000, // 2小时超时，支持 5GB 大文件上传
   });
 }
 

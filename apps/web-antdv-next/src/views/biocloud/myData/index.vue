@@ -473,6 +473,14 @@ const handlePreview = (file: FileItem) => {
   currentPreviewFile.value = file;
   previewModalOpen.value = true;
 };
+
+const handleUpgradeStorage = () => {
+  Modal.info({
+    title: '升级存储空间',
+    content: '如需升级存储空间，请联系管理员进行处理。',
+    okText: '我知道了',
+  });
+};
 </script>
 
 <template>
@@ -502,6 +510,7 @@ const handlePreview = (file: FileItem) => {
           :storage-used-str="storageUsedStr"
           :storage-limit-str="storageLimitStr"
           :storage-percent="storagePercent"
+          @upgrade="handleUpgradeStorage"
         />
 
         <!-- 右侧主区域 -->
