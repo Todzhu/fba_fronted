@@ -260,6 +260,14 @@ export interface TaskStatusResponse {
   completed_at: null | string;
 }
 
+export interface TaskInputFileRestoreInfo {
+  path: string;
+  kind: 'example_url' | 'platform_file' | 'unknown';
+  file_id: null | number;
+  file_url: null | string;
+  file_name: string;
+}
+
 export interface TaskListResponse {
   items: TaskStatusResponse[];
   total: number;
@@ -282,6 +290,19 @@ export async function executeAnalysisTool(
 ) {
   return requestClient.post<ExecuteToolResponse>(
     `/api/v1/sys/analysis-tools/${toolId}/execute`,
+    data,
+  );
+}
+
+/**
+ * 在原失败任务上调整参数并重跑
+ */
+export async function rerunAnalysisTask(
+  taskId: number,
+  data: ExecuteToolRequest,
+) {
+  return requestClient.post<ExecuteToolResponse>(
+    `/api/v1/sys/analysis-tools/tasks/${taskId}/rerun`,
     data,
   );
 }
@@ -336,6 +357,7 @@ export async function deleteTasksBatch(ids: number[]) {
 export async function getTaskInputData(taskId: number) {
   return requestClient.get<{
     file_contents: Record<string, string>;
+    input_files: Record<string, TaskInputFileRestoreInfo>;
     input_params: Record<string, unknown>;
   }>(`/api/v1/sys/analysis-tools/tasks/${taskId}/input-data`);
 }
@@ -381,4 +403,3 @@ export async function inspectFile(params: {
     params,
   );
 }
-

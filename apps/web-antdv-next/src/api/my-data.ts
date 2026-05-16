@@ -58,6 +58,7 @@ export async function createMyDataFolder(data: {
 // ========== 文件上传 ==========
 
 const LARGE_UPLOAD_TIMEOUT = 2 * 60 * 60 * 1000;
+const LARGE_DOWNLOAD_TIMEOUT = 2 * 60 * 60 * 1000;
 
 /**
  * 上传文件（支持 5GB 大文件，超时 2 小时）
@@ -86,8 +87,8 @@ export function getMyDataDownloadUrl(fileId: number): string {
  * 下载文件
  */
 export async function downloadMyDataFile(fileId: number) {
-  return requestClient.get(`${BASE_URL}/download/${fileId}`, {
-    responseType: 'blob',
+  return requestClient.download<Blob>(`${BASE_URL}/download/${fileId}`, {
+    timeout: LARGE_DOWNLOAD_TIMEOUT,
   });
 }
 

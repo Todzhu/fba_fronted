@@ -175,6 +175,16 @@ const canViewTaskLog = (task: TaskItem) =>
   task.tool_name !== '单细胞分析流程' &&
   (task.status === 'running' || task.status === 'failed');
 
+const canRerunFailedTask = (task: TaskItem) =>
+  task.tool_name !== '单细胞分析流程' &&
+  task.status === 'failed' &&
+  !!task.tool_id;
+
+const handleRerunFailedTask = (task: TaskItem) => {
+  if (!canRerunFailedTask(task)) return;
+  router.push(`/tool/${task.tool_id}?rerun_task_id=${task.id}`);
+};
+
 // ========== Delete ==========
 const showDeleteModal = ref(false);
 const deleteTarget = ref<null | { ids: number[]; type: 'batch' | 'single' }>(
@@ -666,6 +676,15 @@ onMounted(() => {
               title="查看配置与结果"
             >
               <Eye class="h-[15px] w-[15px]" />
+            </button>
+            <!-- 普通任务: 调整参数并重跑（仅失败任务） -->
+            <button
+              v-if="canRerunFailedTask(task)"
+              @click="handleRerunFailedTask(task)"
+              class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-amber-500 hover:text-white hover:shadow-md hover:shadow-amber-500/25"
+              title="调整参数并重跑"
+            >
+              <RefreshCw class="h-[15px] w-[15px]" />
             </button>
             <!-- 普通任务: 查看执行日志（运行中或失败时显示） -->
             <button

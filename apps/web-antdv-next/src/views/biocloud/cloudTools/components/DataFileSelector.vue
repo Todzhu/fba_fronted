@@ -309,7 +309,10 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
       await fetchMetadata(key, { file_url: example.url });
     } else {
       // 表格文件：解析 CSV/TSV
-      const response = await baseRequestClient.get(example.url);
+      const response = await baseRequestClient.get(example.url, {
+        responseType: 'text',
+        timeout: 120_000,
+      });
       const content = response.data as string;
       const lines = content.split('\n').filter((line) => line.trim());
       const data = lines.map((line) => line.split(/[,\t]/));
@@ -338,6 +341,7 @@ const downloadExample = async () => {
     try {
       const response = await baseRequestClient.get(example.url, {
         responseType: 'blob',
+        timeout: 120_000,
       });
       const blob = response.data as Blob;
 
@@ -538,6 +542,54 @@ const setFileContents = (contents: Record<string, string>) => {
   }
 };
 
+const ensureFileData = (key: string) => {
+  if (!fileDataMap.value[key]) {
+    fileDataMap.value[key] = {
+      data: [],
+      fileName: '',
+      loading: false,
+      fileType: 'tabular',
+    };
+  }
+  return fileDataMap.value[key]!;
+};
+
+const setFileUrls = async (urls: Record<string, string>) => {
+  for (const [key, fileUrl] of Object.entries(urls)) {
+    if (!fileUrl) continue;
+
+    const fileData = ensureFileData(key);
+    const fileName = fileUrl.split('/').pop() || `${key} 历史文件`;
+    fileData.data = [];
+    fileData.fileName = fileName;
+    fileData.fileType = isBinaryFile(fileName) ? 'binary' : 'tabular';
+    fileData.fileUrl = fileUrl;
+    fileData.fileId = undefined;
+    fileData.dirty = false;
+    updateFileId(key, Date.now());
+
+    if (fileData.fileType === 'binary') {
+      await fetchMetadata(key, { file_url: fileUrl });
+    }
+  }
+};
+
+const setFileIds = async (ids: Record<string, number>) => {
+  for (const [key, fileId] of Object.entries(ids)) {
+    if (!fileId) continue;
+
+    const fileData = ensureFileData(key);
+    fileData.data = [];
+    fileData.fileName = `${key} (历史平台文件)`;
+    fileData.fileType = 'binary';
+    fileData.fileUrl = undefined;
+    fileData.fileId = Number(fileId);
+    fileData.dirty = false;
+    updateFileId(key, Number(fileId));
+    await fetchMetadata(key, { file_id: Number(fileId) });
+  }
+};
+
 // 平台文件选择相关
 const platformSelectorOpen = ref(false);
 const currentSelectorKey = ref('');
@@ -654,6 +706,8 @@ defineExpose({
   fillAllExamples,
   getFileContents,
   setFileContents,
+  setFileUrls,
+  setFileIds,
   getFileUrls,
   getFileIds,
 });

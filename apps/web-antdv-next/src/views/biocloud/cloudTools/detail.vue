@@ -6,7 +6,11 @@
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
-import type { AnalysisTool, TaskStatusResponse } from '#/api/analysis-tools';
+import type {
+  AnalysisTool,
+  TaskInputFileRestoreInfo,
+  TaskStatusResponse,
+} from '#/api/analysis-tools';
 
 import { computed, onMounted, ref, toRaw, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -32,6 +36,7 @@ import {
   getAnalysisTool,
   getTaskInputData,
   getTaskStatus,
+  rerunAnalysisTask,
 } from '#/api/analysis-tools';
 
 import DataFileSelector from './components/DataFileSelector.vue';
@@ -474,7 +479,9 @@ const hasResult = ref(false);
 const taskFailed = ref(false);
 const errorMessage = ref('');
 const taskId = ref<string>('');
+const rerunTaskId = ref<number | null>(null);
 const outputDir = ref<string>('');
+const isRerunMode = computed(() => rerunTaskId.value !== null);
 
 // ========== 组件引用 ==========
 const dataFileSelectorRef = ref<InstanceType<typeof DataFileSelector>>();
@@ -583,20 +590,27 @@ const submitAnalysis = async () => {
     // 合并 files 参数：优先使用平台文件 ID
     const filesParam = { ...inputFiles.value, ...fileIds };
 
-    // 调用执行 API
-    const response = await executeAnalysisTool(toolId.value, {
+    const requestData = {
       files: filesParam,
       file_contents: fileContents,
       file_urls: fileUrls,
       params: formParams.value,
-    });
+    };
+
+    const response = isRerunMode.value
+      ? await rerunAnalysisTask(rerunTaskId.value!, requestData)
+      : await executeAnalysisTool(toolId.value, requestData);
 
     taskId.value = String(response.task_id);
     message.destroy();
 
     // 长时间任务：跳转到任务中心
     if (response.is_long_running) {
-      message.success('任务已提交，请在任务中心查看进度');
+      message.success(
+        isRerunMode.value
+          ? '任务已重新提交，请在任务中心查看进度'
+          : '任务已提交，请在任务中心查看进度',
+      );
       analyzing.value = false;
       // 根据当前路由判断跳转目标：用户端跳 /tasks，后台管理端跳 /analysis/tasks
       const tasksPath = route.path.startsWith('/analysis/')
@@ -628,6 +642,7 @@ const submitAnalysis = async () => {
     if (finalStatus.status === 'completed') {
       outputDir.value = finalStatus.output_dir || '';
       hasResult.value = true;
+      rerunTaskId.value = null;
       message.success('分析完成！');
 
       // 回退兼容：如果没有 output_config，使用硬编码图表
@@ -819,6 +834,47 @@ const handleExportParams = () => {
 };
 
 // 从 URL 参数加载已完成任务的结果
+const restoreTaskInputData = async (taskIdFromUrl: number) => {
+  const inputData = await getTaskInputData(taskIdFromUrl);
+  if (inputData.input_params) {
+    formParams.value = inputData.input_params as Record<string, unknown>;
+  }
+
+  setTimeout(() => {
+    if (
+      inputData.file_contents &&
+      Object.keys(inputData.file_contents).length > 0
+    ) {
+      dataFileSelectorRef.value?.setFileContents(inputData.file_contents);
+    }
+
+    const fileUrls: Record<string, string> = {};
+    const fileIds: Record<string, number> = {};
+    const missingFiles: string[] = [];
+
+    for (const [key, info] of Object.entries(
+      inputData.input_files ?? {},
+    ) as Array<[string, TaskInputFileRestoreInfo]>) {
+      if (info.kind === 'example_url' && info.file_url) {
+        fileUrls[key] = info.file_url;
+      } else if (info.kind === 'platform_file' && info.file_id) {
+        fileIds[key] = info.file_id;
+      } else if (!inputData.file_contents?.[key]) {
+        missingFiles.push(info.file_name || key);
+      }
+    }
+
+    dataFileSelectorRef.value?.setFileUrls?.(fileUrls);
+    dataFileSelectorRef.value?.setFileIds?.(fileIds);
+
+    if (missingFiles.length > 0) {
+      message.warning(
+        `以下历史输入文件无法自动恢复，请重新选择：${missingFiles.join('、')}`,
+      );
+    }
+  }, 100);
+};
+
 const loadTaskResult = async (taskIdFromUrl: number) => {
   try {
     const status = await getTaskStatus(taskIdFromUrl);
@@ -830,21 +886,7 @@ const loadTaskResult = async (taskIdFromUrl: number) => {
 
       // 加载任务输入数据（CSV 内容和参数）
       try {
-        const inputData = await getTaskInputData(taskIdFromUrl);
-        // 回填参数
-        if (inputData.input_params) {
-          formParams.value = inputData.input_params as Record<string, unknown>;
-        }
-        // 回填表格数据
-        if (
-          inputData.file_contents &&
-          Object.keys(inputData.file_contents).length > 0
-        ) {
-          // 使用 nextTick 确保 DataFileSelector 已挂载
-          setTimeout(() => {
-            dataFileSelectorRef.value?.setFileContents(inputData.file_contents);
-          }, 100);
-        }
+        await restoreTaskInputData(taskIdFromUrl);
       } catch (error) {
         console.error('加载任务输入数据失败:', error);
       }
@@ -860,14 +902,40 @@ const loadTaskResult = async (taskIdFromUrl: number) => {
   }
 };
 
+const loadTaskForRerun = async (taskIdFromUrl: number) => {
+  try {
+    const status = await getTaskStatus(taskIdFromUrl);
+    if (status.status !== 'failed') {
+      message.warning('只有失败任务可以调整参数并重跑');
+      return;
+    }
+
+    rerunTaskId.value = taskIdFromUrl;
+    taskId.value = String(taskIdFromUrl);
+    hasResult.value = false;
+    taskFailed.value = false;
+    errorMessage.value = '';
+    showGuide.value = false;
+    activeTab.value = 'params';
+    await restoreTaskInputData(taskIdFromUrl);
+    message.success('已载入失败任务参数，请调整后重新提交');
+  } catch (error) {
+    console.error('加载失败任务输入数据失败:', error);
+    message.error('加载失败任务输入数据失败');
+  }
+};
+
 onMounted(async () => {
   await fetchTool();
 
   // 检查 URL 中是否有 task_id 参数
   const taskIdParam = route.query.task_id;
+  const rerunTaskIdParam = route.query.rerun_task_id;
   const taskNameParam = route.query.task_name;
 
-  if (taskIdParam) {
+  if (rerunTaskIdParam) {
+    await loadTaskForRerun(Number(rerunTaskIdParam));
+  } else if (taskIdParam) {
     await loadTaskResult(Number(taskIdParam));
 
     // 如果有任务名称，使用任务名称更新标签
@@ -1058,6 +1126,10 @@ onMounted(async () => {
 
         <!-- Right: Config Panel (Fixed Width) -->
         <div class="control-panel">
+          <div v-if="isRerunMode" class="rerun-notice">
+            <Icon icon="mdi:refresh" />
+            <span>已载入失败任务参数，修改后会在原任务上重新运行</span>
+          </div>
           <div class="panel-scroll-content">
             <Tabs v-model:active-key="activeTab" class="config-tabs">
               <!-- Tab 1: Data Files -->
@@ -1229,6 +1301,19 @@ onMounted(async () => {
   box-shadow:
     0 4px 6px -1px rgb(0 0 0 / 5%),
     0 2px 4px -2px rgb(0 0 0 / 5%);
+}
+
+.rerun-notice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b45309;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  border-radius: 16px 16px 0 0;
 }
 
 .panel-scroll-content {
