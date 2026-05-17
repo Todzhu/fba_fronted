@@ -66,6 +66,15 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'pipeline/create',
+        name: 'PipelineCreate',
+        component: () => import('#/views/biocloud/pipeline/PipelineCreate.vue'),
+        meta: {
+          title: '创建云流程 - BioCloud',
+          ignoreAccess: true,
+        },
+      },
+      {
         path: 'pipeline/:id',
         name: 'PipelineDetail',
         component: () => import('#/views/biocloud/pipeline/PipelineDetail.vue'),
