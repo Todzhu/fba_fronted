@@ -24,4 +24,16 @@ describe('pipeline list constants extraction', () => {
     expect(constantsSource).toContain('export const SPECIES_OPTIONS');
     expect(constantsSource).toContain('Homo sapiens');
   });
+
+  it('links the single-cell card to the dedicated create page', () => {
+    expect(listSource).toContain("router.push('/pipeline/create?type=scrna')");
+    expect(listSource).not.toContain('showCreateModal');
+    expect(listSource).not.toContain('createPipeline({');
+  });
+
+  it('keeps the home page focused on flow capability and expected outputs', () => {
+    expect(listSource).toContain('标准 6 步分析流程');
+    expect(listSource).toContain('核心产出');
+    expect(listSource).toContain('创建分析项目');
+  });
 });
