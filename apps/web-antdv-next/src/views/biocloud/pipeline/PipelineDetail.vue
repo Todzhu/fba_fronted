@@ -53,6 +53,7 @@ import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
 import { TISSUE_TYPE_OPTIONS } from './types/tissueMarkerPresets';
 import { STEP_HELP_CONTENT } from './types/stepHelpContent';
 import { getCellTypesForTissue } from './types/cellTypeMarkers';
+import PipelineStepper from './components/PipelineStepper.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -796,19 +797,6 @@ watch([activeStepIndex, clusterList], () => {
   }
 }, { immediate: true });
 
-// 步骤是否可点击
-const isStepClickable = (idx: number) => {
-  if (!pipeline.value) return false;
-  // 方式1：current_step 已推进到该步骤或之后
-  if (idx <= pipeline.value.currentStep) return true;
-  // 方式2：前置步骤已经完成（兼容旧数据 current_step 未正确更新的情况）
-  if (idx > 0) {
-    const prevStep = pipeline.value.steps[idx - 1];
-    if (prevStep && prevStep.status === 'completed') return true;
-  }
-  return false;
-};
-
 // 运行当前步骤（调用后端 API，轮询状态）
 // 日志轮询定时器
 let logPollTimer: null | ReturnType<typeof setInterval> = null;
@@ -933,23 +921,6 @@ const openLogDrawer = async () => {
     } catch {}
   }
   showLogDrawer.value = true;
-};
-
-// 步骤样式
-const getStepClass = (step: StepConfig, idx: number) => {
-  const isActive = idx === activeStepIndex.value;
-  if (step.status === 'completed') {
-    return isActive
-      ? 'border-emerald-500 bg-emerald-50'
-      : 'border-transparent hover:bg-slate-50';
-  }
-  if (step.status === 'running') {
-    return 'border-blue-500 bg-blue-50';
-  }
-  if (isActive) {
-    return 'border-blue-500 bg-blue-50/50';
-  }
-  return 'border-transparent opacity-60';
 };
 
 // 统计标签中文映射
@@ -1203,89 +1174,15 @@ onUnmounted(() => {
       v-else-if="pipeline"
       class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8"
     >
-      <div class="flex gap-6">
-        <!-- 左侧：6 步导航 -->
-        <div class="w-72 flex-shrink-0">
-          <div
-            class="overflow-hidden rounded-xl border border-slate-200 bg-white"
-          >
-            <div class="px-5 py-4">
-              <h3 class="text-base font-bold text-slate-900">分析步骤</h3>
-              <p class="mt-0.5 text-xs font-medium text-slate-500">
-                {{
-                  pipeline.steps.filter((s) => s.status === 'completed').length
-                }}/{{ pipeline.steps.length }}
-                已完成
-              </p>
-            </div>
+      <div class="space-y-5">
+        <PipelineStepper
+          v-model:active-step-index="activeStepIndex"
+          :current-step="pipeline.currentStep"
+          :steps="pipeline.steps"
+        />
 
-            <div class="space-y-0.5 px-3 pb-4">
-              <button
-                v-for="(step, idx) in pipeline.steps"
-                :key="idx"
-                @click="isStepClickable(idx) && (activeStepIndex = idx)"
-                class="flex w-full items-center gap-3 rounded-lg border-l-[3px] px-3 py-3.5 text-left transition-all"
-                :class="[
-                  getStepClass(step, idx),
-                  isStepClickable(idx)
-                    ? 'cursor-pointer'
-                    : 'cursor-not-allowed',
-                ]"
-              >
-                <div
-                  class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg"
-                  :class="{
-                    'bg-emerald-100 text-emerald-600':
-                      step.status === 'completed',
-                    'bg-blue-100 text-blue-600':
-                      step.status === 'running' ||
-                      (step.status === 'pending' && idx === activeStepIndex),
-                    'bg-slate-100 text-slate-400':
-                      step.status === 'pending' && idx !== activeStepIndex,
-                    'bg-red-100 text-red-600': step.status === 'error',
-                  }"
-                >
-                  <Check v-if="step.status === 'completed'" class="h-4 w-4" />
-                  <Loader2
-                    v-else-if="step.status === 'running'"
-                    class="h-4 w-4 animate-spin"
-                  />
-                  <component
-                    v-else
-                    :is="stepIcons[step.stepType] || Database"
-                    class="h-4 w-4"
-                  />
-                </div>
-
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-xs font-bold text-slate-400">
-                      {{ idx + 1 }}.
-                    </span>
-                    <span
-                      class="truncate text-base font-semibold"
-                      :class="
-                        idx === activeStepIndex
-                          ? 'text-slate-900'
-                          : 'text-slate-700'
-                      "
-                    >
-                      {{ STEP_LABELS[step.stepType] || step.stepType }}
-                    </span>
-                  </div>
-                </div>
-
-                <ChevronRight
-                  v-if="idx === activeStepIndex"
-                  class="h-4 w-4 flex-shrink-0 text-slate-400"
-                />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 右侧：步骤详情 -->
-        <div class="min-w-0 flex-1 space-y-4">
+        <!-- 步骤详情 -->
+        <div class="min-w-0 space-y-4">
           <template v-if="activeStep">
             <!-- 步骤头部卡片 -->
             <div class="rounded-t-xl rounded-b-none border border-slate-200 bg-white">
@@ -2743,5 +2640,3 @@ onUnmounted(() => {
   transform: scale(0.9);
 }
 </style>
-
-
