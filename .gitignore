@@ -73,3 +73,4 @@ vben-admin.code-workspace
 .shared
 
 .pnpm-store
+.worktrees/
