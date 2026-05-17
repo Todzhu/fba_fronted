@@ -83,6 +83,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 1,
       step: 0.01,
       group: '细胞过滤',
+      advanced: true,
     },
     {
       key: 'expected_doublet_rate',
@@ -95,6 +96,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 30,
       step: 0.5,
       group: '细胞过滤',
+      advanced: true,
     },
     {
       key: 'threshold',
@@ -107,6 +109,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 0.9,
       step: 0.05,
       group: '细胞过滤',
+      advanced: true,
     },
   ],
 
@@ -142,6 +145,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       controlType: 'switch',
       defaultValue: true,
       group: '预处理',
+      advanced: true,
     },
     // --- 降维 ---
     {
@@ -167,6 +171,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 200,
       step: 5,
       group: '降维聚类',
+      advanced: true,
     },
     {
       key: 'n_neighbors',
@@ -178,6 +183,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 100,
       step: 1,
       group: '降维聚类',
+      advanced: true,
     },
     {
       key: 'umap_min_dist',
@@ -189,6 +195,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 1,
       step: 0.05,
       group: '降维聚类',
+      advanced: true,
     },
     // --- 聚类 ---
     {
@@ -213,6 +220,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
         { label: 'Louvain', value: 'louvain' },
       ],
       group: '降维聚类',
+      advanced: true,
     },
   ],
 
@@ -251,6 +259,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 0.1,
       step: 0.005,
       group: 'Marker 基因',
+      advanced: true,
     },
     {
       key: 'pct',
@@ -262,6 +271,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 1,
       step: 0.05,
       group: 'Marker 基因',
+      advanced: true,
     },
   ],
 
@@ -335,6 +345,7 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
       max: 50,
       step: 1,
       group: '重聚类',
+      advanced: true,
     },
   ],
 };

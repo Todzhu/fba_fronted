@@ -63,6 +63,7 @@ const loading = ref(false);
 const activeStepIndex = ref(0);
 const running = ref(false);
 const activeContentTab = ref<'params' | 'results'>('params');
+const showAdvancedParams = ref(false);
 
 // ========== 图片放大预览 ==========
 const lightboxUrl = ref('');
@@ -281,11 +282,18 @@ const currentStepParamConfigs = computed<ParamFieldConfig[]>(() => {
   return configs;
 });
 
+const basicParamConfigs = computed(() => {
+  return currentStepParamConfigs.value.filter((cfg) => !cfg.advanced);
+});
+
+const advancedParamConfigs = computed(() => {
+  return currentStepParamConfigs.value.filter((cfg) => cfg.advanced);
+});
 
 // 当前步骤参数的分组列表（去重，保留顺序）
 const paramGroups = computed<string[]>(() => {
   const groups: string[] = [];
-  for (const cfg of currentStepParamConfigs.value) {
+  for (const cfg of basicParamConfigs.value) {
     if (cfg.group && !groups.includes(cfg.group)) {
       groups.push(cfg.group);
     }
@@ -295,12 +303,12 @@ const paramGroups = computed<string[]>(() => {
 
 // 按分组获取参数
 const getParamsByGroup = (group: string) => {
-  return currentStepParamConfigs.value.filter((cfg) => cfg.group === group);
+  return basicParamConfigs.value.filter((cfg) => cfg.group === group);
 };
 
 // 未分组的参数
 const ungroupedParams = computed(() => {
-  return currentStepParamConfigs.value.filter((cfg) => !cfg.group);
+  return basicParamConfigs.value.filter((cfg) => !cfg.group);
 });
 
 // 设置参数值
@@ -1302,15 +1310,8 @@ onUnmounted(() => {
             </div>
             </div>
 
-            <StepResultPanel
-              :get-chart-url="getChartUrl"
-              :logs="currentStepLogs"
-              :step="activeStep"
-              :step-label="STEP_LABELS[activeStep.stepType] || activeStep.stepType"
-              @open-logs="openLogDrawer"
-              @open-preview="openLightbox"
-            />
-
+            <div class="step-workspace-grid grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)] xl:items-start">
+              <div class="min-w-0 space-y-4">
             <!-- ========== 数据读取步骤 ========== -->
             <template v-if="isDataLoadStep">
               <div
@@ -1876,7 +1877,7 @@ onUnmounted(() => {
                   <!-- 无分组时：同样的卡片 grid -->
                   <template v-else>
                     <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
-                      <template v-for="cfg in currentStepParamConfigs" :key="cfg.key">
+                      <template v-for="cfg in basicParamConfigs" :key="cfg.key">
                         <div class="space-y-1">
                           <div class="mb-1.5 flex items-center gap-1">
                             <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
@@ -1917,6 +1918,67 @@ onUnmounted(() => {
                       </template>
                     </div>
                   </template>
+
+                  <div
+                    v-if="advancedParamConfigs.length > 0"
+                    class="mt-6 border-t border-slate-100 pt-4"
+                  >
+                    <button
+                      type="button"
+                      class="flex w-full items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                      @click="showAdvancedParams = !showAdvancedParams"
+                    >
+                      <span>高级参数</span>
+                      <ChevronRight
+                        class="h-4 w-4 transition-transform"
+                        :class="showAdvancedParams ? 'rotate-90' : ''"
+                      />
+                    </button>
+
+                    <div
+                      v-if="showAdvancedParams"
+                      class="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3"
+                    >
+                      <template v-for="cfg in advancedParamConfigs" :key="cfg.key">
+                        <div class="space-y-1">
+                          <div class="mb-1.5 flex items-center gap-1">
+                            <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
+                            <div class="group relative">
+                              <span class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold text-slate-400 transition-colors group-hover:text-blue-500">?</span>
+                              <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                {{ cfg.tooltip }}
+                                <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                              </div>
+                            </div>
+                          </div>
+                          <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
+                            <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
+                            <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                            <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
+                          </div>
+                          <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                            <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                          </select>
+                          <button
+                            v-else-if="cfg.controlType === 'switch'"
+                            type="button"
+                            @click="setParam(cfg.key, !activeStep.params[cfg.key])"
+                            class="relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full transition-colors"
+                            :class="activeStep.params[cfg.key] ? 'bg-blue-600' : 'bg-slate-300'"
+                          >
+                            <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" :class="activeStep.params[cfg.key] ? 'translate-x-6' : 'translate-x-1'"></span>
+                          </button>
+                          <input
+                            v-else-if="cfg.controlType === 'text'"
+                            :value="activeStep.params[cfg.key]"
+                            @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
+                            type="text"
+                            class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          />
+                        </div>
+                      </template>
+                    </div>
+                  </div>
 
                 </div>
 
@@ -2249,6 +2311,18 @@ onUnmounted(() => {
               </div>
               </div>
             </template>
+              </div>
+              <aside class="min-w-0 xl:sticky xl:top-24">
+                <StepResultPanel
+                  :get-chart-url="getChartUrl"
+                  :logs="currentStepLogs"
+                  :step="activeStep"
+                  :step-label="STEP_LABELS[activeStep.stepType] || activeStep.stepType"
+                  @open-logs="openLogDrawer"
+                  @open-preview="openLightbox"
+                />
+              </aside>
+            </div>
           </template>
         </div>
       </div>

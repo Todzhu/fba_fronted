@@ -34,4 +34,12 @@ describe('pipeline detail workspace layout', () => {
     expect(detailSource).toContain('@open-logs="openLogDrawer"');
     expect(detailSource).toContain('@open-preview="openLightbox"');
   });
+
+  it('uses a two-column step workspace with folded advanced parameters', () => {
+    expect(detailSource).toContain('step-workspace-grid');
+    expect(detailSource).toContain('basicParamConfigs');
+    expect(detailSource).toContain('advancedParamConfigs');
+    expect(detailSource).toContain('showAdvancedParams');
+    expect(detailSource).toContain('高级参数');
+  });
 });
