@@ -23,10 +23,8 @@ import {
   Layers,
   Loader2,
   Map,
-  Pencil,
   Play,
   ScatterChart,
-  Table2,
   Tag,
   Users,
   X,
@@ -54,6 +52,7 @@ import { TISSUE_TYPE_OPTIONS } from './types/tissueMarkerPresets';
 import { STEP_HELP_CONTENT } from './types/stepHelpContent';
 import { getCellTypesForTissue } from './types/cellTypeMarkers';
 import PipelineStepper from './components/PipelineStepper.vue';
+import SampleGroupTable from './components/SampleGroupTable.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -1304,108 +1303,10 @@ onUnmounted(() => {
 
             <!-- ========== 数据读取步骤 ========== -->
             <template v-if="isDataLoadStep">
-
-              <!-- 样本列表卡片（视觉上与步骤头合并） -->
-              <div class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white">
-                <!-- 加载中 -->
-                <div
-                  v-if="loadingSamples"
-                  class="flex items-center justify-center py-12"
-                >
-                  <Loader2 class="h-6 w-6 animate-spin text-blue-500" />
-                  <span class="ml-2 text-sm text-slate-500"
-                    >正在扫描样本...</span
-                  >
-                </div>
-
-                <!-- 样本表格 -->
-                <div v-else-if="sampleRows.length > 0">
-                  <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
-                    <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
-                      <Table2 class="h-5 w-5 text-blue-500" />
-                      样本列表
-                      <span class="ml-2 text-sm font-normal text-slate-400">
-                        共 {{ sampleRows.length }} 个样本
-                      </span>
-                    </h3>
-                  </div>
-
-                  <!-- 表格 -->
-                  <div class="px-8 py-4">
-                  <div
-                    class="overflow-hidden rounded-lg border border-slate-200"
-                  >
-                    <table class="w-full">
-                      <thead>
-                        <tr class="bg-slate-50">
-                          <th
-                            class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600"
-                          >
-                            Sample
-                          </th>
-                          <th
-                            class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600"
-                          >
-                            <span class="flex items-center gap-1">
-                              Sample Name
-                              <Pencil class="h-3 w-3 text-slate-400" />
-                            </span>
-                          </th>
-                          <th
-                            class="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-600"
-                          >
-                            <span class="flex items-center gap-1">
-                              Group
-                              <Pencil class="h-3 w-3 text-slate-400" />
-                            </span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody class="divide-y divide-slate-100">
-                        <tr
-                          v-for="row in sampleRows"
-                          :key="row.sample"
-                          class="transition-colors hover:bg-slate-50/50"
-                        >
-                          <!-- Sample（只读） -->
-                          <td class="px-5 py-3">
-                            <span
-                              class="flex items-center gap-2 text-sm font-medium text-slate-700"
-                            >
-                              <Folder class="h-3.5 w-3.5 text-amber-500" />
-                              {{ row.sample }}
-                            </span>
-                          </td>
-                          <!-- Sample Name（可编辑） -->
-                          <td class="px-5 py-2">
-                            <input
-                              v-model="row.sampleName"
-                              type="text"
-                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              @input="saveSampleDict"
-                            />
-                          </td>
-                          <!-- Group（可编辑） -->
-                          <td class="px-5 py-2">
-                            <input
-                              v-model="row.group"
-                              type="text"
-                              class="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-800 transition-colors focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              @input="saveSampleDict"
-                            />
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  </div>
-                </div>
-
-                <!-- 无数据路径 -->
-                <div
-                  v-else-if="!pipeline.dataPath"
-                  class="flex flex-col items-center justify-center py-12"
-                >
+              <div
+                v-if="!pipeline.dataPath"
+                class="!-mt-px flex flex-col items-center justify-center rounded-b-xl rounded-t-none border border-slate-200 bg-white py-12"
+              >
                   <div
                     class="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100"
                   >
@@ -1415,19 +1316,13 @@ onUnmounted(() => {
                   <p class="mt-1 text-sm text-slate-400">
                     请在创建流程时选择数据文件夹
                   </p>
-                </div>
-
-                <!-- 有路径但无样本 -->
-                <div
-                  v-else
-                  class="flex flex-col items-center justify-center py-12"
-                >
-                  <p class="text-slate-500">所选文件夹下没有找到样本数据</p>
-                  <p class="mt-1 text-sm text-slate-400">
-                    路径：{{ pipeline.dataPath }}
-                  </p>
-                </div>
               </div>
+              <SampleGroupTable
+                v-else
+                :loading="loadingSamples"
+                :rows="sampleRows"
+                @change="saveSampleDict"
+              />
 
               <!-- 运行结果卡片 -->
               <div

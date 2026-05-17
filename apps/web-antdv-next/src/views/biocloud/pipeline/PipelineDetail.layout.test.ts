@@ -23,4 +23,9 @@ describe('pipeline detail workspace layout', () => {
     expect(stepperSource).toContain('STATUS_STYLES');
     expect(stepperSource).toContain('completedCount');
   });
+
+  it('renders the data-load sample table through a focused component', () => {
+    expect(detailSource).toContain('SampleGroupTable');
+    expect(detailSource).toContain('@change="saveSampleDict"');
+  });
 });
