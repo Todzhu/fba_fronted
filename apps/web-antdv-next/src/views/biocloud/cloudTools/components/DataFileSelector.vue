@@ -145,6 +145,28 @@ const allBinaryMode = computed(() => {
   return result;
 });
 
+const isRoeInput = computed(() => {
+  const examples = props.exampleData ?? [];
+  const files = props.schema?.files ?? [];
+
+  return (
+    examples.some((example) => /\/roe\//i.test(example.url)) ||
+    files.some((file) =>
+      /roe|ro\/e|metadata/i.test(
+        `${file.key} ${file.label ?? ''} ${file.description ?? ''}`,
+      ),
+    )
+  );
+});
+
+const footerHintText = computed(() => {
+  if (isRoeInput.value) {
+    return 'ROE 分析使用单细胞 metadata 表作为输入：每行一个细胞，需包含细胞类型列和分组列；支持 CSV、TSV、TXT、XLS、XLSX，导入后请在参数页选择对应列名。';
+  }
+
+  return '在线表格适合预览和少量编辑；较大的表格文件导入后可能会卡顿，建议先确认表头和关键列，再进入下一步。';
+});
+
 // Metadata 汇总信息
 interface MetadataInfo {
   columns: string[];
@@ -611,7 +633,16 @@ const handlePlatformFileSelect = async (file: any) => {
 
   // 根据后缀判断类型
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const binaryExts = ['rds', 'rdata', 'rda', 'h5ad', 'h5', 'loom', 'zarr', 'hdf5'];
+  const binaryExts = [
+    'rds',
+    'rdata',
+    'rda',
+    'h5ad',
+    'h5',
+    'loom',
+    'zarr',
+    'hdf5',
+  ];
   if (binaryExts.includes(ext)) {
     fileDataMap.value[key]!.fileType = 'binary';
   } else {
@@ -795,19 +826,14 @@ defineExpose({
 
       <!-- Metadata 汇总表格 -->
       <Spin :spinning="metadataLoading" tip="正在解析 metadata...">
-        <div
-          v-if="currentMetadataSummary.length"
-          class="metadata-section"
-        >
+        <div v-if="currentMetadataSummary.length" class="metadata-section">
           <div class="metadata-header">
             <Icon icon="mdi:table-eye" style="font-size: 16px" />
             <span>Metadata 概览</span>
             <Tag color="blue">
               {{ currentMetadata?.n_cells?.toLocaleString() }} cells
             </Tag>
-            <Tag>
-              {{ currentMetadata?.columns?.length }} columns
-            </Tag>
+            <Tag> {{ currentMetadata?.columns?.length }} columns </Tag>
           </div>
           <Table
             :columns="metadataColumns"
@@ -820,7 +846,13 @@ defineExpose({
             <template #bodyCell="{ column: col, record }">
               <template v-if="col.dataIndex === 'type'">
                 <Tag
-                  :color="record.type === 'numeric' ? 'green' : record.type === 'categorical' ? 'blue' : 'orange'"
+                  :color="
+                    record.type === 'numeric'
+                      ? 'green'
+                      : record.type === 'categorical'
+                        ? 'blue'
+                        : 'orange'
+                  "
                 >
                   {{ record.type }}
                 </Tag>
@@ -828,7 +860,8 @@ defineExpose({
               <template v-else-if="col.dataIndex === 'detail'">
                 <template v-if="record.type === 'numeric'">
                   <span class="detail-text">
-                    min: {{ record.min }} / max: {{ record.max }} / mean: {{ record.mean }}
+                    min: {{ record.min }} / max: {{ record.max }} / mean:
+                    {{ record.mean }}
                   </span>
                 </template>
                 <template v-else-if="record.values">
@@ -964,9 +997,7 @@ defineExpose({
     <div class="footer">
       <div v-if="!allBinaryMode" class="hint">
         <Icon icon="mdi:information-outline" class="hint-icon" />
-        <span>
-          对于较大的数据文件，在线编辑可能会导致卡顿，请切换到文件模式；在文件模式下，表格不可编辑且仅展示1000行；超过100M的文件请先上传到云盘
-        </span>
+        <span>{{ footerHintText }}</span>
       </div>
       <div v-else></div>
       <Button type="primary" class="btn-next" @click="goNext">下一步</Button>
@@ -1197,7 +1228,9 @@ defineExpose({
   border: 1px solid #f1f5f9;
   background: #ffffff;
   border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.02),
+    0 2px 4px -2px rgba(0, 0, 0, 0.02);
   overflow: hidden;
 }
 
