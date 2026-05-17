@@ -53,6 +53,7 @@ import { STEP_HELP_CONTENT } from './types/stepHelpContent';
 import { getCellTypesForTissue } from './types/cellTypeMarkers';
 import PipelineStepper from './components/PipelineStepper.vue';
 import SampleGroupTable from './components/SampleGroupTable.vue';
+import StepResultPanel from './components/StepResultPanel.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -1300,6 +1301,15 @@ onUnmounted(() => {
               </div>
             </div>
             </div>
+
+            <StepResultPanel
+              :get-chart-url="getChartUrl"
+              :logs="currentStepLogs"
+              :step="activeStep"
+              :step-label="STEP_LABELS[activeStep.stepType] || activeStep.stepType"
+              @open-logs="openLogDrawer"
+              @open-preview="openLightbox"
+            />
 
             <!-- ========== 数据读取步骤 ========== -->
             <template v-if="isDataLoadStep">

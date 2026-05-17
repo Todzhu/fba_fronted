@@ -28,4 +28,10 @@ describe('pipeline detail workspace layout', () => {
     expect(detailSource).toContain('SampleGroupTable');
     expect(detailSource).toContain('@change="saveSampleDict"');
   });
+
+  it('renders the shared step result panel in the active step workspace', () => {
+    expect(detailSource).toContain('StepResultPanel');
+    expect(detailSource).toContain('@open-logs="openLogDrawer"');
+    expect(detailSource).toContain('@open-preview="openLightbox"');
+  });
 });
