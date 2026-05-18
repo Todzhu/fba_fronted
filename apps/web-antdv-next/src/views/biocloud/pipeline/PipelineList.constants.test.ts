@@ -36,4 +36,9 @@ describe('pipeline list constants extraction', () => {
     expect(listSource).toContain('核心产出');
     expect(listSource).toContain('创建分析项目');
   });
+
+  it('keeps a single create-project call to action on the page', () => {
+    expect(listSource.match(/创建分析项目/g)).toHaveLength(1);
+    expect(listSource.match(/@click="handleCreateProject"/g)).toHaveLength(1);
+  });
 });

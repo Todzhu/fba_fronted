@@ -51,15 +51,15 @@ watch(isLoggedIn, (loggedIn) => {
 <template>
   <div class="min-h-screen bg-slate-50 pb-20">
     <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <section class="mb-6 rounded-xl border border-slate-200 bg-white px-6 py-5">
+      <section class="mb-6 flex items-center justify-between rounded-2xl bg-white border border-slate-200/80 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] px-6 py-4">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div class="flex items-center gap-4">
-            <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+          <div class="flex items-center gap-5">
+            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
               <FlaskConical class="h-6 w-6" />
             </div>
             <div>
-              <h1 class="text-xl font-bold tracking-tight text-slate-950">云流程</h1>
-              <p class="mt-1 text-sm text-slate-500">
+              <h1 class="text-lg font-bold tracking-tight text-slate-900">云流程</h1>
+              <p class="mt-0.5 text-[13px] font-medium text-slate-500">
                 以标准分析流程组织数据、参数、运行状态和结果文件。
               </p>
             </div>
@@ -111,14 +111,6 @@ watch(isLoggedIn, (loggedIn) => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-700"
-                @click="handleCreateProject"
-              >
-                创建分析项目
-                <ArrowRight class="h-4 w-4" />
-              </button>
             </div>
           </div>
 
