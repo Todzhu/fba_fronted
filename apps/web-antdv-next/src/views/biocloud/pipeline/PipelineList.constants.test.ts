@@ -10,6 +10,14 @@ const constantsSource = readFileSync(
   resolve(sourceDir, 'constants.ts'),
   'utf8',
 );
+const pageHeaderSource = listSource.slice(
+  listSource.indexOf('<section class="mb-6'),
+  listSource.indexOf('<section class="grid'),
+);
+const recommendedCardHeaderSource = listSource.slice(
+  listSource.indexOf('<article'),
+  listSource.indexOf('<div class="grid gap-0'),
+);
 
 describe('pipeline list constants extraction', () => {
   it('uses shared pipeline type metadata from constants.ts', () => {
@@ -48,5 +56,11 @@ describe('pipeline list constants extraction', () => {
   it('keeps a single create-project call to action on the page', () => {
     expect(listSource.match(/创建分析项目/g)).toHaveLength(1);
     expect(listSource.match(/@click="handleCreateProject"/g)).toHaveLength(1);
+  });
+
+  it('places the create-project action inside the recommended pipeline card header', () => {
+    expect(pageHeaderSource).not.toContain('创建分析项目');
+    expect(recommendedCardHeaderSource).toContain('创建分析项目');
+    expect(recommendedCardHeaderSource).toContain('@click="handleCreateProject"');
   });
 });
