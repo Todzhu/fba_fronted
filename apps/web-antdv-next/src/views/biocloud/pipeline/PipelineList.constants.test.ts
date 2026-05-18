@@ -64,4 +64,9 @@ describe('pipeline list constants extraction', () => {
     expect(recommendedCardHeaderSource).toContain('新建分析');
     expect(recommendedCardHeaderSource).toContain('@click="handleCreateProject"');
   });
+
+  it('keeps the create-project action label on one line', () => {
+    expect(recommendedCardHeaderSource).toContain('whitespace-nowrap');
+    expect(recommendedCardHeaderSource).toContain('<ArrowRight class="h-4 w-4 shrink-0" />');
+  });
 });

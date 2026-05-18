@@ -102,11 +102,11 @@ watch(isLoggedIn, (loggedIn) => {
 
               <button
                 type="button"
-                class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-700 sm:w-auto xl:mt-1"
+                class="inline-flex w-full cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-700 sm:w-auto xl:mt-1"
                 @click="handleCreateProject"
               >
                 新建分析
-                <ArrowRight class="h-4 w-4" />
+                <ArrowRight class="h-4 w-4 shrink-0" />
               </button>
             </div>
           </div>
