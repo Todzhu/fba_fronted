@@ -31,7 +31,7 @@ const scrnaPipeline = PIPELINE_TYPES.find((item) => item.id === 'scrna') ?? PIPE
 const upcomingPipelines = PIPELINE_TYPES.filter((item) => item.id !== 'scrna');
 
 const coreOutputs = ['QC 指标图', 'UMAP / t-SNE', 'Marker 基因表', '细胞注释 h5ad'];
-const inputFormats = ['10x Genomics', 'Smart-seq2', 'h5 / h5ad', '多样本目录'];
+const inputFormats = ['10x Genomics', 'DNBelab C4', 'multi samples'];
 
 const handleCreateProject = () => {
   if (!isLoggedIn.value) {

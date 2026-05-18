@@ -10,14 +10,14 @@ export const PIPELINE_TYPES = [
     fullDescription:
       '单细胞RNA测序（Single-cell RNA-sequencing, scRNA-seq）是一种在单个细胞水平上进行RNA高通量测序和解析的前沿技术。这项技术使得我们能够探索不同细胞之间的基因表达差异，即使在看起来相同的细胞群中，个体细胞的转录组也存在明显的差异。\n\n与传统的Bulk RNA测序不同，单细胞RNA测序可以避免因细胞混合而导致的平均化，揭示单个细胞的独特基因表达特征。通过单细胞测序，我们不仅可以获得单个细胞的遗传信息，还能够深入了解细胞间的异质性。',
     features: [
-      '支持 10x Genomics、Smart-seq2 等主流平台数据',
+      '支持 10x Genomics、DNBelab C4 等主流平台数据',
       '自动化质控过滤，智能阈值推荐',
       '多种标准化和批次校正方法',
       '高效降维 (PCA/UMAP/t-SNE) 与聚类分析',
       '基于参考数据库的自动细胞注释',
       '交互式可视化结果展示',
     ],
-    tags: ['scRNA-seq', '10x Genomics', 'Smart-seq2'],
+    tags: ['scRNA-seq', '10x Genomics', 'DNBelab C4'],
     icon: Microscope,
     gradientFrom: '#3B82F6',
     gradientTo: '#1D4ED8',
