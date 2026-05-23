@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 
+// Public BioCloud client routes live here. These routes use ClientLayout and may show login prompts inside pages.
 const routes: RouteRecordRaw[] = [
   {
     path: '/',

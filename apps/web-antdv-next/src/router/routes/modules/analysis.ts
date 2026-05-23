@@ -1,5 +1,6 @@
 import type { RouteRecordRaw } from 'vue-router';
 
+// Admin analysis routes live here. These routes use the Vben admin layout and participate in admin menu/access behavior.
 const routes: RouteRecordRaw[] = [
   {
     meta: {
