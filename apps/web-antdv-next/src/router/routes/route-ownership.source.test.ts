@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const readRouteFile = (path: string) =>
   readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+
+const routeTargetExists = (path: string) =>
+  existsSync(fileURLToPath(new URL(path, import.meta.url)));
 
 const expectRoutePath = (source: string, path: string) => {
   const escapedPath = path.replaceAll('/', String.raw`\/`);
@@ -31,6 +34,16 @@ describe('frontend route ownership', () => {
     const source = readRouteFile('./modules/system.ts');
 
     expectRoutePath(source, '/system/tutorials');
+  });
+
+  it('keeps tutorial route component imports resolvable', () => {
+    for (const path of [
+      '../../views/biocloud/tutorials/TutorialList.vue',
+      '../../views/biocloud/tutorials/TutorialDetail.vue',
+      '../../views/system/tutorials/index.vue',
+    ]) {
+      expect(routeTargetExists(path)).toBe(true);
+    }
   });
 
   it('keeps admin analysis routes in the analysis route module', () => {
