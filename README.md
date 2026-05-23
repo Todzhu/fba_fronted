@@ -4,7 +4,7 @@
 
 基于 Vue Vben Admin 的生物信息分析云平台前端
 
-简体中文 | [English](./README.en.md)
+简体中文
 
 [![Vue](https://img.shields.io/badge/Vue-3.5%2B-4FC08D)](https://vuejs.org/) [![Ant Design Vue](https://img.shields.io/badge/Ant%20Design%20Vue-4.x-1890ff)](https://antdv.com/) [![Vite](https://img.shields.io/badge/Vite-6.x-646CFF)](https://vitejs.dev/) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)](https://www.typescriptlang.org/) [![pnpm](https://img.shields.io/badge/pnpm-10%2B-F69220)](https://pnpm.io/)
 
@@ -40,8 +40,7 @@ fronted/
 │       │   ├── router/     # 路由配置
 │       │   ├── store/      # Pinia 状态管理
 │       │   └── views/      # 页面视图
-│       │       ├── cloudTools/   # 云端分析工具
-│       │       ├── myData/       # 我的数据
+│       │       ├── biocloud/     # BioCloud 业务页面
 │       │       ├── dashboard/    # 仪表盘
 │       │       ├── system/       # 系统管理
 │       │       └── ...
@@ -58,11 +57,11 @@ fronted/
 
 | 模块          | 说明                                        |
 | ------------- | ------------------------------------------- |
-| `cloudTools/` | 云端分析工具 - 动态表单、结果展示、任务管理 |
-| `myData/`     | 我的数据 - 文件上传、数据管理               |
-| `myTasks/`    | 我的任务 - 任务列表、状态追踪               |
-| `scPipeline/` | 单细胞流程 - 可视化流程编排                 |
-| `system/`     | 系统管理 - 用户、角色、菜单、工具配置等     |
+| `biocloud/cloudTools/` | 云端分析工具 - 动态表单、结果展示、任务管理 |
+| `biocloud/myData/`     | 我的数据 - 文件上传、数据管理               |
+| `biocloud/task/`       | 我的任务 - 任务列表、状态追踪               |
+| `biocloud/pipeline/`   | 单细胞流程 - 可视化流程编排                 |
+| `system/`              | 系统管理 - 用户、角色、菜单、工具配置等     |
 
 ---
 
@@ -78,8 +77,8 @@ fronted/
 **1. 克隆仓库**
 
 ```bash
-git clone https://github.com/your-repo/fba-frontend.git
-cd fba-frontend
+git clone <repository-url>
+cd fronted
 ```
 
 **2. 安装依赖**
@@ -91,8 +90,8 @@ pnpm install
 **3. 配置环境变量**
 
 ```bash
-# 复制环境配置文件
-cp apps/web-antdv-next/.env.example apps/web-antdv-next/.env
+# 按需从开发环境配置初始化本地配置
+cp apps/web-antdv-next/.env.development apps/web-antdv-next/.env
 
 # 修改 API 地址
 # VITE_GLOB_API_URL=http://127.0.0.1:8000
