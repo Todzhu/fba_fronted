@@ -38,9 +38,10 @@ describe('api compatibility modules', () => {
     expect(source).toContain('function deleteFile');
     expect(source).toContain('Promise<UserFileListResult>');
     expect(source).toContain('Promise<UserFile>');
-    expect(source).toContain('function renameFile');
-    expect(source).toContain('function moveFile');
-    expect(source).toContain('): Promise<UserFile>');
+    expect(source).toMatch(
+      /function renameFile\([\s\S]*?\): Promise<UserFile>/,
+    );
+    expect(source).toMatch(/function moveFile\([\s\S]*?\): Promise<UserFile>/);
     expect(source).toContain('function batchDeleteFiles');
   });
 
