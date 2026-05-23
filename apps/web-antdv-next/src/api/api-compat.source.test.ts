@@ -15,15 +15,20 @@ describe('api compatibility modules', () => {
     expect(source).toContain('uploadMyDataFile as uploadFile');
     expect(source).toContain('batchDeleteMyDataFiles as batchDelete');
     expect(source).toContain('getMyDataDownloadUrl as getDownloadUrl');
-    expect(source).toContain('FileItem as UserFileItem');
-    expect(source).toContain('StorageStats as StorageStatsData');
+    expect(source).toContain('interface UserFileItem extends FileItem');
+    expect(source).toContain('user_id: number');
+    expect(source).toContain('storage_path: null | string');
+    expect(source).toContain('interface FileListResponse');
+    expect(source).toContain('interface StorageStatsData extends StorageStats');
   });
 
   it('keeps cloudTools myData as a compatibility module with legacy aliases', () => {
     const source = readApiFile('./cloudTools/myData.ts');
     expect(source).toContain("export * from '../my-data';");
-    expect(source).toContain('FileItem as UserFile');
-    expect(source).toContain('FileListResponse as UserFileListResult');
+    expect(source).toContain('interface UserFile extends FileItem');
+    expect(source).toContain('user_id: number');
+    expect(source).toContain('storage_path: null | string');
+    expect(source).toContain('interface UserFileListResult');
     expect(source).toContain('createMyDataFolder as createFolder');
     expect(source).toContain('uploadMyDataFile as uploadFile');
     expect(source).toContain('getMyDataDownloadUrl as getDownloadUrl');

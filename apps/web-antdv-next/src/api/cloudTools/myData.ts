@@ -3,6 +3,7 @@ import {
   moveMyDataFile,
   renameMyDataFile,
 } from '../my-data';
+import type { FileItem } from '../my-data';
 
 export * from '../my-data';
 export {
@@ -11,10 +12,14 @@ export {
   getMyDataDownloadUrl as getDownloadUrl,
   uploadMyDataFile as uploadFile,
 } from '../my-data';
-export type {
-  FileItem as UserFile,
-  FileListResponse as UserFileListResult,
-} from '../my-data';
+export interface UserFile extends FileItem {
+  user_id: number;
+  storage_path: null | string;
+}
+export interface UserFileListResult {
+  items: UserFile[];
+  total: number;
+}
 export type UserFolderCreateParams = {
   name: string;
   parent_id?: null | number;

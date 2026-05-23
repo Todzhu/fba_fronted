@@ -1,3 +1,5 @@
+import type { FileItem, StorageStats } from './my-data';
+
 export * from './my-data';
 export {
   batchDeleteMyDataFiles as batchDelete,
@@ -7,7 +9,15 @@ export {
   getMyDataFiles as getFiles,
   uploadMyDataFile as uploadFile,
 } from './my-data';
-export type {
-  FileItem as UserFileItem,
-  StorageStats as StorageStatsData,
-} from './my-data';
+
+export interface UserFileItem extends FileItem {
+  user_id: number;
+  storage_path: null | string;
+}
+
+export interface FileListResponse {
+  items: UserFileItem[];
+  total: number;
+}
+
+export interface StorageStatsData extends StorageStats {}

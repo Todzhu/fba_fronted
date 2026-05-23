@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const get = vi.fn();
 const post = vi.fn();
 const put = vi.fn();
+const del = vi.fn();
 
 vi.mock('#/api/request', () => ({
   miniRequestClient: {
@@ -10,6 +11,7 @@ vi.mock('#/api/request', () => ({
   },
   requestClient: {
     get,
+    delete: del,
     post,
     put,
   },
@@ -18,6 +20,7 @@ vi.mock('#/api/request', () => ({
 describe('analysisTool compatibility behavior', () => {
   beforeEach(() => {
     get.mockReset();
+    del.mockReset();
     post.mockReset();
     put.mockReset();
   });
@@ -107,6 +110,26 @@ describe('analysisTool compatibility behavior', () => {
       omics_category: '单细胞',
       title: 'Cluster',
       func_category: '聚类',
+    });
+  });
+
+  it('maps legacy cloudTools myData wrapper payloads to canonical file APIs', async () => {
+    const { batchDeleteFiles, moveFile, renameFile } = await import(
+      './cloudTools/myData'
+    );
+
+    await renameFile(3, { name: 'renamed.txt' });
+    await moveFile(4, { target_parent_id: 9 });
+    await batchDeleteFiles({ ids: [1, 2, 3] });
+
+    expect(put).toHaveBeenCalledWith('/api/v1/sys/my-data/3/rename', {
+      name: 'renamed.txt',
+    });
+    expect(put).toHaveBeenCalledWith('/api/v1/sys/my-data/4/move', {
+      target_parent_id: 9,
+    });
+    expect(del).toHaveBeenCalledWith('/api/v1/sys/my-data/batch', {
+      data: { ids: [1, 2, 3] },
     });
   });
 });
