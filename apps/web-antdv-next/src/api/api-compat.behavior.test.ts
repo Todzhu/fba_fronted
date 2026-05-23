@@ -178,8 +178,9 @@ describe('analysisTool compatibility behavior', () => {
     });
   });
 
-  it('maps legacy detail responses to legacy analysis tool fields', async () => {
-    const { fetchAnalysisToolDetail } = await import('./analysisTool');
+  it('maps legacy detail responses and remembered favorite state to legacy analysis tool fields', async () => {
+    const { fetchAnalysisToolDetail, toggleAnalysisToolFavorite } =
+      await import('./analysisTool');
 
     get.mockResolvedValueOnce({
       created_time: '2026-01-01',
@@ -194,13 +195,18 @@ describe('analysisTool compatibility behavior', () => {
       views: 11,
     });
 
+    await toggleAnalysisToolFavorite(5, true);
     const result = await fetchAnalysisToolDetail(5);
 
+    expect(post).toHaveBeenCalledWith('/api/v1/biocloud/analysis_tool/favorite', {
+      is_favorite: true,
+      tool_id: 5,
+    });
     expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools/5');
     expect(result).toMatchObject({
       category: '单细胞',
       image_url: '/cluster.png',
-      is_favorite: false,
+      is_favorite: true,
       likes: 3,
       name: 'Cluster',
       type: '聚类',

@@ -72,6 +72,8 @@ export interface AnalysisToolUpdateRequest {
   is_favorite?: boolean;
 }
 
+const legacyFavoriteState = new Map<number, boolean>();
+
 function mapLegacyToolPayload(
   data: AnalysisToolCreateRequest | AnalysisToolUpdateRequest,
 ): CloudToolCreateParams | CloudToolUpdateParams {
@@ -97,13 +99,21 @@ function mapLegacyToolPayload(
 }
 
 function mapCanonicalToolToLegacy(tool: CanonicalAnalysisTool): AnalysisTool {
+  const toolWithFavorite = tool as CanonicalAnalysisTool & {
+    is_favorite?: boolean;
+  };
+  const favoriteState =
+    typeof toolWithFavorite.is_favorite === 'boolean'
+      ? toolWithFavorite.is_favorite
+      : (legacyFavoriteState.get(tool.id) ?? false);
+
   return {
     category: tool.omics_category,
     created_time: tool.created_time,
     description: tool.description ?? undefined,
     id: tool.id,
     image_url: tool.icon ?? undefined,
-    is_favorite: false,
+    is_favorite: favoriteState,
     likes: tool.stars,
     name: tool.title,
     type: tool.func_category ?? undefined,
@@ -172,6 +182,7 @@ export function toggleAnalysisToolFavorite(
   tool_id: number,
   is_favorite: boolean,
 ) {
+  legacyFavoriteState.set(tool_id, is_favorite);
   return requestClient.post('/api/v1/biocloud/analysis_tool/favorite', {
     is_favorite,
     tool_id,
