@@ -88,15 +88,16 @@ const categoryColumns = [
   { key: 'operation', title: '操作', width: 150 },
 ];
 
-async function loadCategories() {
+async function loadCategoryOptions() {
+  categories.value = await getAdminTutorialCategories();
+}
+
+async function loadCategoryRows() {
   categoryLoading.value = true;
   try {
     categoryRows.value = await getAdminTutorialCategories({
       search: categoryQuery.search || undefined,
     });
-    if (!categoryQuery.search) {
-      categories.value = categoryRows.value;
-    }
   } finally {
     categoryLoading.value = false;
   }
@@ -120,7 +121,8 @@ async function loadArticles() {
 }
 
 async function refreshAll() {
-  await loadCategories();
+  await loadCategoryOptions();
+  await loadCategoryRows();
   await loadArticles();
 }
 
@@ -315,7 +317,7 @@ onMounted(async () => {
             allow-clear
             placeholder="搜索分类"
             style="width: 240px"
-            @search="loadCategories"
+            @search="loadCategoryRows"
           />
           <Button type="primary" @click="openCreateCategory">新增分类</Button>
         </div>

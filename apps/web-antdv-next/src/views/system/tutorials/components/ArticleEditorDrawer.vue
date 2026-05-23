@@ -29,7 +29,11 @@ import {
   uploadTutorialFile,
 } from '#/api';
 
-import { toCategoryOptions, tutorialStatusOptions } from '../data';
+import {
+  normalizeArticleStatus,
+  toCategoryOptions,
+  tutorialStatusOptions,
+} from '../data';
 
 interface ArticleFormModel {
   attachment_urls: string[];
@@ -39,7 +43,7 @@ interface ArticleFormModel {
   published_at?: string;
   slug: string;
   sort: number;
-  status: number;
+  status: 0 | 1;
   summary: string;
   tags: string[];
   title: string;
@@ -67,6 +71,7 @@ const loading = ref(false);
 const saving = ref(false);
 const uploadingCover = ref(false);
 const uploadingAttachment = ref(false);
+let articleLoadToken = 0;
 
 const formModel = reactive<ArticleFormModel>({
   attachment_urls: [],
@@ -107,7 +112,7 @@ function applyArticle(article: TutorialArticleDetail) {
     published_at: article.published_at || undefined,
     slug: article.slug || '',
     sort: article.sort || 0,
-    status: article.status ?? 0,
+    status: normalizeArticleStatus(article.status),
     summary: article.summary || '',
     tags: article.tags || [],
     title: article.title || '',
@@ -117,15 +122,30 @@ function applyArticle(article: TutorialArticleDetail) {
 watch(
   () => [props.open, props.articleId] as const,
   async ([open, articleId]) => {
-    if (!open) return;
+    const requestedArticleId = articleId;
+    const requestedToken = ++articleLoadToken;
+    if (!open) {
+      loading.value = false;
+      return;
+    }
     resetForm();
-    if (!articleId) return;
+    if (!requestedArticleId) return;
 
     loading.value = true;
     try {
-      applyArticle(await getAdminTutorialArticle(articleId));
+      const article = await getAdminTutorialArticle(requestedArticleId);
+      if (
+        !props.open ||
+        props.articleId !== requestedArticleId ||
+        requestedToken !== articleLoadToken
+      ) {
+        return;
+      }
+      applyArticle(article);
     } finally {
-      loading.value = false;
+      if (requestedToken === articleLoadToken) {
+        loading.value = false;
+      }
     }
   },
   { immediate: true },
@@ -144,6 +164,9 @@ async function handleCoverUpload(file: File) {
   try {
     formModel.cover_url = await uploadFile(file);
     message.success('封面已上传');
+  } catch (error) {
+    console.error('Cover upload failed:', error);
+    message.error('封面上传失败');
   } finally {
     uploadingCover.value = false;
   }
@@ -156,6 +179,9 @@ async function handleAttachmentUpload(file: File) {
     const url = await uploadFile(file);
     formModel.attachment_urls = [...(formModel.attachment_urls || []), url];
     message.success('附件已上传');
+  } catch (error) {
+    console.error('Attachment upload failed:', error);
+    message.error('附件上传失败');
   } finally {
     uploadingAttachment.value = false;
   }
@@ -188,7 +214,7 @@ async function handleSave() {
       published_at: formModel.published_at || null,
       slug: formModel.slug.trim(),
       sort: formModel.sort || 0,
-      status: formModel.status,
+      status: normalizeArticleStatus(formModel.status),
       summary: formModel.summary || null,
       tags: formModel.tags,
       title: formModel.title.trim(),

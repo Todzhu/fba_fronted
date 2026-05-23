@@ -3,19 +3,22 @@ import type { TutorialCategory } from '#/api';
 export const tutorialStatusOptions = [
   { label: '草稿', value: 0 },
   { label: '已发布', value: 1 },
-  { label: '已下线', value: 2 },
 ];
 
+export function normalizeArticleStatus(status?: null | number) {
+  return status === 1 ? 1 : 0;
+}
+
 export function getTutorialStatusLabel(status?: null | number) {
+  const normalizedStatus = normalizeArticleStatus(status);
   return (
-    tutorialStatusOptions.find((option) => option.value === status)?.label ||
-    '未知'
+    tutorialStatusOptions.find((option) => option.value === normalizedStatus)
+      ?.label || '未知'
   );
 }
 
 export function getTutorialStatusColor(status?: null | number) {
-  if (status === 1) return 'green';
-  if (status === 2) return 'orange';
+  if (normalizeArticleStatus(status) === 1) return 'green';
   return 'default';
 }
 
