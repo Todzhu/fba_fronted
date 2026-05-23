@@ -162,6 +162,7 @@ export interface CloudToolUpdateParams {
 }
 
 export interface CloudToolListParams {
+  func_category?: string;
   search?: string;
   omics?: string;
   status?: number;

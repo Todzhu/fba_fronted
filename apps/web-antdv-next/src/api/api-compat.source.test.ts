@@ -58,8 +58,8 @@ describe('api compatibility modules', () => {
     expect(source).toContain('function fetchAnalysisToolList');
     expect(source).toContain('function fetchAnalysisToolManageList');
     expect(source).toContain('function fetchAnalysisToolDetail');
+    expect(source).toContain('func_category: params.type');
     expect(source).toContain('function mapCanonicalToolToLegacy');
-    expect(source).toContain('item.type === type');
     expect(source).toContain('function createAnalysisTool');
     expect(source).toContain('function updateAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolFuncTypes');

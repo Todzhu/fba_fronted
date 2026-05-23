@@ -84,6 +84,7 @@ describe('analysisTool compatibility behavior', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
       params: {
+        func_category: undefined,
         omics: '单细胞',
         page: 1,
         search: 'cluster',
@@ -92,7 +93,7 @@ describe('analysisTool compatibility behavior', () => {
     });
   });
 
-  it('applies legacy manage type after fetching supported cloud tool filters', async () => {
+  it('maps legacy manage type to supported cloud tool filters', async () => {
     const { fetchAnalysisToolManageList } = await import('./analysisTool');
 
     get.mockResolvedValueOnce({
@@ -109,6 +110,7 @@ describe('analysisTool compatibility behavior', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
       params: {
+        func_category: '差异分析',
         omics: undefined,
         page: undefined,
         search: undefined,
@@ -116,8 +118,11 @@ describe('analysisTool compatibility behavior', () => {
       },
     });
     expect(result).toMatchObject({
-      items: [{ id: 1, type: '差异分析' }],
-      total: 1,
+      items: [
+        { id: 1, type: '差异分析' },
+        { id: 2, type: '富集分析' },
+      ],
+      total: 2,
     });
   });
 

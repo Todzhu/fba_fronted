@@ -112,19 +112,12 @@ function mapCanonicalToolToLegacy(tool: CanonicalAnalysisTool): AnalysisTool {
   };
 }
 
-function mapCanonicalListToLegacy(
-  response: AnalysisToolListResponse,
-  type?: string,
-) {
+function mapCanonicalListToLegacy(response: AnalysisToolListResponse) {
   const items = response.items.map(mapCanonicalToolToLegacy);
-  const filteredItems = type
-    ? items.filter((item) => item.type === type)
-    : items;
 
   return {
     ...response,
-    items: filteredItems,
-    total: type ? filteredItems.length : response.total,
+    items,
   };
 }
 
@@ -146,15 +139,14 @@ export function fetchAnalysisToolManageList(
   params: AnalysisToolManageQuery = {},
 ) {
   const mapped: CloudToolListParams = {
+    func_category: params.type,
     omics: params.category,
     page: params.page,
     search: params.name,
     size: params.size,
   };
 
-  return getCloudToolListApi(mapped).then((response) =>
-    mapCanonicalListToLegacy(response, params.type),
-  );
+  return getCloudToolListApi(mapped).then(mapCanonicalListToLegacy);
 }
 
 export function fetchAnalysisToolDetail(id: number) {
