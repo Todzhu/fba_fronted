@@ -49,11 +49,12 @@ describe('api compatibility modules', () => {
     const source = readApiFile('./analysisTool.ts');
     expect(source).toContain("export * from './analysis-tools';");
     expect(source).toContain('getAnalysisToolCategories as fetchAnalysisToolCategories');
-    expect(source).toContain('getCloudToolApi as fetchAnalysisToolDetail');
     expect(source).toContain('deleteCloudToolApi as deleteAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolList');
     expect(source).toContain('function fetchAnalysisToolManageList');
-    expect(source).toContain('func_category: params.type');
+    expect(source).toContain('function fetchAnalysisToolDetail');
+    expect(source).toContain('function mapCanonicalToolToLegacy');
+    expect(source).toContain('item.type === type');
     expect(source).toContain('function createAnalysisTool');
     expect(source).toContain('function updateAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolFuncTypes');

@@ -28,7 +28,25 @@ describe('analysisTool compatibility behavior', () => {
   it('maps legacy list query names to canonical analysis tool filters', async () => {
     const { fetchAnalysisToolList } = await import('./analysisTool');
 
-    await fetchAnalysisToolList({
+    get.mockResolvedValueOnce({
+      items: [
+        {
+          created_time: '2026-01-01',
+          description: 'desc',
+          func_category: '差异分析',
+          icon: '/tool.png',
+          id: 1,
+          omics_category: '转录组',
+          stars: 7,
+          title: 'DEG',
+          updated_time: null,
+          views: 99,
+        },
+      ],
+      total: 1,
+    });
+
+    const result = await fetchAnalysisToolList({
       category: '转录组',
       func_type: '差异分析',
       page: 2,
@@ -39,10 +57,23 @@ describe('analysisTool compatibility behavior', () => {
     expect(get).toHaveBeenCalledWith(
       '/api/v1/sys/analysis-tools?page=2&size=20&search=deg&omics=%E8%BD%AC%E5%BD%95%E7%BB%84&func=%E5%B7%AE%E5%BC%82%E5%88%86%E6%9E%90',
     );
+    expect(result.items[0]).toMatchObject({
+      category: '转录组',
+      image_url: '/tool.png',
+      is_favorite: false,
+      likes: 7,
+      name: 'DEG',
+      type: '差异分析',
+    });
   });
 
   it('maps legacy manage query names to canonical cloud tool filters', async () => {
     const { fetchAnalysisToolManageList } = await import('./analysisTool');
+
+    get.mockResolvedValueOnce({
+      items: [],
+      total: 0,
+    });
 
     await fetchAnalysisToolManageList({
       category: '单细胞',
@@ -53,7 +84,6 @@ describe('analysisTool compatibility behavior', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
       params: {
-        func_category: undefined,
         omics: '单细胞',
         page: 1,
         search: 'cluster',
@@ -62,21 +92,32 @@ describe('analysisTool compatibility behavior', () => {
     });
   });
 
-  it('keeps legacy manage type in the forwarded cloud tool params', async () => {
+  it('applies legacy manage type after fetching supported cloud tool filters', async () => {
     const { fetchAnalysisToolManageList } = await import('./analysisTool');
 
-    await fetchAnalysisToolManageList({
+    get.mockResolvedValueOnce({
+      items: [
+        { func_category: '差异分析', id: 1, title: 'DEG' },
+        { func_category: '富集分析', id: 2, title: 'GO' },
+      ],
+      total: 2,
+    });
+
+    const result = await fetchAnalysisToolManageList({
       type: '差异分析',
     });
 
     expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
       params: {
-        func_category: '差异分析',
         omics: undefined,
         page: undefined,
         search: undefined,
         size: undefined,
       },
+    });
+    expect(result).toMatchObject({
+      items: [{ id: 1, type: '差异分析' }],
+      total: 1,
     });
   });
 
@@ -129,6 +170,35 @@ describe('analysisTool compatibility behavior', () => {
       omics_category: '单细胞',
       title: 'Cluster',
       func_category: '聚类',
+    });
+  });
+
+  it('maps legacy detail responses to legacy analysis tool fields', async () => {
+    const { fetchAnalysisToolDetail } = await import('./analysisTool');
+
+    get.mockResolvedValueOnce({
+      created_time: '2026-01-01',
+      description: 'detail',
+      func_category: '聚类',
+      icon: '/cluster.png',
+      id: 5,
+      omics_category: '单细胞',
+      stars: 3,
+      title: 'Cluster',
+      updated_time: '2026-01-02',
+      views: 11,
+    });
+
+    const result = await fetchAnalysisToolDetail(5);
+
+    expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools/5');
+    expect(result).toMatchObject({
+      category: '单细胞',
+      image_url: '/cluster.png',
+      is_favorite: false,
+      likes: 3,
+      name: 'Cluster',
+      type: '聚类',
     });
   });
 

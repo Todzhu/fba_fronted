@@ -3,9 +3,12 @@ import { requestClient } from '#/api/request';
 import {
   createCloudToolApi,
   getAnalysisToolList,
+  getCloudToolApi,
   getCloudToolListApi,
   updateCloudToolApi,
+  type AnalysisTool as CanonicalAnalysisTool,
   type AnalysisToolListParams,
+  type AnalysisToolListResponse,
   type CloudToolCreateParams,
   type CloudToolListParams,
   type CloudToolUpdateParams,
@@ -15,7 +18,6 @@ export * from './analysis-tools';
 export {
   deleteCloudToolApi as deleteAnalysisTool,
   getAnalysisToolCategories as fetchAnalysisToolCategories,
-  getCloudToolApi as fetchAnalysisToolDetail,
 } from './analysis-tools';
 
 export interface AnalysisTool {
@@ -94,6 +96,38 @@ function mapLegacyToolPayload(
   return mapped;
 }
 
+function mapCanonicalToolToLegacy(tool: CanonicalAnalysisTool): AnalysisTool {
+  return {
+    category: tool.omics_category,
+    created_time: tool.created_time,
+    description: tool.description ?? undefined,
+    id: tool.id,
+    image_url: tool.icon ?? undefined,
+    is_favorite: false,
+    likes: tool.stars,
+    name: tool.title,
+    type: tool.func_category ?? undefined,
+    updated_time: tool.updated_time ?? undefined,
+    views: tool.views,
+  };
+}
+
+function mapCanonicalListToLegacy(
+  response: AnalysisToolListResponse,
+  type?: string,
+) {
+  const items = response.items.map(mapCanonicalToolToLegacy);
+  const filteredItems = type
+    ? items.filter((item) => item.type === type)
+    : items;
+
+  return {
+    ...response,
+    items: filteredItems,
+    total: type ? filteredItems.length : response.total,
+  };
+}
+
 export function fetchAnalysisToolList(params: AnalysisToolQuery = {}) {
   const mapped: AnalysisToolListParams = {
     func: params.func_type ? [params.func_type] : undefined,
@@ -103,21 +137,28 @@ export function fetchAnalysisToolList(params: AnalysisToolQuery = {}) {
     size: params.page_size,
   };
 
-  return getAnalysisToolList(mapped);
+  return getAnalysisToolList(mapped).then((response) =>
+    mapCanonicalListToLegacy(response),
+  );
 }
 
 export function fetchAnalysisToolManageList(
   params: AnalysisToolManageQuery = {},
 ) {
-  const mapped: CloudToolListParams & { func_category?: string } = {
-    func_category: params.type,
+  const mapped: CloudToolListParams = {
     omics: params.category,
     page: params.page,
     search: params.name,
     size: params.size,
   };
 
-  return getCloudToolListApi(mapped as CloudToolListParams);
+  return getCloudToolListApi(mapped).then((response) =>
+    mapCanonicalListToLegacy(response, params.type),
+  );
+}
+
+export function fetchAnalysisToolDetail(id: number) {
+  return getCloudToolApi(id).then(mapCanonicalToolToLegacy);
 }
 
 export function createAnalysisTool(data: AnalysisToolCreateRequest) {
