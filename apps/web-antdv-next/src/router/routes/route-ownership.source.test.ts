@@ -27,4 +27,12 @@ describe('frontend route ownership', () => {
       expectRoutePath(source, path);
     }
   });
+
+  it('keeps analysis routes out of core routes', () => {
+    const source = readRouteFile('./core.ts');
+
+    expect(source).not.toContain("path: '/analysis'");
+    expect(source).not.toContain("name: 'AnalysisTools'");
+    expect(source).not.toContain("name: 'AnalysisToolDetail'");
+  });
 });

@@ -26,7 +26,6 @@ const routes: RouteRecordRaw[] = [
           ignoreAccess: true, // Allow browsing without login
         },
       },
-      // Placeholder routes for future implementation
       {
         path: 'tool/:id',
         name: 'ToolUsage',

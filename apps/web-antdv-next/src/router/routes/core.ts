@@ -91,42 +91,6 @@ const coreRoutes: RouteRecordRaw[] = [
       },
     ],
   },
-  {
-    component: BasicLayout,
-    meta: {
-      title: 'Analysis',
-    },
-    name: 'AnalysisCore',
-    path: '/analysis',
-    children: [
-      {
-        name: 'AnalysisTools',
-        path: 'tools',
-        component: () => import('#/views/biocloud/cloudTools/index.vue'),
-        meta: {
-          title: '分析工具',
-        },
-      },
-      {
-        name: 'AnalysisToolDetail',
-        path: 'tool/:id',
-        component: () => import('#/views/biocloud/cloudTools/detail.vue'),
-        meta: {
-          title: '工具详情',
-          hideInMenu: true,
-        },
-      },
-      {
-        name: 'AnalysisTasksCore',
-        path: 'tasks',
-        component: () => import('#/views/biocloud/cloudTools/tasks/index.vue'),
-        meta: {
-          title: '任务中心',
-          hideInMenu: true,
-        },
-      },
-    ],
-  },
 ];
 
 export { coreRoutes, fallbackNotFoundRoute };
