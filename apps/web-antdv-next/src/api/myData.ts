@@ -4,6 +4,7 @@ import {
   deleteMyDataFile,
   getMyDataDownloadUrl,
   getMyDataFiles,
+  getStorageStats as getCanonicalStorageStats,
   uploadMyDataFile,
 } from './my-data';
 import type { FileItem, StorageStats } from './my-data';
@@ -45,14 +46,18 @@ export function uploadFile(
   return uploadMyDataFile(file, parentId) as Promise<UserFileItem>;
 }
 
-export function deleteFile(fileId: number) {
-  return deleteMyDataFile(fileId);
+export function deleteFile(fileId: number): Promise<void> {
+  return deleteMyDataFile(fileId) as Promise<void>;
 }
 
-export function batchDelete(ids: number[]) {
-  return batchDeleteMyDataFiles(ids);
+export function batchDelete(ids: number[]): Promise<void> {
+  return batchDeleteMyDataFiles(ids) as Promise<void>;
 }
 
 export function getDownloadUrl(fileId: number): string {
   return getMyDataDownloadUrl(fileId);
+}
+
+export function getStorageStats(): Promise<StorageStatsData> {
+  return getCanonicalStorageStats() as Promise<StorageStatsData>;
 }

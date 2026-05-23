@@ -15,6 +15,11 @@ describe('api compatibility modules', () => {
     expect(source).toContain('function uploadFile');
     expect(source).toContain('function batchDelete');
     expect(source).toContain('function getDownloadUrl');
+    expect(source).toMatch(/function deleteFile\([\s\S]*?\): Promise<void>/);
+    expect(source).toMatch(/function batchDelete\([\s\S]*?\): Promise<void>/);
+    expect(source).toMatch(
+      /function getStorageStats\([\s\S]*?\): Promise<StorageStatsData>/,
+    );
     expect(source).toContain('Promise<FileListResponse>');
     expect(source).toContain('Promise<UserFileItem>');
     expect(source).toContain('interface UserFileItem extends FileItem');
