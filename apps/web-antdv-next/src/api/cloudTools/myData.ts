@@ -1,17 +1,16 @@
 import {
   batchDeleteMyDataFiles,
+  createMyDataFolder,
+  deleteMyDataFile,
+  getMyDataDownloadUrl,
+  getMyDataFiles as getCanonicalMyDataFiles,
   moveMyDataFile,
   renameMyDataFile,
+  uploadMyDataFile,
 } from '../my-data';
 import type { FileItem } from '../my-data';
 
 export * from '../my-data';
-export {
-  createMyDataFolder as createFolder,
-  deleteMyDataFile as deleteFile,
-  getMyDataDownloadUrl as getDownloadUrl,
-  uploadMyDataFile as uploadFile,
-} from '../my-data';
 export interface UserFile extends FileItem {
   user_id: number;
   storage_path: null | string;
@@ -34,6 +33,33 @@ export type UserFileBatchDeleteParams = {
   ids: number[];
 };
 
+export function getMyDataFiles(params?: {
+  keyword?: string;
+  parent_id?: null | number;
+}): Promise<UserFileListResult> {
+  return getCanonicalMyDataFiles({
+    keyword: params?.keyword,
+    parent_id: params?.parent_id ?? undefined,
+  }) as Promise<UserFileListResult>;
+}
+
+export function createFolder(
+  data: UserFolderCreateParams,
+): Promise<UserFile> {
+  return createMyDataFolder(data) as Promise<UserFile>;
+}
+
+export function uploadFile(
+  file: File,
+  parentId?: null | number,
+): Promise<UserFile> {
+  return uploadMyDataFile(file, parentId) as Promise<UserFile>;
+}
+
+export function getDownloadUrl(fileId: number): string {
+  return getMyDataDownloadUrl(fileId);
+}
+
 export function renameFile(fileId: number, data: UserFileRenameParams) {
   return renameMyDataFile(fileId, data.name);
 }
@@ -44,4 +70,8 @@ export function moveFile(fileId: number, data: UserFileMoveParams) {
 
 export function batchDeleteFiles(data: UserFileBatchDeleteParams) {
   return batchDeleteMyDataFiles(data.ids);
+}
+
+export function deleteFile(fileId: number) {
+  return deleteMyDataFile(fileId);
 }

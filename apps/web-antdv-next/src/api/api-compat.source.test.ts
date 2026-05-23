@@ -10,11 +10,13 @@ describe('api compatibility modules', () => {
   it('keeps myData as a compatibility module with legacy aliases', () => {
     const source = readApiFile('./myData.ts');
     expect(source).toContain("export * from './my-data';");
-    expect(source).toContain('getMyDataFiles as getFiles');
-    expect(source).toContain('createMyDataFolder as createFolder');
-    expect(source).toContain('uploadMyDataFile as uploadFile');
-    expect(source).toContain('batchDeleteMyDataFiles as batchDelete');
-    expect(source).toContain('getMyDataDownloadUrl as getDownloadUrl');
+    expect(source).toContain('function getFiles');
+    expect(source).toContain('function createFolder');
+    expect(source).toContain('function uploadFile');
+    expect(source).toContain('function batchDelete');
+    expect(source).toContain('function getDownloadUrl');
+    expect(source).toContain('Promise<FileListResponse>');
+    expect(source).toContain('Promise<UserFileItem>');
     expect(source).toContain('interface UserFileItem extends FileItem');
     expect(source).toContain('user_id: number');
     expect(source).toContain('storage_path: null | string');
@@ -29,10 +31,13 @@ describe('api compatibility modules', () => {
     expect(source).toContain('user_id: number');
     expect(source).toContain('storage_path: null | string');
     expect(source).toContain('interface UserFileListResult');
-    expect(source).toContain('createMyDataFolder as createFolder');
-    expect(source).toContain('uploadMyDataFile as uploadFile');
-    expect(source).toContain('getMyDataDownloadUrl as getDownloadUrl');
-    expect(source).toContain('deleteMyDataFile as deleteFile');
+    expect(source).toContain('function getMyDataFiles');
+    expect(source).toContain('function createFolder');
+    expect(source).toContain('function uploadFile');
+    expect(source).toContain('function getDownloadUrl');
+    expect(source).toContain('function deleteFile');
+    expect(source).toContain('Promise<UserFileListResult>');
+    expect(source).toContain('Promise<UserFile>');
     expect(source).toContain('function renameFile');
     expect(source).toContain('function moveFile');
     expect(source).toContain('function batchDeleteFiles');
@@ -46,6 +51,7 @@ describe('api compatibility modules', () => {
     expect(source).toContain('deleteCloudToolApi as deleteAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolList');
     expect(source).toContain('function fetchAnalysisToolManageList');
+    expect(source).toContain('func_category: params.type');
     expect(source).toContain('function createAnalysisTool');
     expect(source).toContain('function updateAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolFuncTypes');

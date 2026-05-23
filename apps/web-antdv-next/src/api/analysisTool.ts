@@ -109,14 +109,15 @@ export function fetchAnalysisToolList(params: AnalysisToolQuery = {}) {
 export function fetchAnalysisToolManageList(
   params: AnalysisToolManageQuery = {},
 ) {
-  const mapped: CloudToolListParams = {
+  const mapped: CloudToolListParams & { func_category?: string } = {
+    func_category: params.type,
     omics: params.category,
     page: params.page,
     search: params.name,
     size: params.size,
   };
 
-  return getCloudToolListApi(mapped);
+  return getCloudToolListApi(mapped as CloudToolListParams);
 }
 
 export function createAnalysisTool(data: AnalysisToolCreateRequest) {

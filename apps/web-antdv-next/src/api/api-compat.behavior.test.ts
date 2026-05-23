@@ -53,10 +53,29 @@ describe('analysisTool compatibility behavior', () => {
 
     expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
       params: {
+        func_category: undefined,
         omics: '单细胞',
         page: 1,
         search: 'cluster',
         size: 10,
+      },
+    });
+  });
+
+  it('keeps legacy manage type in the forwarded cloud tool params', async () => {
+    const { fetchAnalysisToolManageList } = await import('./analysisTool');
+
+    await fetchAnalysisToolManageList({
+      type: '差异分析',
+    });
+
+    expect(get).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
+      params: {
+        func_category: '差异分析',
+        omics: undefined,
+        page: undefined,
+        search: undefined,
+        size: undefined,
       },
     });
   });
