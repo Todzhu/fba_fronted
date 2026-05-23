@@ -1,5 +1,13 @@
 import { requestClient } from '#/api/request';
 
+export interface TutorialPage<T> {
+  items: T[];
+  total: number;
+  page?: number;
+  size?: number;
+  pages?: number;
+}
+
 export interface TutorialCategory {
   id: number;
   name: string;
@@ -32,7 +40,9 @@ export interface TutorialArticleDetail extends TutorialArticleListItem {
 
 export interface TutorialArticleQuery {
   category_id?: number;
+  page?: number;
   search?: string;
+  size?: number;
   status?: number;
   tag?: string;
 }
@@ -53,12 +63,24 @@ export interface TutorialArticlePayload {
 
 export type TutorialArticleUpdatePayload = Partial<TutorialArticlePayload>;
 
+function withOptionalParams<T, P extends object = object>(
+  url: string,
+  params?: P,
+) {
+  return params && Object.keys(params).length > 0
+    ? requestClient.get<T>(url, { params })
+    : requestClient.get<T>(url);
+}
+
 export function getTutorialCategories() {
   return requestClient.get<TutorialCategory[]>('/api/v1/tutorials/categories');
 }
 
 export function getTutorialArticles(params: TutorialArticleQuery = {}) {
-  return requestClient.get('/api/v1/tutorials/articles', { params });
+  return withOptionalParams<TutorialPage<TutorialArticleListItem>>(
+    '/api/v1/tutorials/articles',
+    params,
+  );
 }
 
 export function getTutorialArticle(slug: string) {
@@ -74,9 +96,9 @@ export function increaseTutorialView(id: number) {
 export function getAdminTutorialCategories(
   params: { is_active?: boolean; search?: string } = {},
 ) {
-  return requestClient.get<TutorialCategory[]>(
+  return withOptionalParams<TutorialCategory[]>(
     '/api/v1/sys/tutorials/categories',
-    { params },
+    params,
   );
 }
 
@@ -104,7 +126,10 @@ export function deleteAdminTutorialCategory(id: number) {
 }
 
 export function getAdminTutorialArticles(params: TutorialArticleQuery = {}) {
-  return requestClient.get('/api/v1/sys/tutorials/articles', { params });
+  return withOptionalParams<TutorialPage<TutorialArticleListItem>>(
+    '/api/v1/sys/tutorials/articles',
+    params,
+  );
 }
 
 export function getAdminTutorialArticle(id: number) {

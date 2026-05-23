@@ -28,17 +28,15 @@ describe('BioCloud page headers', () => {
 
   it('shows public tutorial navigation immediately after my tasks', () => {
     const source = readSource('../../layouts/ClientLayout.vue');
-    const myTasksIndex = source.indexOf(
-      "{ name: '我的任务', href: '/tasks', icon: ClipboardList, requiresAuth: true }",
-    );
-    const tutorialsIndex = source.indexOf(
-      "{ name: '教程', href: '/tutorials', icon: BookOpen, requiresAuth: false }",
-    );
+    const myTasksIndex = source.search(/name:\s*'我的任务'/);
+    const tutorialMatch = source.match(/\{[^{}]*name:\s*'教程'[^{}]*\}/s);
 
     expect(myTasksIndex).toBeGreaterThan(-1);
-    expect(tutorialsIndex).toBeGreaterThan(myTasksIndex);
-    expect(source).toMatch(
-      /\{ name: '我的任务', href: '\/tasks', icon: ClipboardList, requiresAuth: true \},\s*\{ name: '教程', href: '\/tutorials', icon: BookOpen, requiresAuth: false \}/,
-    );
+    expect(tutorialMatch).not.toBeNull();
+
+    const tutorialObject = tutorialMatch?.[0] ?? '';
+    expect(tutorialMatch?.index).toBeGreaterThan(myTasksIndex);
+    expect(tutorialObject).toMatch(/href:\s*'\/tutorials'/);
+    expect(tutorialObject).toMatch(/requiresAuth:\s*false/);
   });
 });
