@@ -60,12 +60,18 @@ export function getDownloadUrl(fileId: number): string {
   return getMyDataDownloadUrl(fileId);
 }
 
-export function renameFile(fileId: number, data: UserFileRenameParams) {
-  return renameMyDataFile(fileId, data.name);
+export function renameFile(
+  fileId: number,
+  data: UserFileRenameParams,
+): Promise<UserFile> {
+  return renameMyDataFile(fileId, data.name) as Promise<UserFile>;
 }
 
-export function moveFile(fileId: number, data: UserFileMoveParams) {
-  return moveMyDataFile(fileId, data.target_parent_id);
+export function moveFile(
+  fileId: number,
+  data: UserFileMoveParams,
+): Promise<UserFile> {
+  return moveMyDataFile(fileId, data.target_parent_id) as Promise<UserFile>;
 }
 
 export function batchDeleteFiles(data: UserFileBatchDeleteParams) {

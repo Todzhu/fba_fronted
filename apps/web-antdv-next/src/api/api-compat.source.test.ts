@@ -40,6 +40,7 @@ describe('api compatibility modules', () => {
     expect(source).toContain('Promise<UserFile>');
     expect(source).toContain('function renameFile');
     expect(source).toContain('function moveFile');
+    expect(source).toContain('): Promise<UserFile>');
     expect(source).toContain('function batchDeleteFiles');
   });
 
