@@ -108,7 +108,10 @@ function goToPage(nextPage: number) {
 }
 
 watch([search, selectedCategoryId], () => {
-  page.value = 1;
+  if (page.value !== 1) {
+    page.value = 1;
+    return;
+  }
   fetchArticles();
 });
 

@@ -52,7 +52,15 @@ function formatDate(value?: null | string) {
 function attachmentName(url: string) {
   const cleanUrl = url.split('?')[0] ?? url;
   const name = cleanUrl.split('/').filter(Boolean).pop();
-  return name ? decodeURIComponent(name) : '附件';
+  return name ? safeDecodeFilename(name) : '附件';
+}
+
+function safeDecodeFilename(name: string) {
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
 }
 
 async function loadArticle() {
