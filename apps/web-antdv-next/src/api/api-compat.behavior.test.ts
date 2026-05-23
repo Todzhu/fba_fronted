@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const get = vi.fn();
 const post = vi.fn();
+const put = vi.fn();
 
 vi.mock('#/api/request', () => ({
   miniRequestClient: {
@@ -10,6 +11,7 @@ vi.mock('#/api/request', () => ({
   requestClient: {
     get,
     post,
+    put,
   },
 }));
 
@@ -17,6 +19,7 @@ describe('analysisTool compatibility behavior', () => {
   beforeEach(() => {
     get.mockReset();
     post.mockReset();
+    put.mockReset();
   });
 
   it('maps legacy list query names to canonical analysis tool filters', async () => {
@@ -68,6 +71,42 @@ describe('analysisTool compatibility behavior', () => {
     expect(post).toHaveBeenCalledWith('/api/v1/biocloud/analysis_tool/favorite', {
       is_favorite: true,
       tool_id: 12,
+    });
+  });
+
+  it('maps legacy create and update payloads to canonical cloud tool fields', async () => {
+    const { createAnalysisTool, updateAnalysisTool } =
+      await import('./analysisTool');
+
+    await createAnalysisTool({
+      category: '转录组',
+      description: 'desc',
+      image_url: '/tool.png',
+      is_favorite: true,
+      likes: 8,
+      name: 'DEG',
+      type: '差异分析',
+      views: 99,
+    });
+    await updateAnalysisTool(5, {
+      category: '单细胞',
+      image_url: '/new.png',
+      name: 'Cluster',
+      type: '聚类',
+    });
+
+    expect(post).toHaveBeenCalledWith('/api/v1/sys/cloud-tools', {
+      description: 'desc',
+      func_category: '差异分析',
+      icon: '/tool.png',
+      omics_category: '转录组',
+      title: 'DEG',
+    });
+    expect(put).toHaveBeenCalledWith('/api/v1/sys/cloud-tools/5', {
+      icon: '/new.png',
+      omics_category: '单细胞',
+      title: 'Cluster',
+      func_category: '聚类',
     });
   });
 });

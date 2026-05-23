@@ -38,10 +38,11 @@ describe('api compatibility modules', () => {
     expect(source).toContain("export * from './analysis-tools';");
     expect(source).toContain('getAnalysisToolCategories as fetchAnalysisToolCategories');
     expect(source).toContain('getCloudToolApi as fetchAnalysisToolDetail');
-    expect(source).toContain('createCloudToolApi as createAnalysisTool');
     expect(source).toContain('deleteCloudToolApi as deleteAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolList');
     expect(source).toContain('function fetchAnalysisToolManageList');
+    expect(source).toContain('function createAnalysisTool');
+    expect(source).toContain('function updateAnalysisTool');
     expect(source).toContain('function fetchAnalysisToolFuncTypes');
     expect(source).toContain('function toggleAnalysisToolFavorite');
   });

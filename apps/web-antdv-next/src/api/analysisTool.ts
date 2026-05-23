@@ -1,24 +1,36 @@
 import { requestClient } from '#/api/request';
 
 import {
+  createCloudToolApi,
   getAnalysisToolList,
   getCloudToolListApi,
+  updateCloudToolApi,
   type AnalysisToolListParams,
+  type CloudToolCreateParams,
   type CloudToolListParams,
+  type CloudToolUpdateParams,
 } from './analysis-tools';
 
 export * from './analysis-tools';
 export {
-  createCloudToolApi as createAnalysisTool,
   deleteCloudToolApi as deleteAnalysisTool,
   getAnalysisToolCategories as fetchAnalysisToolCategories,
   getCloudToolApi as fetchAnalysisToolDetail,
-  updateCloudToolApi as updateAnalysisTool,
 } from './analysis-tools';
-export type {
-  CloudToolCreateParams as AnalysisToolCreateRequest,
-  CloudToolUpdateParams as AnalysisToolUpdateRequest,
-} from './analysis-tools';
+
+export interface AnalysisTool {
+  id: number;
+  name: string;
+  description?: string;
+  image_url?: string;
+  category?: string;
+  type?: string;
+  views: number;
+  likes: number;
+  is_favorite: boolean;
+  created_time?: string;
+  updated_time?: string;
+}
 
 export interface AnalysisToolQuery {
   page?: number;
@@ -34,6 +46,52 @@ export interface AnalysisToolManageQuery {
   name?: string;
   category?: string;
   type?: string;
+}
+
+export interface AnalysisToolCreateRequest {
+  name: string;
+  description?: string;
+  image_url?: string;
+  category?: string;
+  type?: string;
+  views?: number;
+  likes?: number;
+  is_favorite?: boolean;
+}
+
+export interface AnalysisToolUpdateRequest {
+  name?: string;
+  description?: string;
+  image_url?: string;
+  category?: string;
+  type?: string;
+  views?: number;
+  likes?: number;
+  is_favorite?: boolean;
+}
+
+function mapLegacyToolPayload(
+  data: AnalysisToolCreateRequest | AnalysisToolUpdateRequest,
+): CloudToolCreateParams | CloudToolUpdateParams {
+  const mapped: CloudToolCreateParams | CloudToolUpdateParams = {};
+
+  if (data.name !== undefined) {
+    mapped.title = data.name;
+  }
+  if (data.description !== undefined) {
+    mapped.description = data.description;
+  }
+  if (data.image_url !== undefined) {
+    mapped.icon = data.image_url;
+  }
+  if (data.category !== undefined) {
+    mapped.omics_category = data.category;
+  }
+  if (data.type !== undefined) {
+    mapped.func_category = data.type;
+  }
+
+  return mapped;
 }
 
 export function fetchAnalysisToolList(params: AnalysisToolQuery = {}) {
@@ -59,6 +117,17 @@ export function fetchAnalysisToolManageList(
   };
 
   return getCloudToolListApi(mapped);
+}
+
+export function createAnalysisTool(data: AnalysisToolCreateRequest) {
+  return createCloudToolApi(mapLegacyToolPayload(data) as CloudToolCreateParams);
+}
+
+export function updateAnalysisTool(
+  id: number,
+  data: AnalysisToolUpdateRequest,
+) {
+  return updateCloudToolApi(id, mapLegacyToolPayload(data));
 }
 
 export function fetchAnalysisToolFuncTypes() {
