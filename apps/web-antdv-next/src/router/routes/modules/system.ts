@@ -32,6 +32,15 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'SystemTutorials',
+        path: '/system/tutorials',
+        component: () => import('#/views/system/tutorials/index.vue'),
+        meta: {
+          icon: 'ant-design:book-outlined',
+          title: '教程管理',
+        },
+      },
+      {
         name: 'SysUser',
         path: '/system/user',
         component: () => import('#/views/system/user/index.vue'),

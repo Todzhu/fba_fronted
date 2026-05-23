@@ -15,9 +15,22 @@ describe('frontend route ownership', () => {
   it('keeps public BioCloud client routes in external landing routes', () => {
     const source = readRouteFile('./external/landing.ts');
 
-    for (const path of ['tools', 'data', 'tasks', 'pipeline']) {
+    for (const path of [
+      'tools',
+      'data',
+      'tasks',
+      'tutorials',
+      'tutorials/:slug',
+      'pipeline',
+    ]) {
       expectRoutePath(source, path);
     }
+  });
+
+  it('keeps tutorial cms routes in the system route module', () => {
+    const source = readRouteFile('./modules/system.ts');
+
+    expectRoutePath(source, '/system/tutorials');
   });
 
   it('keeps admin analysis routes in the analysis route module', () => {

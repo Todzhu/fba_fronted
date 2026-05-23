@@ -6,6 +6,7 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 
 import {
+  BookOpen,
   ChevronDown,
   ClipboardList,
   Database,
@@ -39,6 +40,7 @@ const navItems = [
   { name: '云流程', href: '/pipeline', icon: GitBranch, requiresAuth: false },
   { name: '我的数据', href: '/data', icon: Database, requiresAuth: true },
   { name: '我的任务', href: '/tasks', icon: ClipboardList, requiresAuth: true },
+  { name: '教程', href: '/tutorials', icon: BookOpen, requiresAuth: false },
 ];
 
 // 处理导航点击事件：如果需要登录且未登录，弹出登录框
