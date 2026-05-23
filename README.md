@@ -123,6 +123,8 @@ pnpm preview
 
 ### Docker 部署
 
+前端 `docker-compose.yml` 依赖已存在的 `fba_network`、`fba_static` 和 `fba_static_upload` 外部资源。通常先启动完整后端/全栈部署来创建这些资源；仅部署前端时，需要先创建同名网络和卷。
+
 ```bash
 # 使用 Docker Compose
 docker-compose up -d
