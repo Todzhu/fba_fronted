@@ -46,12 +46,12 @@ export function uploadFile(
   return uploadMyDataFile(file, parentId) as Promise<UserFileItem>;
 }
 
-export function deleteFile(fileId: number): Promise<void> {
-  return deleteMyDataFile(fileId) as Promise<void>;
+export async function deleteFile(fileId: number): Promise<void> {
+  await deleteMyDataFile(fileId);
 }
 
-export function batchDelete(ids: number[]): Promise<void> {
-  return batchDeleteMyDataFiles(ids) as Promise<void>;
+export async function batchDelete(ids: number[]): Promise<void> {
+  await batchDeleteMyDataFiles(ids);
 }
 
 export function getDownloadUrl(fileId: number): string {

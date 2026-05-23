@@ -221,4 +221,17 @@ describe('analysisTool compatibility behavior', () => {
       data: { ids: [1, 2, 3] },
     });
   });
+
+  it('keeps root myData delete wrappers resolving to undefined', async () => {
+    const { batchDelete, deleteFile } = await import('./myData');
+    del.mockResolvedValue({ ok: true });
+
+    await expect(deleteFile(7)).resolves.toBeUndefined();
+    await expect(batchDelete([7, 8])).resolves.toBeUndefined();
+
+    expect(del).toHaveBeenCalledWith('/api/v1/sys/my-data/7');
+    expect(del).toHaveBeenCalledWith('/api/v1/sys/my-data/batch', {
+      data: { ids: [7, 8] },
+    });
+  });
 });
