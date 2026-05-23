@@ -46,9 +46,9 @@ fronted/
 │       │       └── ...
 │       └── public/         # 静态资源
 ├── packages/               # 共享包
-│   ├── @vben/common-ui/    # 通用组件
-│   ├── @vben/hooks/        # Vue Hooks
-│   ├── @vben/request/      # HTTP 请求封装
+│   ├── effects/common-ui/  # 通用组件
+│   ├── effects/hooks/      # Vue Hooks
+│   ├── effects/request/    # HTTP 请求封装
 │   └── ...
 └── internal/               # 内部工具
 ```
@@ -69,8 +69,8 @@ fronted/
 
 ### 环境要求
 
-- Node.js 20.10+
-- pnpm 9.12+
+- Node.js 20.19+
+- pnpm 10.0+
 
 ### 安装步骤
 
@@ -164,21 +164,13 @@ docker-compose up -d
 
 ### 添加新页面
 
-1. 在 `apps/web-antdv-next/src/views/` 下创建页面组件
-2. 在 `apps/web-antdv-next/src/router/routes/modules/` 中添加路由
-3. 在后台菜单管理中配置菜单权限
+1. 在 `apps/web-antdv-next/src/views/` 下创建页面组件。
+2. 公共 BioCloud 页面路由添加到 `apps/web-antdv-next/src/router/routes/external/landing.ts`。
+3. 后台管理页面路由添加到 `apps/web-antdv-next/src/router/routes/modules/`，并在后台菜单管理中配置菜单权限。
 
 ### 添加新 API
 
-在 `apps/web-antdv-next/src/api/` 目录下添加接口文件：
-
-```typescript
-import { requestClient } from '#/api/request';
-
-export async function getMyData() {
-  return requestClient.get('/api/v1/my-endpoint');
-}
-```
+优先扩展现有业务 API 模块，例如 `analysis-tools.ts`、`my-data.ts`、`pipeline.ts` 或 `myTasks.ts`。不要为同一业务概念新增重复 API 文件；旧的 camelCase API 文件仅作为兼容入口保留。
 
 ### 代码规范
 
