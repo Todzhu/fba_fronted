@@ -36,11 +36,13 @@ describe('api compatibility modules', () => {
   it('keeps analysisTool as a compatibility module with legacy aliases', () => {
     const source = readApiFile('./analysisTool.ts');
     expect(source).toContain("export * from './analysis-tools';");
-    expect(source).toContain('getAnalysisToolList as fetchAnalysisToolList');
     expect(source).toContain('getAnalysisToolCategories as fetchAnalysisToolCategories');
-    expect(source).toContain('getCloudToolListApi as fetchAnalysisToolManageList');
     expect(source).toContain('getCloudToolApi as fetchAnalysisToolDetail');
     expect(source).toContain('createCloudToolApi as createAnalysisTool');
     expect(source).toContain('deleteCloudToolApi as deleteAnalysisTool');
+    expect(source).toContain('function fetchAnalysisToolList');
+    expect(source).toContain('function fetchAnalysisToolManageList');
+    expect(source).toContain('function fetchAnalysisToolFuncTypes');
+    expect(source).toContain('function toggleAnalysisToolFavorite');
   });
 });
