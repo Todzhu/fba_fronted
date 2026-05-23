@@ -74,10 +74,9 @@ fronted/
 
 ### 安装步骤
 
-**1. 克隆仓库**
+**1. 进入前端目录**
 
 ```bash
-git clone <repository-url>
 cd fronted
 ```
 
