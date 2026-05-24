@@ -44,27 +44,44 @@ export const CELL_TYPE_MARKER_DB: MarkerDatabase = {
     //  🧬 Human
     // ========================================================
     Human: {
+        // -------------------- 泛癌 --------------------
+        PanCancer: {
+            label: '泛癌',
+            cellTypes: [
+                { cellType: 'Epithelial_cell', positive: ['EPCAM', 'KRT8', 'KRT15', 'KRT18'] },
+                { cellType: 'Fibroblast', positive: ['COL1A2', 'COL1A1', 'COL3A1', 'DCN', 'COL6A1'] },
+                { cellType: 'Endothelial_cell', positive: ['ENG', 'PECAM1', 'VWF'] },
+                { cellType: 'CD8_T', positive: ['CD3D', 'CD3E', 'CD3G', 'CD2', 'CD8A', 'CD8B'] },
+                { cellType: 'CD4_T', positive: ['CD3D', 'CD3E', 'CD3G', 'CD2', 'CD4'] },
+                { cellType: 'Treg', positive: ['FOXP3', 'IL2RA', 'CTLA4'] },
+                { cellType: 'NK', positive: ['KLRF1', 'FCGR3A', 'FGFBP2', 'CX3CR1', 'GNLY', 'NKG7'] },
+                { cellType: 'B_cell', positive: ['MS4A1', 'CD79A', 'FCRL5'] },
+                { cellType: 'Monocytes', positive: ['LYZ', 'S100A8', 'S100A9', 'S100A12', 'VCAN', 'FCN1'] },
+                { cellType: 'Macrophages', positive: ['C1QA', 'C1QB', 'C1QC', 'MSR1', 'APOE', 'CD163', 'MRC1'] },
+                { cellType: 'Dendritic_cell', positive: ['CD1C', 'CD1E', 'CLEC10A', 'FCER1A'] },
+                { cellType: 'Mast_cell', positive: ['TPSAB1', 'KIT', 'CPA3'] },
+            ],
+        },
+
         // -------------------- 免疫系统 --------------------
         Immune: {
             label: '免疫系统/PBMC',
             cellTypes: [
-                { cellType: 'T cells', positive: ['CD3D', 'CD3E', 'CD3G', 'CD2'] },
-                { cellType: 'CD4+ T cells', positive: ['CD3D', 'CD4', 'IL7R', 'MAL', 'LEF1'] },
-                { cellType: 'CD8+ T cells', positive: ['CD3D', 'CD8A', 'CD8B', 'GZMK', 'GZMB'] },
-                { cellType: 'Regulatory T cells', positive: ['FOXP3', 'IL2RA', 'CTLA4', 'IKZF2', 'TIGIT'] },
-                { cellType: 'Naive T cells', positive: ['CCR7', 'LEF1', 'TCF7', 'SELL'] },
-                { cellType: 'NK cells', positive: ['NKG7', 'GNLY', 'KLRD1', 'KLRB1', 'NCAM1', 'FCGR3A'], negative: ['CD3D'] },
-                { cellType: 'B cells', positive: ['MS4A1', 'CD79A', 'CD79B', 'CD19', 'PAX5'] },
-                { cellType: 'Plasma cells', positive: ['MZB1', 'SDC1', 'JCHAIN', 'IGHG1', 'XBP1'] },
-                { cellType: 'CD14+ Monocytes', positive: ['CD14', 'LYZ', 'S100A8', 'S100A9', 'VCAN'] },
-                { cellType: 'CD16+ Monocytes', positive: ['FCGR3A', 'MS4A7', 'LST1', 'IFITM3'] },
-                { cellType: 'Macrophages', positive: ['CD68', 'CD163', 'MSR1', 'MARCO', 'MRC1'] },
-                { cellType: 'Dendritic cells', positive: ['FCER1A', 'CLEC10A', 'CD1C', 'HLA-DRA', 'ITGAX'] },
-                { cellType: 'pDC', positive: ['LILRA4', 'IL3RA', 'CLEC4C', 'IRF7', 'TCF4'] },
-                { cellType: 'Platelets', positive: ['PPBP', 'PF4', 'GP9', 'ITGA2B'] },
-                { cellType: 'Neutrophils', positive: ['CSF3R', 'FCGR3B', 'CXCR2', 'S100A8', 'S100A9', 'G0S2'] },
-                { cellType: 'Mast cells', positive: ['KIT', 'TPSAB1', 'TPSB2', 'CPA3', 'HPGDS'] },
-                { cellType: 'γδ T cells', positive: ['TRDC', 'TRGC1', 'TRGC2'] },
+                { cellType: 'CD4+ T cells', positive: ['CD3D', 'CD3E', 'CD4', 'IL7R', 'LTB'] },
+                { cellType: 'CD8+ T cells', positive: ['CD3D', 'CD3E', 'CD8A', 'CD8B'] },
+                { cellType: 'Naive T cells', positive: ['IL7R', 'CCR7', 'LEF1', 'TCF7', 'SELL'] },
+                { cellType: 'Memory T cells', positive: ['IL7R', 'S100A4', 'CD69'] },
+                { cellType: 'Regulatory T cells', positive: ['FOXP3', 'IL2RA', 'CTLA4'] },
+                { cellType: 'B cells', positive: ['CD79A', 'CD79B', 'MS4A1', 'CD19'] },
+                { cellType: 'Naive B cells', positive: ['TCL1A', 'IGHD', 'IGHM'] },
+                { cellType: 'Memory B cells', positive: ['CD27', 'TNFRSF13B'] },
+                { cellType: 'Plasma cells', positive: ['MZB1', 'SSR4', 'IGLL5', 'JCHAIN'] },
+                { cellType: 'NK cells', positive: ['GNLY', 'NKG7', 'NCAM1', 'KLRD1', 'KLRF1'] },
+                { cellType: 'CD14+ Monocytes', positive: ['CD14', 'LYZ', 'S100A8', 'S100A9', 'FCN1'] },
+                { cellType: 'FCGR3A+ Monocytes', positive: ['FCGR3A', 'MS4A7', 'CD16'] },
+                { cellType: 'Dendritic cells', positive: ['FCER1A', 'CST3', 'CLEC10A'] },
+                { cellType: 'Plasmacytoid dendritic cells', positive: ['IL3RA', 'GZMB', 'SERPINF1', 'ITM2C'] },
+                { cellType: 'Megakaryocytes', positive: ['PPBP', 'PF4', 'ITGA2B', 'GP9'] },
             ],
         },
 
@@ -257,6 +274,25 @@ export const CELL_TYPE_MARKER_DB: MarkerDatabase = {
     //  🐭 Mouse
     // ========================================================
     Mouse: {
+        // -------------------- 泛癌 --------------------
+        PanCancer: {
+            label: '泛癌',
+            cellTypes: [
+                { cellType: 'Epithelial_cell', positive: ['Epcam', 'Krt8', 'Krt15', 'Krt18'] },
+                { cellType: 'Fibroblast', positive: ['Col1a2', 'Col1a1', 'Col3a1', 'Dcn', 'Col6a1'] },
+                { cellType: 'Endothelial_cell', positive: ['Eng', 'Pecam1', 'Vwf'] },
+                { cellType: 'CD8_T', positive: ['Cd3d', 'Cd3e', 'Cd3g', 'Cd2', 'Cd8a', 'Cd8b1'] },
+                { cellType: 'CD4_T', positive: ['Cd3d', 'Cd3e', 'Cd3g', 'Cd2', 'Cd4'] },
+                { cellType: 'Treg', positive: ['Foxp3', 'Il2ra', 'Ctla4'] },
+                { cellType: 'NK', positive: ['Klrf1', 'Fcgr3', 'Fgfbp2', 'Cx3cr1', 'Nkg7'] },
+                { cellType: 'B_cell', positive: ['Ms4a1', 'Cd79a', 'Fcrl5'] },
+                { cellType: 'Monocytes', positive: ['Lyz2', 'S100a8', 'S100a9', 'S100a12', 'Vcan', 'Fcn1'] },
+                { cellType: 'Macrophages', positive: ['C1qa', 'C1qb', 'C1qc', 'Msr1', 'Apoe', 'Cd163', 'Mrc1'] },
+                { cellType: 'Dendritic_cell', positive: ['Cd1d1', 'Clec10a', 'Fcer1a'] },
+                { cellType: 'Mast_cell', positive: ['Tpsab1', 'Kit', 'Cpa3'] },
+            ],
+        },
+
         // -------------------- 免疫系统 --------------------
         Immune: {
             label: '免疫系统/脾脏',

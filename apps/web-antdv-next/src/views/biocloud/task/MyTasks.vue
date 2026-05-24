@@ -46,6 +46,9 @@ const tasks = ref<TaskItem[]>([]);
 const total = ref(0);
 const currentPage = ref(1);
 const pageSize = 10;
+const TASK_LIST_POLL_INTERVAL = 5000;
+let taskListPollTimer: ReturnType<typeof setInterval> | null = null;
+let taskListFetching = false;
 
 // Tab 切换
 
@@ -112,9 +115,17 @@ const formatDateTime = (dateStr: null | string): string => {
 };
 
 // ========== API Methods ==========
-const fetchTasks = async () => {
-  loading.value = true;
-  loadingText.value = '正在加载任务列表...';
+const hasActiveTasks = computed(() =>
+  tasks.value.some((task) => task.status === 'pending' || task.status === 'running'),
+);
+
+const fetchTasks = async (options: { silent?: boolean } = {}) => {
+  if (taskListFetching) return;
+  taskListFetching = true;
+  if (!options.silent) {
+    loading.value = true;
+    loadingText.value = '正在加载任务列表...';
+  }
   try {
     const res = await getMyTasks({
       page: currentPage.value,
@@ -123,17 +134,66 @@ const fetchTasks = async () => {
     });
     tasks.value = res.items;
     total.value = res.total;
+    selectedTasks.value = selectedTasks.value.filter((id) =>
+      res.items.some((task) => task.id === id),
+    );
   } catch (error) {
     console.error('获取任务列表失败:', error);
-    tasks.value = [];
-    total.value = 0;
+    if (!options.silent) {
+      tasks.value = [];
+      total.value = 0;
+    }
   } finally {
-    loading.value = false;
-    loadingText.value = '';
+    if (!options.silent) {
+      loading.value = false;
+      loadingText.value = '';
+    }
+    taskListFetching = false;
+  }
+};
+
+const pollTasks = async () => {
+  await fetchTasks({ silent: true });
+  if (hasActiveTasks.value) {
+    await loadMyPipelines();
+  }
+  syncTaskListPolling();
+};
+
+const startTaskListPolling = () => {
+  if (taskListPollTimer || !hasActiveTasks.value) return;
+  taskListPollTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      pollTasks();
+    }
+  }, TASK_LIST_POLL_INTERVAL);
+};
+
+const stopTaskListPolling = () => {
+  if (taskListPollTimer) {
+    clearInterval(taskListPollTimer);
+    taskListPollTimer = null;
+  }
+};
+
+const syncTaskListPolling = () => {
+  if (hasActiveTasks.value) {
+    startTaskListPolling();
+  } else {
+    stopTaskListPolling();
+  }
+};
+
+const handleVisibilityChange = () => {
+  if (document.visibilityState === 'visible' && hasActiveTasks.value) {
+    pollTasks();
   }
 };
 
 // ========== Computed ==========
+const isPipelineTask = (task: TaskItem) =>
+  !!task.input_params?.pipeline_id || task.tool_name === '单细胞分析流程';
+
 const filteredTasks = computed(() => {
   if (!searchQuery.value.trim()) return tasks.value;
   const query = searchQuery.value.toLowerCase();
@@ -172,11 +232,11 @@ const goToTaskResult = (task: TaskItem) => {
 };
 
 const canViewTaskLog = (task: TaskItem) =>
-  task.tool_name !== '单细胞分析流程' &&
+  !isPipelineTask(task) &&
   (task.status === 'running' || task.status === 'failed');
 
 const canRerunFailedTask = (task: TaskItem) =>
-  task.tool_name !== '单细胞分析流程' &&
+  !isPipelineTask(task) &&
   task.status === 'failed' &&
   !!task.tool_id;
 
@@ -283,6 +343,8 @@ watch(showLogDrawer, (val) => {
 
 onBeforeUnmount(() => {
   stopLogPolling();
+  stopTaskListPolling();
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 
 
@@ -357,6 +419,10 @@ watch(currentPage, () => {
   fetchTasks();
 });
 
+watch(hasActiveTasks, () => {
+  syncTaskListPolling();
+});
+
 // ========== 流程步骤状态（用于圆点展示） ==========
 const myPipelines = ref<Pipeline[]>([]);
 
@@ -376,6 +442,7 @@ const findPipeline = (task: TaskItem): Pipeline | undefined => {
 onMounted(() => {
   fetchTasks();
   loadMyPipelines();
+  document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 
@@ -418,7 +485,7 @@ onMounted(() => {
         </div>
 
         <!-- 状态筛选 -->
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <button
             v-for="option in statusOptions"
             :key="option.value"
@@ -437,7 +504,7 @@ onMounted(() => {
         <!-- 操作按钮 -->
         <div class="flex items-center gap-2">
           <button
-            @click="fetchTasks"
+            @click="() => fetchTasks()"
             class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
           >
             <RefreshCw class="h-4 w-4" />
@@ -492,7 +559,7 @@ onMounted(() => {
             />
             <span>任务名称</span>
           </div>
-          <div class="col-span-2 pl-1">分析工具</div>
+          <div class="col-span-2 pl-1">任务来源</div>
           <div class="col-span-2 pl-1">任务状态</div>
           <div class="col-span-2 pl-1">创建时间</div>
           <div class="col-span-2 text-right pr-2">操作</div>
@@ -564,29 +631,36 @@ onMounted(() => {
                   <Pencil class="h-3.5 w-3.5" />
                 </button>
               </div>
-              <p class="mt-0.5 truncate text-[12px] text-slate-400 font-mono">ID: {{ task.id }}</p>
+              <div class="mt-0.5 flex items-center gap-3">
+                <p class="truncate text-[12px] text-slate-400 font-mono">ID: {{ task.id }}</p>
+              </div>
             </div>
           </div>
 
           <!-- Tool Name -->
           <div class="col-span-2 pl-1 flex items-center gap-2">
             <!-- 流程任务: Microscope 图标 -->
-            <div v-if="task.tool_name === '单细胞分析流程'" class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-indigo-50 text-indigo-500 transition-colors group-hover:bg-indigo-100">
+            <div v-if="isPipelineTask(task)" class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-indigo-50 text-indigo-500 transition-colors group-hover:bg-indigo-100">
                <Microscope class="h-3 w-3" />
             </div>
             <!-- 普通任务: API 标签 -->
             <div v-else class="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-pink-50 text-pink-500 transition-colors group-hover:bg-pink-100">
                <span class="font-mono text-[10px] font-bold">API</span>
             </div>
-            <span class="truncate text-[13px] font-medium text-slate-600">
-              {{ task.tool_name || '-' }}
-            </span>
+            <div class="min-w-0">
+              <div class="truncate text-[13px] font-semibold text-slate-700">
+                {{ isPipelineTask(task) ? '流程任务' : '云工具任务' }}
+              </div>
+              <div class="truncate text-[12px] text-slate-400">
+                {{ task.tool_name || '-' }}
+              </div>
+            </div>
           </div>
 
           <!-- Status -->
           <div class="col-span-2 pl-1 flex items-center">
             <!-- 流程任务: 用圆点展示步骤状态 -->
-            <div v-if="task.tool_name === '单细胞分析流程' && findPipeline(task)" class="flex items-center gap-1 pl-1">
+            <div v-if="isPipelineTask(task) && findPipeline(task)" class="flex items-center gap-1 pl-1">
               <div
                 v-for="(step, idx) in findPipeline(task)!.steps"
                 :key="idx"
@@ -660,7 +734,7 @@ onMounted(() => {
           >
             <!-- 流程分析任务: 继续分析按钮 -->
             <button
-              v-if="task.tool_name === '单细胞分析流程' && task.input_params?.pipeline_id"
+              v-if="isPipelineTask(task) && task.input_params?.pipeline_id"
               @click="router.push(`/pipeline/${task.input_params.pipeline_id}`)"
               class="flex h-8 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 px-3.5 text-white shadow-md shadow-indigo-500/25 transition-all duration-300 hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500 hover:shadow-lg hover:shadow-indigo-500/40"
               title="继续分析"
@@ -670,7 +744,7 @@ onMounted(() => {
             </button>
             <!-- 普通任务: 查看配置与结果 -->
             <button
-               v-if="task.tool_name !== '单细胞分析流程' && task.status === 'completed'"
+               v-if="!isPipelineTask(task) && task.status === 'completed'"
               @click="router.push(`/tool/${task.tool_id}?task_id=${task.id}`)"
               class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-500/25"
               title="查看配置与结果"

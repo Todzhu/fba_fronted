@@ -117,7 +117,9 @@ const customRequest = ({ onSuccess }: any) => {
           />
         </p>
         <p class="ant-upload-text">点击或拖拽文件到此处上传</p>
-        <p class="ant-upload-hint">支持多文件上传，单文件最大支持 {{ MAX_FILE_SIZE_LABEL }}</p>
+        <p class="ant-upload-hint">
+          支持多文件上传，单文件最大支持 {{ MAX_FILE_SIZE_LABEL }}；.zip、.tar 上传后自动解压
+        </p>
       </Upload.Dragger>
 
       <!-- 上传进度区域 -->

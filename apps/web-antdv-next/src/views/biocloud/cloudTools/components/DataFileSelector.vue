@@ -71,11 +71,17 @@ const fileConfigs = computed<FileConfig[]>(() => {
 
   // 如果有示例数据配置，以示例数据生成 Tab
   if (examples && examples.length > 0) {
-    return examples.map((e) => ({
-      key: e.key,
-      label: e.name || e.key,
-      required: false,
-    }));
+    const schemaFiles = props.schema?.files ?? [];
+    return examples.map((e) => {
+      const schemaFile = schemaFiles.find((file) => file.key === e.key);
+      return {
+        key: e.key,
+        label: schemaFile?.label || e.name || e.key,
+        required: schemaFile?.required ?? false,
+        extensions: schemaFile?.extensions,
+        description: schemaFile?.description,
+      };
+    });
   }
 
   // 否则使用 input_schema.files
@@ -315,8 +321,11 @@ const loadExampleForFile = async (key: string, example: ExampleDataConfig) => {
 
   // 判断文件类型 - 优先使用 URL 判断（URL 包含真实扩展名，name 可能是中文描述）
   const urlFileName = example.url?.split('/').pop() || '';
-  const displayName = example.name || urlFileName || 'file';
-  const isBinary = isBinaryFile(urlFileName) || isBinaryFile(displayName);
+  const exampleName = example.name || '';
+  const isBinary = isBinaryFile(urlFileName) || isBinaryFile(exampleName);
+  const displayName = isBinary
+    ? urlFileName || exampleName || 'file'
+    : exampleName || urlFileName || 'file';
 
   try {
     if (isBinary) {

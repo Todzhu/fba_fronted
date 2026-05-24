@@ -20,12 +20,19 @@ import {
   FolderOpen,
   Grid3x3,
   Home,
+  Info,
   List,
   Loader2,
+  Pencil,
+  Save,
   X,
 } from 'lucide-vue-next';
 
 import { getTaskFileUrl, getTaskStatus } from '#/api/analysis-tools';
+import { getPipeline, updatePipeline } from '#/api/pipeline';
+import PipelineDataFolderSelector from '#/views/biocloud/pipeline/components/PipelineDataFolderSelector.vue';
+import { SPECIES_OPTIONS } from '#/views/biocloud/pipeline/constants';
+import type { Pipeline } from '#/views/biocloud/pipeline/types/pipeline';
 
 // ========== 类型 ==========
 interface TaskFile {
@@ -43,6 +50,7 @@ interface TaskInfo {
   status: string;
   task_name: null | string;
   tool_name: null | string;
+  input_params: null | Record<string, unknown>;
 }
 
 // 文件夹/文件混合项
@@ -76,6 +84,24 @@ const previewTitle = ref('');
 const showHtmlPreview = ref(false);
 const htmlPreviewUrl = ref('');
 const htmlPreviewTitle = ref('');
+
+// 流程项目基本信息
+const projectInfo = ref<null | Pipeline>(null);
+const projectInfoLoading = ref(false);
+const projectInfoSaving = ref(false);
+const projectInfoEditing = ref(false);
+const projectInfoError = ref('');
+const projectInfoForm = ref({
+  dataPath: '',
+  description: '',
+  name: '',
+  species: '',
+});
+
+const pipelineId = computed(() => {
+  const raw = task.value?.input_params?.pipeline_id;
+  return typeof raw === 'number' || typeof raw === 'string' ? String(raw) : '';
+});
 
 // ========== 计算属性：当前目录内容 ==========
 const currentItems = computed<FolderItem[]>(() => {
@@ -171,12 +197,86 @@ const formatTime = (time: null | string) => {
   return new Date(time).toLocaleString('zh-CN');
 };
 
+const formatSpecies = (species?: string) => {
+  if (!species) return '-';
+  return SPECIES_OPTIONS.find((item) => item.value === species)?.label || species;
+};
+
+const setProjectForm = (pipeline: Pipeline) => {
+  projectInfoForm.value = {
+    dataPath: pipeline.dataPath || '',
+    description: pipeline.description || '',
+    name: pipeline.name,
+    species: pipeline.species || '',
+  };
+};
+
+const loadProjectInfo = async () => {
+  projectInfo.value = null;
+  projectInfoError.value = '';
+  projectInfoEditing.value = false;
+  if (!pipelineId.value) return;
+
+  projectInfoLoading.value = true;
+  try {
+    const pipeline = await getPipeline(pipelineId.value);
+    projectInfo.value = pipeline;
+    setProjectForm(pipeline);
+  } catch (error: any) {
+    projectInfoError.value = error?.message || '获取项目基本信息失败';
+  } finally {
+    projectInfoLoading.value = false;
+  }
+};
+
+const startProjectEdit = () => {
+  if (!projectInfo.value) return;
+  setProjectForm(projectInfo.value);
+  projectInfoError.value = '';
+  projectInfoEditing.value = true;
+};
+
+const cancelProjectEdit = () => {
+  if (projectInfoSaving.value) return;
+  if (projectInfo.value) setProjectForm(projectInfo.value);
+  projectInfoError.value = '';
+  projectInfoEditing.value = false;
+};
+
+const saveProjectInfo = async () => {
+  const name = projectInfoForm.value.name.trim();
+  if (!pipelineId.value || !name) {
+    projectInfoError.value = '项目名称不能为空';
+    return;
+  }
+
+  projectInfoSaving.value = true;
+  projectInfoError.value = '';
+  try {
+    const updated = await updatePipeline(pipelineId.value, {
+      dataPath: projectInfoForm.value.dataPath || undefined,
+      description: projectInfoForm.value.description.trim() || undefined,
+      name,
+      species: projectInfoForm.value.species || undefined,
+    });
+    projectInfo.value = updated;
+    setProjectForm(updated);
+    if (task.value) task.value.task_name = updated.name;
+    projectInfoEditing.value = false;
+  } catch (error: any) {
+    projectInfoError.value = error?.message || '保存项目基本信息失败';
+  } finally {
+    projectInfoSaving.value = false;
+  }
+};
+
 // ========== 数据加载 ==========
 const fetchData = async () => {
   loading.value = true;
   try {
     const taskRes = await getTaskStatus(taskId.value);
     task.value = taskRes;
+    await loadProjectInfo();
 
     const { requestClient } = await import('#/api/request');
     const filesRes = await requestClient.get<TaskFile[]>(
@@ -369,6 +469,109 @@ watch(() => route.params.taskId, (n, o) => {
           <div class="meta-item"><span class="meta-label">完成时间</span><span class="meta-value">{{ formatTime(task.completed_at) }}</span></div>
           <div v-if="false" class="meta-item"><span class="meta-label">文件数量</span><span class="meta-value">{{ allFiles.length }} 个 <span v-if="totalImages" class="text-green-600">({{ totalImages }} 图片)</span><span v-if="totalTables" class="text-blue-600">({{ totalTables }} 表格)</span></span></div>
         </div>
+
+        <div v-if="pipelineId" class="project-info-panel">
+          <div class="project-info-head">
+            <div class="project-info-title">
+              <Info class="h-4 w-4 text-blue-600" />
+              <span>项目基本信息</span>
+            </div>
+            <div class="project-info-actions">
+              <button
+                v-if="projectInfo && !projectInfoEditing"
+                class="project-action-btn"
+                type="button"
+                @click="startProjectEdit"
+              >
+                <Pencil class="h-3.5 w-3.5" /> 编辑
+              </button>
+              <template v-else-if="projectInfoEditing">
+                <button
+                  class="project-action-btn"
+                  type="button"
+                  :disabled="projectInfoSaving"
+                  @click="cancelProjectEdit"
+                >
+                  <X class="h-3.5 w-3.5" /> 取消
+                </button>
+                <button
+                  class="project-save-btn"
+                  type="button"
+                  :disabled="projectInfoSaving"
+                  @click="saveProjectInfo"
+                >
+                  <Loader2 v-if="projectInfoSaving" class="h-3.5 w-3.5 animate-spin" />
+                  <Save v-else class="h-3.5 w-3.5" />
+                  {{ projectInfoSaving ? '保存中' : '保存' }}
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <div v-if="projectInfoError" class="project-error">{{ projectInfoError }}</div>
+          <div v-if="projectInfoLoading" class="project-loading">
+            <Loader2 class="h-4 w-4 animate-spin text-blue-500" />
+            <span>正在加载项目基本信息...</span>
+          </div>
+
+          <div v-else-if="projectInfo && !projectInfoEditing" class="project-info-grid">
+            <div class="project-field">
+              <span class="project-label">项目名称</span>
+              <span class="project-value">{{ projectInfo.name || '-' }}</span>
+            </div>
+            <div class="project-field">
+              <span class="project-label">样本物种</span>
+              <span class="project-value">{{ formatSpecies(projectInfo.species) }}</span>
+            </div>
+            <div class="project-field project-field-wide">
+              <span class="project-label">样本数据位置</span>
+              <span class="project-value mono">{{ projectInfo.dataPath || '-' }}</span>
+            </div>
+            <div class="project-field project-field-wide">
+              <span class="project-label">项目描述</span>
+              <span class="project-value">{{ projectInfo.description || '-' }}</span>
+            </div>
+          </div>
+
+          <div v-else-if="projectInfoEditing" class="project-edit-grid">
+            <label class="project-edit-field">
+              <span>项目名称 <b>*</b></span>
+              <input
+                v-model="projectInfoForm.name"
+                maxlength="50"
+                placeholder="请输入项目名称"
+                type="text"
+              />
+            </label>
+            <label class="project-edit-field">
+              <span>样本物种</span>
+              <select v-model="projectInfoForm.species">
+                <option value="">未设置</option>
+                <option
+                  v-for="option in SPECIES_OPTIONS"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+            <div class="project-edit-field project-edit-wide">
+              <span>样本数据位置</span>
+              <PipelineDataFolderSelector v-model="projectInfoForm.dataPath" />
+            </div>
+            <label class="project-edit-field project-edit-wide">
+              <span>项目描述</span>
+              <textarea
+                v-model="projectInfoForm.description"
+                maxlength="200"
+                placeholder="简要描述项目目的或备注信息"
+                rows="3"
+              ></textarea>
+              <em>{{ projectInfoForm.description.length }}/200</em>
+            </label>
+          </div>
+        </div>
       </div>
 
       <!-- 文件浏览器 -->
@@ -514,6 +717,39 @@ watch(() => route.params.taskId, (n, o) => {
 .meta-item { display: flex; flex-direction: column; gap: 2px; }
 .meta-label { font-size: 12px; color: #94a3b8; }
 .meta-value { font-size: 13px; font-weight: 500; color: #334155; }
+.project-info-panel { padding-top: 18px; margin-top: 20px; border-top: 1px solid #eef2f7; }
+.project-info-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.project-info-title { display: flex; gap: 8px; align-items: center; font-size: 14px; font-weight: 700; color: #1e293b; }
+.project-info-actions { display: flex; gap: 8px; align-items: center; }
+.project-action-btn,
+.project-save-btn { display: inline-flex; gap: 5px; align-items: center; justify-content: center; height: 30px; padding: 0 12px; font-size: 12px; font-weight: 600; cursor: pointer; border-radius: 8px; transition: all 0.2s; }
+.project-action-btn { color: #475569; background: #fff; border: 1px solid #e2e8f0; }
+.project-action-btn:hover { color: #2563eb; border-color: #bfdbfe; background: #eff6ff; }
+.project-save-btn { color: #fff; background: #2563eb; border: 1px solid #2563eb; }
+.project-save-btn:hover { background: #1d4ed8; }
+.project-action-btn:disabled,
+.project-save-btn:disabled { cursor: not-allowed; opacity: 0.6; }
+.project-error { padding: 9px 12px; margin-bottom: 12px; font-size: 13px; font-weight: 500; color: #dc2626; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; }
+.project-loading { display: flex; gap: 8px; align-items: center; padding: 14px 0; font-size: 13px; color: #64748b; }
+.project-info-grid,
+.project-edit-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 22px; }
+.project-field,
+.project-edit-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.project-field-wide,
+.project-edit-wide { grid-column: 1 / -1; }
+.project-label,
+.project-edit-field > span { font-size: 12px; font-weight: 500; color: #94a3b8; }
+.project-edit-field b { color: #ef4444; }
+.project-value { overflow: hidden; font-size: 13px; font-weight: 600; line-height: 1.6; color: #334155; text-overflow: ellipsis; white-space: nowrap; }
+.project-value.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-weight: 500; }
+.project-edit-field input,
+.project-edit-field select,
+.project-edit-field textarea { width: 100%; padding: 9px 11px; font-size: 13px; color: #334155; background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.project-edit-field input:focus,
+.project-edit-field select:focus,
+.project-edit-field textarea:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgb(59 130 246 / 12%); }
+.project-edit-field textarea { resize: vertical; }
+.project-edit-field em { align-self: flex-end; font-size: 11px; font-style: normal; color: #94a3b8; }
 
 /* 文件浏览器 */
 .files-card { padding: 24px; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgb(0 0 0 / 8%); }
@@ -576,4 +812,12 @@ watch(() => route.params.taskId, (n, o) => {
 .report-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
 .report-header button { padding: 4px; cursor: pointer; background: none; border: none; }
 .report-iframe { flex: 1; width: 100%; border: none; }
+
+@media (max-width: 768px) {
+  .info-header,
+  .project-info-head { align-items: flex-start; }
+  .info-meta,
+  .project-info-grid,
+  .project-edit-grid { grid-template-columns: 1fr; }
+}
 </style>

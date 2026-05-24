@@ -39,6 +39,7 @@ interface SchemaProperty {
   step?: number;
   group?: string; // 分组名称
   required?: boolean; // 支持属性内部的 required 标记
+  multiple?: boolean; // metadata_value_select 是否允许多选
 }
 
 interface SchemaPropertyWithKey extends SchemaProperty {

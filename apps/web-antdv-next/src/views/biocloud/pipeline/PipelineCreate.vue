@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import { useAccessStore } from '@vben/stores';
 
@@ -14,6 +14,7 @@ import { PIPELINE_TYPES, SPECIES_OPTIONS } from './constants';
 import { STEP_LABELS, STEP_ORDER } from './types/pipeline';
 
 const router = useRouter();
+const route = useRoute();
 const accessStore = useAccessStore();
 
 const isLoggedIn = computed(() => !!accessStore.accessToken);
@@ -22,6 +23,10 @@ const creating = ref(false);
 const apiError = ref('');
 
 const scrnaPipeline = PIPELINE_TYPES.find((item) => item.id === 'scrna') ?? PIPELINE_TYPES[0];
+const selectedPipelineType = computed(() => String(route.query.type || 'scrna'));
+const selectedPipeline = computed(
+  () => PIPELINE_TYPES.find((item) => item.id === selectedPipelineType.value) ?? scrnaPipeline,
+);
 
 const formName = ref('');
 const formDataPath = ref('');
@@ -66,6 +71,10 @@ const handleCreate = async () => {
     showAuthModal.value = true;
     return;
   }
+  if (!selectedPipeline.value.available) {
+    apiError.value = `${selectedPipeline.value.title}正在准备中，暂不支持创建项目`;
+    return;
+  }
   if (!validateForm()) return;
 
   creating.value = true;
@@ -75,7 +84,7 @@ const handleCreate = async () => {
       description: formDescription.value.trim() || undefined,
       dataPath: formDataPath.value,
       species: formSpecies.value,
-      pipelineType: 'scrna',
+      pipelineType: selectedPipeline.value.id,
     });
     router.push(`/pipeline/${pipeline.id}`);
   } catch (error: any) {
@@ -107,10 +116,10 @@ watch(isLoggedIn, (loggedIn) => {
       <div class="mb-6 rounded-xl border border-slate-200 bg-white px-6 py-5">
         <div class="flex items-center gap-4">
           <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
-            <Microscope class="h-6 w-6" />
+            <component :is="selectedPipeline.icon || Microscope" class="h-6 w-6" />
           </div>
           <div>
-            <h1 class="text-xl font-bold text-slate-950">创建单细胞分析项目</h1>
+            <h1 class="text-xl font-bold text-slate-950">创建{{ selectedPipeline.title.replace('流程', '项目') }}</h1>
             <p class="mt-1 text-sm text-slate-500">
               先建立项目，进入详情页后在第 1 步扫描样本并编辑分组。
             </p>
@@ -121,11 +130,11 @@ watch(isLoggedIn, (loggedIn) => {
       <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section class="rounded-xl border border-slate-200 bg-white">
           <div class="border-b border-slate-100 px-6 py-4">
-            <h2 class="text-base font-bold text-slate-900">项目配置</h2>
-            <p class="mt-1 text-sm text-slate-500">
-              选择输入数据目录和样本物种，系统会创建标准 6 步分析流程。
-            </p>
-          </div>
+              <h2 class="text-base font-bold text-slate-900">项目配置</h2>
+              <p class="mt-1 text-sm text-slate-500">
+              选择输入数据目录和样本物种，系统会创建标准 5 步分析流程。
+              </p>
+            </div>
 
           <div class="space-y-5 px-6 py-5">
             <div
@@ -228,12 +237,12 @@ watch(isLoggedIn, (loggedIn) => {
             </button>
             <button
               type="button"
-              :disabled="creating"
+              :disabled="creating || !selectedPipeline.available"
               class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
               @click="handleCreate"
             >
               <Loader2 v-if="creating" class="h-4 w-4 animate-spin" />
-              {{ creating ? '创建中...' : '创建项目' }}
+              {{ creating ? '创建中...' : selectedPipeline.available ? '创建项目' : '即将上线' }}
             </button>
           </div>
         </section>
@@ -241,13 +250,13 @@ watch(isLoggedIn, (loggedIn) => {
         <aside class="self-start rounded-xl border border-slate-200 bg-white lg:sticky lg:top-6">
           <div class="border-b border-slate-100 px-5 py-4">
             <p class="text-xs font-semibold uppercase tracking-wide text-teal-600">
-              {{ scrnaPipeline.subtitle }}
+              {{ selectedPipeline.subtitle }}
             </p>
             <h2 class="mt-1 text-lg font-bold text-slate-950">
-              {{ scrnaPipeline.title }}
+              {{ selectedPipeline.title }}
             </h2>
             <p class="mt-2 text-sm leading-6 text-slate-500">
-              {{ scrnaPipeline.description }}
+              {{ selectedPipeline.description }}
             </p>
           </div>
 

@@ -1,6 +1,6 @@
 /**
  * 单细胞分析流程类型定义
- * 6 步分析流程：数据读取 → 质控过滤 → 降维聚类 → 特征基因 → 细胞注释 → 亚群分析
+ * 5 步分析流程：数据读取 → 质控过滤 → 降维聚类 → 特征基因 → 细胞注释
  */
 
 // 步骤类型
@@ -9,8 +9,7 @@ export type StepType =
   | 'data_load' // 数据读取
   | 'dim_cluster' // 降维聚类（含预处理）
   | 'find_marker' // 特征基因
-  | 'qc_filter' // 质控过滤
-  | 'sub_annotation'; // 亚群分析
+  | 'qc_filter'; // 质控过滤
 
 // 步骤状态
 export type StepStatus = 'completed' | 'error' | 'pending' | 'running';
@@ -47,6 +46,7 @@ export interface Pipeline {
   status: string;
   analysisTaskId?: number; // 关联的 AnalysisTask ID
   taskOutputDir?: string;  // 统一任务输出目录（用于构建图片 URL）
+  taskOutputRelDir?: string; // 相对后端数据根目录的任务输出目录（用于构建静态资源 URL）
   steps: StepConfig[];
   createdAt: string;
   updatedAt: string;
@@ -59,7 +59,6 @@ export const STEP_ORDER: StepType[] = [
   'dim_cluster',
   'find_marker',
   'annotation',
-  'sub_annotation',
 ];
 
 // 步骤标签
@@ -69,7 +68,6 @@ export const STEP_LABELS: Record<string, string> = {
   dim_cluster: '降维聚类',
   find_marker: '特征基因',
   annotation: '细胞注释',
-  sub_annotation: '亚群分析',
 };
 
 // 步骤描述
@@ -79,7 +77,6 @@ export const STEP_DESCRIPTIONS: Record<string, string> = {
   dim_cluster: '归一化、降维可视化与无监督聚类',
   find_marker: '差异基因分析，找到各 Cluster 特征基因',
   annotation: '根据 Marker 基因进行细胞类型注释',
-  sub_annotation: '选定亚群重新降维聚类与亚型注释',
 };
 
 // 步骤图标（使用 lucide 图标名称）
@@ -89,5 +86,4 @@ export const STEP_ICONS: Record<string, string> = {
   dim_cluster: 'scatter-chart',
   find_marker: 'dna',
   annotation: 'tag',
-  sub_annotation: 'zoom-in',
 };

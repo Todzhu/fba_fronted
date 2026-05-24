@@ -10,6 +10,8 @@ import type {
 
 import { requestClient } from '#/api/request';
 
+const SAVE_H5AD_TIMEOUT = 10 * 60 * 1000;
+
 // ========== 后端响应类型（snake_case，与后端 Schema 一致） ==========
 
 /** 步骤响应（后端格式） */
@@ -40,6 +42,7 @@ interface ApiPipeline {
   status: string;
   analysis_task_id: null | number;
   task_output_dir: null | string;
+  task_output_rel_dir: null | string;
   steps: ApiPipelineStep[];
   created_time: null | string;
   updated_time: null | string;
@@ -63,6 +66,27 @@ interface ApiStepChartsResponse {
   charts: string[];
   tables: string[];
   stats: Record<string, unknown>;
+}
+
+export interface ClusterMarkerRow {
+  cluster?: null | string;
+  gene: string;
+  logfc: null | number;
+  pct1: null | number;
+  pct2: null | number;
+  pval_adj: null | number;
+  score: null | number;
+}
+
+export interface ClusterMarkerGroup {
+  cluster: string;
+  markers: ClusterMarkerRow[];
+}
+
+export interface ClusterMarkersTable {
+  clusters: ClusterMarkerGroup[];
+  columns: string[];
+  rows: Record<string, null | number | string>[];
 }
 
 // ========== 后端 → 前端数据转换 ==========
@@ -99,6 +123,7 @@ function toPipeline(api: ApiPipeline): Pipeline {
     status: api.status || 'running',
     analysisTaskId: api.analysis_task_id || undefined,
     taskOutputDir: api.task_output_dir || undefined,
+    taskOutputRelDir: api.task_output_rel_dir || undefined,
     steps: api.steps.map((s) => toStepConfig(s)),
     createdAt: api.created_time || new Date().toISOString(),
     updatedAt: api.updated_time || new Date().toISOString(),
@@ -115,6 +140,14 @@ export interface CreatePipelineParams {
   species?: string;
   pipelineType?: string;
   sampleDict?: Record<string, unknown>;
+}
+
+/** 更新流程项目基本信息参数 */
+export interface UpdatePipelineParams {
+  name: string;
+  description?: string;
+  dataPath?: string;
+  species?: string;
 }
 
 /**
@@ -148,6 +181,22 @@ export async function getPipelines(): Promise<Pipeline[]> {
  */
 export async function getPipeline(id: string): Promise<Pipeline> {
   const resp = await requestClient.get<ApiPipeline>(`/api/v1/pipelines/${id}`);
+  return toPipeline(resp);
+}
+
+/**
+ * 更新流程项目基本信息
+ */
+export async function updatePipeline(
+  id: string,
+  data: UpdatePipelineParams,
+): Promise<Pipeline> {
+  const resp = await requestClient.put<ApiPipeline>(`/api/v1/pipelines/${id}`, {
+    name: data.name,
+    description: data.description,
+    data_path: data.dataPath,
+    species: data.species,
+  });
   return toPipeline(resp);
 }
 
@@ -222,6 +271,22 @@ export async function getStepCharts(
 }
 
 /**
+ * 获取步骤4输出的 cluster marker 表，供细胞类型注释时共同判读。
+ */
+export async function getClusterMarkers(
+  pipelineId: string,
+): Promise<ClusterMarkersTable> {
+  const resp = await requestClient.get<ClusterMarkersTable>(
+    `/api/v1/pipelines/${pipelineId}/cluster-markers`,
+  );
+  return {
+    clusters: resp.clusters ?? [],
+    columns: resp.columns ?? [],
+    rows: resp.rows ?? [],
+  };
+}
+
+/**
  * 获取步骤运行日志
  * @param pipelineId 流程 ID
  * @param stepIndex 步骤序号
@@ -287,10 +352,12 @@ export async function autoAnnotate(
   pipelineId: string,
   method: string = 'panglaodb',
   organism: string = 'human',
-): Promise<Record<string, { cell_type: string; confidence: number; score: number }>> {
-  return await requestClient.post<Record<string, { cell_type: string; confidence: number; score: number }>>(
+  markerDict?: Record<string, string[]>,
+  tissueType?: string,
+): Promise<Record<string, { candidates?: { cell_type: string; confidence: number; score: number }[]; cell_type: string; confidence: number; score: number }>> {
+  return await requestClient.post<Record<string, { candidates?: { cell_type: string; confidence: number; score: number }[]; cell_type: string; confidence: number; score: number }>>(
     `/api/v1/pipelines/${pipelineId}/auto-annotate`,
-    { method, organism },
+    { marker_dict: markerDict, method, organism, tissue_type: tissueType },
     { timeout: 300_000 }, // 5分钟超时，自动注释需要联网下载数据并运行 ORA 分析
   );
 }
@@ -311,12 +378,13 @@ export async function saveH5adToMyData(
   return await requestClient.post<{ name: string; size: number }>(
     `/api/v1/pipelines/${pipelineId}/save-h5ad`,
     body,
+    { timeout: SAVE_H5AD_TIMEOUT },
   );
 }
 
 // ========== 用户数据文件 API ==========
 
-/** 获取上一步（细胞注释）产出的细胞类型列表，供亚群分析选择 */
+/** 获取细胞注释产出的细胞类型列表，供后续独立工具复用 */
 export async function getCelltypes(
   pipelineId: string | number,
 ): Promise<{ name: string; count: number }[]> {

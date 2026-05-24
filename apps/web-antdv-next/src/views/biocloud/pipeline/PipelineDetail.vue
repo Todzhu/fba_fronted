@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
  * 云流程详情页
- * 6 步分析导航 + 参数配置 + 结果展示
+ * 5 步分析导航 + 参数配置 + 结果展示
  * 第1步"数据读取"自动从创建时选的文件夹加载样本表格
  */
 import type { Pipeline, StepConfig } from './types/pipeline';
 import type { ParamFieldConfig } from './types/stepParamConfigs';
+import type { ClusterMarkersTable } from '#/api/pipeline';
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -13,7 +14,6 @@ import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowLeft,
   BookOpen,
-  Check,
   ChevronRight,
   Database,
   Dna,
@@ -22,38 +22,37 @@ import {
   Folder,
   Layers,
   Loader2,
-  Map,
   Play,
   ScatterChart,
   Tag,
-  Users,
   X,
-  ZoomIn,
 } from 'lucide-vue-next';
-import { message, Table as ATable } from 'ant-design-vue';
+import { message } from 'ant-design-vue';
 
 import {
   generateDotplot as generateDotplotApi,
-  generateFeatureplot as generateFeatureplotApi,
   autoAnnotate as autoAnnotateApi,
+  getClusterMarkers,
   getPipeline as fetchPipelineApi,
   getFilesInFolder,
   getStepLogs,
-  getCelltypes,
   runStep as runStepApi,
   saveH5adToMyData as saveH5adApi,
   updateSampleDict,
 } from '#/api/pipeline';
-import { ChevronDown, Download, Save, Trash2 } from 'lucide-vue-next';
+import { getTaskStatus } from '#/api/analysis-tools';
+import { ChevronDown, Download, Save } from 'lucide-vue-next';
 
+import { SPECIES_OPTIONS } from './constants';
 import { STEP_DESCRIPTIONS, STEP_LABELS } from './types/pipeline';
 import { STEP_PARAM_CONFIGS } from './types/stepParamConfigs';
-import { TISSUE_TYPE_OPTIONS } from './types/tissueMarkerPresets';
 import { STEP_HELP_CONTENT } from './types/stepHelpContent';
-import { getCellTypesForTissue } from './types/cellTypeMarkers';
+import { getCellTypesForTissue, getTissueOptions } from './types/cellTypeMarkers';
+import AnnotationWorkbench from './components/AnnotationWorkbench.vue';
 import PipelineStepper from './components/PipelineStepper.vue';
 import SampleGroupTable from './components/SampleGroupTable.vue';
 import StepResultPanel from './components/StepResultPanel.vue';
+import StepStatsSummary from './components/StepStatsSummary.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -63,7 +62,7 @@ const loading = ref(false);
 const activeStepIndex = ref(0);
 const running = ref(false);
 const activeContentTab = ref<'params' | 'results'>('params');
-const showAdvancedParams = ref(false);
+const advancedParamsOpenByStep = ref<Record<number, boolean>>({});
 
 // ========== 图片放大预览 ==========
 const lightboxUrl = ref('');
@@ -80,7 +79,6 @@ const stepIcons: Record<string, typeof Database> = {
   dim_cluster: ScatterChart,
   find_marker: Dna,
   annotation: Tag,
-  sub_annotation: ZoomIn,
 };
 
 // ========== 数据读取步骤：样本表格 ==========
@@ -198,12 +196,96 @@ const currentStepLogs = computed(() => {
 // 首次加载标记
 const isInitialLoad = ref(true);
 
+const normalizeOrganism = (value?: null | string) => {
+  const normalized = String(value || '').toLowerCase();
+  if (normalized.includes('mouse') || normalized.includes('mus') || normalized === '小鼠') {
+    return 'mouse';
+  }
+  return 'human';
+};
+
+const getPipelineOrganism = () => normalizeOrganism(pipeline.value?.species);
+
+const formatSpecies = (species?: string) => {
+  if (!species) return '-';
+  return SPECIES_OPTIONS.find((item) => item.value === species)?.label || species;
+};
+
+const getAnnotationSpecies = (): 'Human' | 'Mouse' =>
+  getPipelineOrganism() === 'mouse' ? 'Mouse' : 'Human';
+
+const legacyTissueMap: Record<string, string> = {
+  brain: 'Brain',
+  gut: 'GI_tract',
+  kidney: 'Kidney',
+  liver: 'Liver',
+  lung: 'Lung',
+  other: 'Immune',
+  pbmc: 'Immune',
+  skin: 'Skin',
+  tumor: 'Immune',
+};
+
+const normalizeTissueKey = (tissue: string) =>
+  legacyTissueMap[tissue] || tissue || 'Immune';
+
+const syncAnnotationOrganism = (step?: StepConfig) => {
+  if (!step || step.stepType !== 'annotation') return;
+  step.params.organism = getPipelineOrganism();
+};
+
+const normalizePipeline = (loadedPipeline: null | Pipeline): null | Pipeline => {
+  if (!loadedPipeline) return null;
+  const visibleSteps = loadedPipeline.steps
+    .filter((step) => (step.stepType as string) !== 'sub_annotation')
+    .map((step) => {
+      const configs = STEP_PARAM_CONFIGS[step.stepType] || [];
+      const params: Record<string, unknown> = {
+        ...((step.params || {}) as Record<string, unknown>),
+      };
+
+      for (const cfg of configs) {
+        if (params[cfg.key] === undefined && cfg.defaultValue !== undefined) {
+          params[cfg.key] = cfg.defaultValue;
+        }
+      }
+      if (step.stepType === 'annotation') {
+        params.organism = normalizeOrganism(loadedPipeline.species);
+        params.tissue_type = normalizeTissueKey(String(params.tissue_type || 'Immune'));
+      }
+
+      return {
+        ...step,
+        params,
+      };
+    });
+  return {
+    ...loadedPipeline,
+    currentStep: Math.min(
+      loadedPipeline.currentStep,
+      Math.max(visibleSteps.length - 1, 0),
+    ),
+    steps: visibleSteps,
+  };
+};
+
 // 加载流程
 const fetchPipeline = async () => {
   loading.value = true;
   try {
     const id = route.params.id as string;
-    pipeline.value = await fetchPipelineApi(id);
+    const loadedPipeline = await fetchPipelineApi(id);
+    if (loadedPipeline.analysisTaskId) {
+      try {
+        const task = await getTaskStatus(loadedPipeline.analysisTaskId);
+        if (task.task_name) {
+          loadedPipeline.name = task.task_name;
+        }
+      } catch (error) {
+        console.warn('同步任务名称失败:', error);
+      }
+    }
+    pipeline.value = normalizePipeline(loadedPipeline);
     if (pipeline.value) {
       // 仅首次加载时跳转到当前进行的步骤
       if (isInitialLoad.value) {
@@ -218,6 +300,15 @@ const fetchPipeline = async () => {
         pipeline.value.steps[activeStepIndex.value]?.stepType === 'data_load'
       ) {
         await loadSamplesFromPipeline();
+      }
+      if (pipeline.value.steps[activeStepIndex.value]?.stepType === 'annotation') {
+        const step = pipeline.value.steps[activeStepIndex.value];
+        syncAnnotationOrganism(step);
+        selectedTissueType.value = normalizeTissueKey(
+          String(step?.params.tissue_type || selectedTissueType.value),
+        );
+        loadMarkerPreset(selectedTissueType.value);
+        await loadClusterMarkers();
       }
       // 检测是否有运行中的步骤，自动恢复轮询
       const runningStepIdx = pipeline.value.steps.findIndex(
@@ -252,34 +343,24 @@ const isAnnotationStep = computed(() => {
   return activeStep.value?.stepType === 'annotation';
 });
 
-// ========== 参数表单逻辑 ==========
+const activeStepAdvancedParamsOpen = computed(() => {
+  return advancedParamsOpenByStep.value[activeStepIndex.value] === true;
+});
 
-// 存储亚群分析可用的大类细胞类型列表
-const subAnnotationCellTypes = ref<{ name: string; count: number }[]>([]);
-const isFetchingCellTypes = ref(false);
+const toggleAdvancedParams = () => {
+  advancedParamsOpenByStep.value[activeStepIndex.value] =
+    !activeStepAdvancedParamsOpen.value;
+};
+
+const paramTooltipIconClass =
+  'flex h-4 w-4 shrink-0 cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold leading-none text-slate-400 transition-colors group-hover:border-blue-400 group-hover:text-blue-500';
+
+// ========== 参数表单逻辑 ==========
 
 // 当前步骤的参数配置列表
 const currentStepParamConfigs = computed<ParamFieldConfig[]>(() => {
   if (!activeStep.value) return [];
-  const configs = STEP_PARAM_CONFIGS[activeStep.value.stepType] || [];
-  
-  // 对于亚群分析，动态注入下拉选项
-  if (activeStep.value.stepType === 'sub_annotation' && subAnnotationCellTypes.value.length > 0) {
-    return configs.map(c => {
-      if (c.key === 'target_celltype') {
-        return {
-          ...c,
-          options: subAnnotationCellTypes.value.map(ct => ({
-            label: `${ct.name} (${ct.count} cells)`,
-            value: ct.name,
-          })),
-        };
-      }
-      return c;
-    });
-  }
-  
-  return configs;
+  return STEP_PARAM_CONFIGS[activeStep.value.stepType] || [];
 });
 
 const basicParamConfigs = computed(() => {
@@ -334,55 +415,56 @@ const adjustParam = (
   activeStep.value.params[key] = next;
 };
 
-// ===== 细胞注释映射表编辑 =====
-// 分析结果 Tab（图表 / 数据表）
-const activeResultTab = ref<'charts' | 'tables'>('charts');
-// 辅助图折叠状态
-const showAuxCharts = ref(false);
-
 // ===== Marker 可编辑表格 =====
 interface MarkerRow {
   cellType: string;
   markers: string;
 }
-const selectedTissueType = ref('pbmc');
+const selectedTissueType = ref('Immune');
 const markerTableRows = ref<MarkerRow[]>([]);
 const dotplotUrl = ref('');
 const dotplotLoading = ref(false);
-const featureplotUrl = ref('');
-const featureplotLoading = ref(false);
-const activeAnnotationVizTab = ref<'dotplot' | 'featureplot'>('dotplot'); // Dotplot / Feature Plot 切换
-const showMarkerTable = ref(false); // Marker 表折叠状态
+const clusterMarkersTable = ref<ClusterMarkersTable>({
+  clusters: [],
+  columns: [],
+  rows: [],
+});
 const showSaveDropdown = ref(false); // 保存 h5ad 下拉菜单
 const savingH5ad = ref(false); // 保存中状态
 
 // ===== 自动注释相关 =====
-const autoAnnotateResult = ref<Record<string, { cell_type: string; score: number; confidence: number }>>({});
+const autoAnnotateResult = ref<Record<string, { candidates?: { cell_type: string; score: number; confidence: number }[]; cell_type: string; score: number; confidence: number }>>({});
 const autoAnnotateLoading = ref(false);
+const annotationTissueOptions = computed(() => getTissueOptions(getAnnotationSpecies()));
 
-// Marker 表中的细胞类型候选列表（供 Cluster 映射下拉使用）
-const candidateCellTypes = computed(() =>
-  markerTableRows.value.map((r) => r.cellType).filter(Boolean),
-);
-// 从知识库加载组织类型的 Marker 预设，并自动触发后端注释
+const buildMarkerDict = () => {
+  const markerDict: Record<string, string[]> = {};
+  for (const row of markerTableRows.value) {
+    const cellType = row.cellType.trim();
+    if (!cellType) continue;
+    const genes = row.markers
+      .split(/[,，\s]+/)
+      .map((g) => g.trim())
+      .filter(Boolean);
+    if (genes.length > 0) {
+      markerDict[cellType] = genes;
+    }
+  }
+  return markerDict;
+};
+
+// 从知识库加载组织类型的 Marker 预设。自动注释是独立的可选辅助动作。
 const loadMarkerPreset = (tissue: string) => {
-  selectedTissueType.value = tissue;
   if (!activeStep.value) return;
-  const organism = activeStep.value.params['organism'] as string || 'human';
-  const speciesMap: Record<string, 'Human' | 'Mouse'> = { human: 'Human', mouse: 'Mouse' };
-  const tissueMap: Record<string, string> = {
-    pbmc: 'Immune', lung: 'Lung', liver: 'Liver', brain: 'Brain',
-    tumor: 'Immune', gut: 'GI_tract', kidney: 'Kidney', skin: 'Skin', other: 'Immune',
-  };
-  const sp = speciesMap[organism] || 'Human';
-  const ts = tissueMap[tissue] || 'Immune';
-  const cellTypes = getCellTypesForTissue(sp, ts);
+  syncAnnotationOrganism(activeStep.value);
+  const ts = normalizeTissueKey(tissue);
+  selectedTissueType.value = ts;
+  activeStep.value.params.tissue_type = ts;
+  const cellTypes = getCellTypesForTissue(getAnnotationSpecies(), ts);
   markerTableRows.value = cellTypes.map((ct) => ({
     cellType: ct.cellType,
     markers: ct.positive.join(', '),
   }));
-  // 选择组织后自动触发自动注释（异步，不阻塞 UI）
-  handleAutoAnnotate();
 };
 
 const addMarkerRow = () => {
@@ -399,17 +481,7 @@ const handleGenerateDotplot = async () => {
   dotplotLoading.value = true;
   try {
     // 构建 {细胞类型: [基因列表]} 的字典结构
-    const markerDict: Record<string, string[]> = {};
-    for (const row of markerTableRows.value) {
-      if (!row.cellType.trim()) continue;
-      const genes = row.markers
-        .split(/[,，\s]+/)
-        .map((g) => g.trim())
-        .filter(Boolean);
-      if (genes.length > 0) {
-        markerDict[row.cellType.trim()] = genes;
-      }
-    }
+    const markerDict = buildMarkerDict();
     if (Object.keys(markerDict).length === 0) return;
     const resp = await generateDotplotApi(pipeline.value.id, markerDict);
     dotplotUrl.value = resp.url;
@@ -420,52 +492,24 @@ const handleGenerateDotplot = async () => {
   }
 };
 
-// 收集 marker 表格中的所有基因并调用后端生成 Feature Plot
-const handleGenerateFeatureplot = async () => {
-  if (!pipeline.value || markerTableRows.value.length === 0) return;
-  featureplotLoading.value = true;
-  try {
-    // 从 marker 表提取所有基因
-    const allGenes = new Set<string>();
-    for (const row of markerTableRows.value) {
-      const genes = row.markers
-        .split(/[,，\s]+/)
-        .map((g) => g.trim())
-        .filter(Boolean);
-      genes.forEach((g) => allGenes.add(g));
-    }
-    if (allGenes.size === 0) return;
-    const resp = await generateFeatureplotApi(pipeline.value.id, [...allGenes]);
-    featureplotUrl.value = resp.url;
-    // 自动切换到 Feature Plot tab
-    activeAnnotationVizTab.value = 'featureplot';
-  } catch (error) {
-    console.error('生成 Feature Plot 失败:', error);
-  } finally {
-    featureplotLoading.value = false;
-  }
-};
-
 // 调用后端自动注释预览，获取 cluster→cell_type 映射
 const handleAutoAnnotate = async () => {
   if (!pipeline.value || !activeStep.value) return;
   autoAnnotateLoading.value = true;
   try {
+    syncAnnotationOrganism(activeStep.value);
     const method = (activeStep.value.params['annotation_method'] as string) || 'panglaodb';
-    const organism = (activeStep.value.params['organism'] as string) || 'human';
-    const result = await autoAnnotateApi(pipeline.value.id, method, organism);
+    const organism = (activeStep.value.params['organism'] as string) || getPipelineOrganism();
+    const markerDict = buildMarkerDict();
+    const result = await autoAnnotateApi(
+      pipeline.value.id,
+      method,
+      organism,
+      Object.keys(markerDict).length > 0 ? markerDict : undefined,
+      selectedTissueType.value,
+    );
     autoAnnotateResult.value = result;
-    // 将结果自动填入 Cluster 映射表
-    for (const row of clusterTableData.value) {
-      const autoResult = result[row.cluster];
-      if (autoResult && autoResult.cell_type) {
-        // 仅在用户未手动填写的情况下自动填入
-        if (!row.cellType || row.cellType.trim() === '') {
-          row.cellType = autoResult.cell_type;
-        }
-      }
-    }
-    message.success(`自动注释完成，已为 ${Object.keys(result).length} 个 Cluster 生成建议`);
+    message.success(`已生成 ${Object.keys(result).length} 个 Cluster 的自动注释参考`);
   } catch (error) {
     console.error('自动注释失败:', error);
     message.error('自动注释失败，请检查降维聚类步骤是否完成');
@@ -474,11 +518,11 @@ const handleAutoAnnotate = async () => {
   }
 };
 
-// 一键用自动注释结果填充所有 Cluster
-const fillAllAutoAnnotation = () => {
+// 主动将自动注释参考应用到 Cluster 表。默认只填空白，避免覆盖人工判读。
+const applyAutoAnnotation = (overwrite = false) => {
   for (const row of clusterTableData.value) {
     const autoResult = autoAnnotateResult.value[row.cluster];
-    if (autoResult && autoResult.cell_type) {
+    if (autoResult && autoResult.cell_type && autoResult.confidence >= 60 && (overwrite || !row.cellType?.trim())) {
       row.cellType = autoResult.cell_type;
     }
   }
@@ -491,154 +535,6 @@ const resetAllAnnotation = () => {
   }
   autoAnnotateResult.value = {};
 };
-
-// ===== QC 质控图样本切换 =====
-const selectedQcSample = ref<string>('all');
-
-// 从当前步骤的 stats.samples 获取样本列表
-const qcSampleList = computed<string[]>(() => {
-  const samplesObj = activeStep.value?.result?.stats?.samples as Record<string, unknown> | undefined;
-  if (!samplesObj) return [];
-  return Object.keys(samplesObj);
-});
-
-// 数据读取步骤的图后缀
-const currentQcChartSuffix = computed(() => {
-  if (selectedQcSample.value === 'all') return 'orig_violin.png';
-  return `orig_violin_${selectedQcSample.value}.png`;
-});
-
-// 质控过滤步骤的图后缀
-const currentFilteredChartSuffix = computed(() => {
-  if (selectedQcSample.value === 'all') return 'filtered_violin.png';
-  return `filtered_violin_${selectedQcSample.value}.png`;
-});
-
-// 切换步骤时重置下拉框
-watch(activeStepIndex, () => {
-  selectedQcSample.value = 'all';
-  selectedDimChart.value = 'umap_cluster';
-});
-
-// ===== 降维聚类图表切换 =====
-const selectedDimChart = ref<string>('umap_cluster');
-
-// 图表选项配置
-const DIM_CHART_OPTIONS: { value: string; label: string; match: (u: string) => boolean }[] = [
-  { value: 'umap_cluster', label: 'Cluster UMAP', match: (u) => u.includes('umap_cluster') },
-  { value: 'umap_sample', label: 'Sample UMAP', match: (u) => u.includes('umap_sample') },
-  { value: 'umap_group', label: 'Group UMAP', match: (u) => u.includes('umap_group_split') },
-  { value: 'barplot', label: 'Cluster 细胞比例', match: (u) => u.includes('cluster_proportion_barplot') },
-  { value: 'hvg', label: '高变基因', match: (u) => u.includes('highly_variable_genes') },
-  { value: 'pca', label: 'PCA 方差比', match: (u) => u.includes('pca_variance_ratio') },
-];
-
-// 当前可用的图表选项（根据实际返回的 charts 过滤）
-const availableDimCharts = computed(() => {
-  const charts = activeStep.value?.result?.charts as string[] | undefined;
-  if (!charts) return [];
-  return DIM_CHART_OPTIONS.filter(opt => charts.some(opt.match));
-});
-
-// 当前选中的图表 URL
-const currentDimChartUrls = computed(() => {
-  const charts = activeStep.value?.result?.charts as string[] | undefined;
-  if (!charts) return [];
-  const opt = DIM_CHART_OPTIONS.find(o => o.value === selectedDimChart.value);
-  if (!opt) return [];
-  return charts.filter(opt.match);
-});
-
-// ===== Marker 基因表格内联展示 =====
-const markerTableColumns = ref<any[]>([]);
-const markerTableData = ref<Record<string, string>[]>([]);
-const markerTableLoading = ref(false);
-
-const fetchMarkerTable = async () => {
-  if (!activeStep.value?.result?.tables) return;
-  const tables = activeStep.value.result.tables as string[];
-  const target = tables.find((t: string) => t.includes('all_cluster_marker'));
-  if (!target) return;
-
-  const url = getChartUrl(target);
-  markerTableLoading.value = true;
-  try {
-    const resp = await fetch(url);
-    const text = await resp.text();
-    const lines = text.trim().split('\n');
-    if (lines.length > 0) {
-      const headers = lines[0]!.split('\t').map(h => h.trim());
-      console.log('[Marker Table] headers:', headers);
-      // 生成 ant-design-vue Table 列配置（仅 cluster 列支持筛选）
-      const clusterIdx = headers.findIndex(h => h.toLowerCase() === 'cluster');
-      console.log('[Marker Table] clusterIdx:', clusterIdx);
-      const clusterValues = clusterIdx >= 0
-        ? [...new Set(lines.slice(1).map(l => (l.split('\t')[clusterIdx] || '').trim()))].sort((a, b) => Number(a) - Number(b))
-        : [];
-
-      markerTableColumns.value = headers.map(h => ({
-        title: h,
-        dataIndex: h,
-        key: h,
-        width: 120,
-        ellipsis: true,
-        ...(h === 'cluster' && clusterValues.length > 0
-          ? {
-              filters: clusterValues.map(v => ({ text: `Cluster ${v}`, value: v })),
-              onFilter: (value: string, record: Record<string, string>) => record[h] === value,
-            }
-          : {}),
-      }));
-      // 生成数据源
-      markerTableData.value = lines.slice(1).map((line, idx) => {
-        const cells = line.split('\t');
-        const row: Record<string, string> = { _key: String(idx) };
-        headers.forEach((h, i) => { row[h] = (cells[i] || '').trim(); });
-        return row;
-      });
-    }
-  } catch (e) {
-    console.error('获取 Marker 表格失败:', e);
-  } finally {
-    markerTableLoading.value = false;
-  }
-};
-
-// 切换步骤时重置状态
-watch(activeStepIndex, async () => {
-  // 切换回图表视图
-  activeResultTab.value = 'charts';
-  
-  // 切换步骤时清空旧数据
-  if (activeStep.value?.stepType !== 'find_marker') {
-    markerTableColumns.value = [];
-    markerTableData.value = [];
-  }
-  
-  // 切换到亚群分析步骤时，获取已有注释细胞类型
-  if (activeStep.value?.stepType === 'sub_annotation' && pipeline.value?.id) {
-    // 只有在上一步（细胞注释）已完成，且还没有获取过数据时才去获取
-    const annotationStep = pipeline.value.steps.find((s) => s.stepType === 'annotation');
-    if (annotationStep?.status === 'completed' && subAnnotationCellTypes.value.length === 0 && !isFetchingCellTypes.value) {
-      isFetchingCellTypes.value = true;
-      try {
-        const items = await getCelltypes(pipeline.value.id);
-        subAnnotationCellTypes.value = items;
-      } catch (err) {
-        console.error('获取细胞类型失败', err);
-      } finally {
-        isFetchingCellTypes.value = false;
-      }
-    }
-  }
-});
-
-// 切换到 find_marker 数据表 tab 时自动加载
-watch([activeStepIndex, activeResultTab], () => {
-  if (activeStep.value?.stepType === 'find_marker' && activeResultTab.value === 'tables' && markerTableData.value.length === 0) {
-    fetchMarkerTable();
-  }
-});
 
 // ===== Cluster→CellType 映射表 =====
 // 从 dim_cluster 步骤结果中获取 cluster 列表
@@ -687,9 +583,20 @@ const initClusterMap = () => {
   }));
 };
 
+const loadClusterMarkers = async () => {
+  if (!pipeline.value) return;
+  try {
+    clusterMarkersTable.value = await getClusterMarkers(pipeline.value.id);
+  } catch (error) {
+    console.error('读取 Cluster marker 表失败:', error);
+    clusterMarkersTable.value = { clusters: [], columns: [], rows: [] };
+  }
+};
+
 // 提交 Cluster→CellType 注释并运行后端
 const submitClusterAnnotation = async () => {
   if (!pipeline.value || !activeStep.value) return;
+  syncAnnotationOrganism(activeStep.value);
   // 从 clusterTableData 获取数据（proxyConfig query 同源）
   const cellTypeMapping: Record<string, string> = {};
   for (const row of clusterTableData.value) {
@@ -734,7 +641,10 @@ const submitClusterAnnotation = async () => {
 // 下载 h5ad 到本地
 const handleDownloadH5ad = () => {
   if (!pipeline.value) return;
-  const url = `/static/pipelines/${pipeline.value.userId}/pipelines/${pipeline.value.id}/step_4_annotation/adata_annotated.h5ad`;
+  const relDir = pipeline.value.taskOutputRelDir;
+  const url = relDir
+    ? `/static/pipelines/${relDir}/05-cell_annotation/adata_annotated.h5ad`
+    : `/static/pipelines/${pipeline.value.userId}/pipelines/${pipeline.value.id}/step_4_annotation/adata_annotated.h5ad`;
   const a = document.createElement('a');
   a.href = url;
   a.download = `${pipeline.value.name}_annotated.h5ad`;
@@ -802,6 +712,7 @@ const confirmSaveToMyData = async () => {
 watch([activeStepIndex, clusterList], () => {
   if (isAnnotationStep.value && clusterList.value.length > 0) {
     initClusterMap();
+    loadClusterMarkers();
   }
 }, { immediate: true });
 
@@ -886,6 +797,7 @@ const handleRunStep = async () => {
   try {
     // 注释步骤：自动注入 Marker 表格数据到参数
     if (activeStep.value.stepType === 'annotation' && markerTableRows.value.length > 0) {
+      syncAnnotationOrganism(activeStep.value);
       const allGenes = new Set<string>();
       for (const row of markerTableRows.value) {
         for (const g of row.markers.split(/[,，\s]+/)) {
@@ -931,99 +843,6 @@ const openLogDrawer = async () => {
   showLogDrawer.value = true;
 };
 
-// 统计标签中文映射
-const STAT_LABELS: Record<string, string> = {
-  total_cells: '总细胞数',
-  total_genes: '总基因数',
-  n_samples: '样本数',
-  n_groups: '分组数',
-  cells_after_filter: '过滤后细胞数',
-  genes_after_filter: '过滤后基因数',
-  filter_ratio: '过滤比例',
-  median_genes: '基因中位数',
-  n_clusters: '聚类数',
-  n_hvg: '高变基因数',
-  n_pcs: '主成分数',
-};
-
-// 统计指标图标映射
-const STAT_ICONS: Record<string, any> = {
-  total_cells: Users,
-  total_genes: Dna,
-  n_samples: Folder,
-  n_groups: Layers,
-  n_clusters: ScatterChart,
-  n_hvg: Dna,
-  n_pcs: Layers,
-};
-
-// 统计指标图标背景色
-const STAT_ICON_COLORS: Record<string, string> = {
-  total_cells: 'bg-blue-600',
-  total_genes: 'bg-indigo-600',
-  n_samples: 'bg-emerald-600',
-  n_groups: 'bg-slate-700',
-  n_clusters: 'bg-violet-600',
-  n_hvg: 'bg-teal-600',
-  n_pcs: 'bg-cyan-600',
-};
-
-// 统计指标排序优先级（越小越前）
-const STAT_ORDER: Record<string, number> = {
-  total_cells: 1,
-  total_genes: 2,
-  n_samples: 3,
-  n_groups: 4,
-  cells_after_filter: 1,
-  genes_after_filter: 2,
-  filter_ratio: 3,
-  median_genes: 4,
-  n_clusters: 5,
-  n_hvg: 6,
-  n_pcs: 7,
-};
-
-// 获取排序后的统计数据
-const getSortedStats = (stats: Record<string, unknown>): Array<{ key: string; value: unknown }> => {
-  const simple: Array<{ key: string; value: unknown }> = [];
-  for (const [key, value] of Object.entries(stats)) {
-    if (typeof value !== 'object' || value === null) {
-      simple.push({ key, value });
-    }
-  }
-  return simple.sort((a, b) => (STAT_ORDER[a.key] ?? 99) - (STAT_ORDER[b.key] ?? 99));
-};
-
-
-// 过滤 stats 中的简单值（排除嵌套对象）
-const getSimpleStats = (
-  stats: Record<string, unknown>,
-): Record<string, unknown> => {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(stats)) {
-    if (typeof value !== 'object' || value === null) {
-      result[key] = value;
-    }
-  }
-  return result;
-};
-
-// 格式化统计值
-const formatStatValue = (value: unknown): string => {
-  if (typeof value === 'number') {
-    return value.toLocaleString();
-  }
-  if (typeof value === 'object' && value !== null) {
-    // 将对象转为可读字符串，如 {NC: 31739, T: 28343} → "NC: 31,739 | T: 28,343"
-    return Object.entries(value as Record<string, unknown>)
-      .map(
-        ([k, v]) => `${k}: ${typeof v === 'number' ? v.toLocaleString() : v}`,
-      )
-      .join(' | ');
-  }
-  return String(value ?? '-');
-};
-
 // 步骤类型 → 输出目录名映射（与后端 STEP_OUTPUT_DIRS 保持一致）
 const STEP_OUTPUT_DIRS: Record<string, string> = {
   data_load: '01-data_qc',
@@ -1031,20 +850,10 @@ const STEP_OUTPUT_DIRS: Record<string, string> = {
   dim_cluster: '03-dim_cluster',
   find_marker: '04-marker_genes',
   annotation: '05-cell_annotation',
-  sub_annotation: '06-sub_cell_annotation',
 };
 
 // 将反斜杠统一为正斜杠（Windows 路径兼容）
 const normalizePath = (p: string) => p.split('\\').join('/');
-
-// 从 taskOutputDir（绝对路径）提取 median/ 之后的相对路径
-const extractRelDir = (absDir: string): string | null => {
-  const normalized = normalizePath(absDir);
-  const marker = '/median/';
-  const idx = normalized.indexOf(marker);
-  if (idx === -1) return null;
-  return normalized.substring(idx + marker.length);
-};
 
 // 构建图表/表格的完整访问 URL
 const getChartUrl = (relPath: string): string => {
@@ -1053,13 +862,10 @@ const getChartUrl = (relPath: string): string => {
   const normalizedPath = normalizePath(relPath);
 
   // v2: 使用 Pipeline 关联的统一任务目录
-  const taskDir = pipeline.value.taskOutputDir;
-  if (taskDir) {
-    const relDir = extractRelDir(taskDir);
-    if (relDir) {
-      const stepDir = STEP_OUTPUT_DIRS[activeStep.value.stepType] || `step_${activeStepIndex.value}`;
-      return `/static/pipelines/${relDir}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
-    }
+  const relDir = pipeline.value.taskOutputRelDir;
+  if (relDir) {
+    const stepDir = STEP_OUTPUT_DIRS[activeStep.value.stepType] || `step_${activeStepIndex.value}`;
+    return `/static/pipelines/${relDir}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
   }
 
   // 兼容旧版：使用 pipelines/ 路径
@@ -1078,13 +884,10 @@ const getStepChartUrl = (relPath: string, stepType: string): string => {
   const normalizedPath = normalizePath(relPath);
 
   // v2: 使用 Pipeline 关联的统一任务目录
-  const taskDir = pipeline.value.taskOutputDir;
-  if (taskDir) {
-    const relDir = extractRelDir(taskDir);
-    if (relDir) {
-      const stepDir = STEP_OUTPUT_DIRS[stepType] || stepType;
-      return `/static/pipelines/${relDir}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
-    }
+  const relDir = pipeline.value.taskOutputRelDir;
+  if (relDir) {
+    const stepDir = STEP_OUTPUT_DIRS[stepType] || stepType;
+    return `/static/pipelines/${relDir}/${stepDir}/${normalizedPath}?t=${Date.now()}`;
   }
 
   // 兼容旧版
@@ -1111,6 +914,7 @@ watch(
     // 统一填充未设置的参数默认值
     const step = pipeline.value?.steps[idx];
     if (step) {
+      syncAnnotationOrganism(step);
       const configs = STEP_PARAM_CONFIGS[step.stepType];
       if (configs) {
         for (const cfg of configs) {
@@ -1127,6 +931,13 @@ watch(
       sampleRows.value.length === 0
     ) {
       loadSamplesFromPipeline();
+    }
+    if (pipeline.value?.steps[idx]?.stepType === 'annotation') {
+      selectedTissueType.value = normalizeTissueKey(
+        String(pipeline.value.steps[idx]?.params.tissue_type || selectedTissueType.value),
+      );
+      loadMarkerPreset(selectedTissueType.value);
+      loadClusterMarkers();
     }
   },
 );
@@ -1149,24 +960,44 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 pb-20">
+  <div class="min-h-screen bg-slate-50 pb-10">
     <!-- Header -->
-    <div class="border-b border-slate-200 bg-white px-4 py-5 sm:px-6 lg:px-8">
+    <div class="compact-project-header border-b border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
       <div class="mx-auto max-w-7xl">
         <div class="flex items-center gap-4">
           <button
             @click="router.push('/tasks')"
-            class="cursor-pointer rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
+            class="w-fit cursor-pointer rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
           >
             <ArrowLeft class="h-5 w-5" />
           </button>
-          <div>
+          <div class="min-w-[160px]">
             <h1 class="text-xl font-bold text-slate-900">
               {{ pipeline?.name || '加载中...' }}
             </h1>
-            <p v-if="pipeline?.description" class="text-sm text-slate-500">
-              {{ pipeline.description }}
-            </p>
+          </div>
+          <div
+            v-if="pipeline"
+            class="grid flex-1 grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm md:grid-cols-3"
+          >
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-slate-400">样本物种</p>
+              <p class="truncate font-semibold text-slate-800" :title="formatSpecies(pipeline.species)">
+                {{ formatSpecies(pipeline.species) }}
+              </p>
+            </div>
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-slate-400">样本数据位置</p>
+              <p class="truncate font-semibold text-slate-800" :title="pipeline.dataPath || '-'">
+                {{ pipeline.dataPath || '-' }}
+              </p>
+            </div>
+            <div class="min-w-0">
+              <p class="text-xs font-semibold text-slate-400">项目描述</p>
+              <p class="truncate font-semibold text-slate-800" :title="pipeline.description || '-'">
+                {{ pipeline.description || '-' }}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -1192,43 +1023,38 @@ onUnmounted(() => {
         <!-- 步骤详情 -->
         <div class="min-w-0 space-y-4">
           <template v-if="activeStep">
-            <!-- 步骤头部卡片 -->
-            <div class="rounded-t-xl rounded-b-none border border-slate-200 bg-white">
-            <div class="px-8 py-6">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="flex items-center gap-4">
-                    <div
-                      class="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100"
-                    >
+            <!-- 当前步骤工具栏 -->
+            <div class="active-step-toolbar rounded-xl border border-slate-200 bg-white px-5 py-4">
+              <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="flex min-w-0 items-center gap-3">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50">
                       <component
                         :is="stepIcons[activeStep.stepType] || Database"
-                        class="h-6 w-6 text-blue-600"
+                        class="h-5 w-5 text-blue-600"
                       />
                     </div>
-                    <div>
-                      <h2 class="text-xl font-black text-slate-900">
-                        步骤 {{ activeStepIndex + 1 }}: {{ STEP_LABELS[activeStep.stepType] || activeStep.stepType }}
+                    <div class="min-w-0">
+                      <h2 class="truncate text-lg font-black text-slate-900">
+                        步骤 {{ activeStepIndex + 1 }} · {{ STEP_LABELS[activeStep.stepType] || activeStep.stepType }}
                       </h2>
-                      <p v-if="isDataLoadStep && pipeline" class="mt-0.5 flex items-center gap-2 text-sm text-slate-500">
-                        <Folder class="h-3.5 w-3.5 text-blue-400" />
-                        {{ pipeline.dataPath ? `我的数据/${pipeline.dataPath}` : '未指定数据路径' }}
+                      <p v-if="isDataLoadStep && pipeline" class="mt-0.5 flex min-w-0 items-center gap-2 truncate text-sm text-slate-500">
+                        <Folder class="h-3.5 w-3.5 shrink-0 text-blue-400" />
+                        <span class="truncate">{{ pipeline.dataPath ? `我的数据/${pipeline.dataPath}` : '未指定数据路径' }}</span>
                         <span
                           v-if="pipeline.species"
-                          class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700"
+                          class="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700"
                         >
                           {{ pipeline.species }}
                         </span>
                       </p>
-                      <p v-else class="mt-0.5 text-sm text-slate-500">
+                      <p v-else class="mt-0.5 truncate text-sm text-slate-500">
                         {{ STEP_DESCRIPTIONS[activeStep.stepType] || '' }}
                       </p>
                     </div>
-                  </div>
                 </div>
 
                 <!-- 右侧操作区 -->
-                <div class="flex items-center gap-3">
+                <div class="flex flex-wrap items-center gap-3 lg:justify-end">
                   <!-- 使用说明按钮 -->
                   <button
                     v-if="STEP_HELP_CONTENT[activeStep.stepType]"
@@ -1308,10 +1134,15 @@ onUnmounted(() => {
                 </div>
               </div>
             </div>
-            </div>
 
-            <div class="step-workspace-grid grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(360px,0.92fr)] xl:items-start">
-              <div class="min-w-0 space-y-4">
+            <div
+              class="step-workspace-grid grid gap-5"
+              :class="isAnnotationStep ? 'annotation-step-workspace xl:grid-cols-1' : 'xl:grid-cols-[minmax(280px,1fr)_minmax(0,2fr)] xl:items-start'"
+            >
+              <div
+                class="min-w-0"
+                :class="isAnnotationStep ? 'annotation-workbench-card !-mt-px' : 'space-y-4'"
+              >
             <!-- ========== 数据读取步骤 ========== -->
             <template v-if="isDataLoadStep">
               <div
@@ -1334,473 +1165,97 @@ onUnmounted(() => {
                 :rows="sampleRows"
                 @change="saveSampleDict"
               />
-
-              <!-- 运行结果卡片 -->
-              <div
-                v-if="activeStep.result"
-                class="overflow-hidden rounded-xl border border-slate-200 bg-white"
-              >
-                <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
-                  <div class="flex items-center gap-4">
-                    <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
-                      <ScatterChart class="h-5 w-5 text-emerald-500" />
-                      运行结果
-                    </h3>
-                    <select
-                      v-if="qcSampleList.length > 1"
-                      v-model="selectedQcSample"
-                      class="h-8 cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none transition-colors hover:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="all">all samples</option>
-                      <option v-for="s in qcSampleList" :key="s" :value="s">{{ s }}</option>
-                    </select>
-                  </div>
-                  <!-- 统计指标（标题栏右侧） -->
-                  <div
-                    v-if="
-                      activeStep.result.stats &&
-                      Object.keys(getSimpleStats(activeStep.result.stats)).length > 0
-                    "
-                    class="flex flex-wrap items-center gap-x-4 gap-y-1"
-                  >
-                    <template
-                      v-for="(item, sIdx) in getSortedStats(activeStep.result.stats)"
-                      :key="item.key"
-                    >
-                      <span class="inline-flex items-center gap-1.5 text-sm">
-                        <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"></span>
-                        <span class="text-slate-400">{{ STAT_LABELS[item.key] || item.key }}</span>
-                        <span class="font-bold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">{{ formatStatValue(item.value) }}</span>
-                      </span>
-                      <span v-if="sIdx < getSortedStats(activeStep.result.stats).length - 1" class="text-slate-200">|</span>
-                    </template>
-                  </div>
-                </div>
-
-                <div class="px-8 py-5">
-
-                  <!-- 图表展示 -->
-                  <div
-                    v-if="
-                      activeStep.result.charts &&
-                      activeStep.result.charts.length > 0
-                    "
-                  >
-                    <div
-                      v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.endsWith(currentQcChartSuffix))"
-                      :key="idx"
-                      class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                      @click="openLightbox(getChartUrl(chartUrl))"
-                    >
-                      <img
-                        :src="getChartUrl(chartUrl)"
-                        :alt="`分析图表 ${idx + 1}`"
-                        class="w-full rounded-lg"
-                        loading="lazy"
-                      />
-                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                          <ZoomIn class="h-3.5 w-3.5" />
-                          点击放大
-                        </div>
-                      </div>
-                    </div>
-                    <!-- 图注 -->
-                    <p class="mt-2 mb-4 text-center text-sm font-medium text-slate-800">
-                      图. {{ selectedQcSample !== 'all' ? selectedQcSample + ' 样本' : '各样本' }}质控指标分布（基因数、UMI 总数、线粒体比例、基因复杂度）
-                    </p>
-                  </div>
-                </div>
-              </div>
             </template>
 
             <!-- ========== 通用步骤UI：参数 + 结果独立卡片 ========== -->
             <template v-else>
-
-              <!-- ===== 🔬 注释步骤专属：Marker 基因辅助面板 ===== -->
-              <div
-                v-if="isAnnotationStep"
-                class="!-mt-px overflow-hidden rounded-none border border-b-0 border-slate-200 bg-white"
-              >
-                <!-- 标题栏 -->
-                <div class="flex items-center gap-2 border-b border-slate-100 px-8 py-4">
-                  <Tag class="h-5 w-5 text-blue-500" />
-                  <h3 class="text-base font-bold text-slate-800">Marker 基因参考</h3>
-                  <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                    选择组织 → 编辑 Marker → 生成 Dotplot
-                  </span>
-                </div>
-
-                <div class="px-8 py-5">
-                  <!-- 组织类型选择 + 自动注释状态 -->
-                  <div class="mb-5 flex items-center gap-4">
-                    <label class="text-sm font-medium text-slate-700 whitespace-nowrap">组织类型</label>
-                    <select
-                      :value="selectedTissueType"
-                      @change="(e: Event) => loadMarkerPreset((e.target as HTMLSelectElement).value)"
-                      class="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 transition-all focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
-                      :disabled="autoAnnotateLoading"
-                    >
-                      <option v-for="opt in TISSUE_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
-                        {{ opt.label }}
-                      </option>
-                    </select>
-                    <!-- 自动注释状态指示 -->
-                    <div v-if="autoAnnotateLoading" class="flex items-center gap-2 text-sm text-purple-600">
-                      <Loader2 class="h-4 w-4 animate-spin" />
-                      <span>自动注释中...</span>
-                    </div>
-                    <div v-else-if="Object.keys(autoAnnotateResult).length > 0" class="flex items-center gap-2">
-                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-                        <Check class="h-3 w-3" />
-                        已注释 {{ Object.keys(autoAnnotateResult).length }} 个 Cluster
-                      </span>
-                      <button
-                        type="button"
-                        @click="handleAutoAnnotate"
-                        class="cursor-pointer text-xs text-purple-500 hover:text-purple-700"
-                      >
-                        🔄 重新注释
-                      </button>
-                    </div>
-                    <span v-else class="text-xs text-slate-400">选择后自动加载 Marker 基因并执行自动注释</span>
-                  </div>
-
-                  <!-- Marker 紧凑摘要（默认显示） -->
-                  <div v-if="markerTableRows.length > 0 && !showMarkerTable" class="mb-4">
-                    <div class="flex flex-wrap gap-2">
-                      <span
-                        v-for="(row, idx) in markerTableRows"
-                        :key="idx"
-                        class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs"
-                      >
-                        <span class="font-semibold text-slate-700">{{ row.cellType }}</span>
-                        <span class="text-slate-400">{{ row.markers.split(',').length }} genes</span>
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      @click="showMarkerTable = true"
-                      class="mt-2 cursor-pointer text-xs font-medium text-blue-500 hover:text-blue-700"
-                    >
-                      ✏️ 展开编辑 Marker 表
-                    </button>
-                  </div>
-
-                  <!-- Marker 可编辑表格（展开时显示） -->
-                  <div v-else-if="markerTableRows.length > 0" class="mb-4">
-                    <div class="max-h-[320px] overflow-y-auto overflow-hidden rounded-lg border border-slate-200">
-                      <table class="w-full text-sm">
-                        <thead class="sticky top-0 z-10">
-                          <tr class="bg-slate-50">
-                            <th class="w-40 px-3 py-2 text-left font-semibold text-slate-600">细胞类型</th>
-                            <th class="px-3 py-2 text-left font-semibold text-slate-600">Marker 基因</th>
-                            <th class="w-12 px-3 py-2 text-center font-semibold text-slate-600"></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr
-                            v-for="(row, idx) in markerTableRows"
-                            :key="idx"
-                            class="border-t border-slate-100 hover:bg-slate-50/50"
-                          >
-                            <td class="px-3 py-1.5">
-                              <input v-model="row.cellType" type="text"
-                                class="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs focus:border-blue-400 focus:outline-none"
-                                placeholder="细胞类型" />
-                            </td>
-                            <td class="px-3 py-1.5">
-                              <input v-model="row.markers" type="text"
-                                class="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs focus:border-blue-400 focus:outline-none"
-                                placeholder="CD3D, CD3E, CD4..." />
-                            </td>
-                            <td class="px-3 py-1.5 text-center">
-                              <button type="button" @click="removeMarkerRow(idx)"
-                                class="cursor-pointer rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500">
-                                <Trash2 class="h-3 w-3" />
-                              </button>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                    <div class="mt-2 flex items-center gap-3">
-                      <button type="button" @click="addMarkerRow"
-                        class="cursor-pointer text-xs font-medium text-blue-500 hover:text-blue-700">
-                        + 添加类型
-                      </button>
-                      <button type="button" @click="showMarkerTable = false"
-                        class="cursor-pointer text-xs font-medium text-slate-400 hover:text-slate-600">
-                        收起
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- 无数据提示 -->
-                  <div v-else class="mb-4 flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                    <Tag class="h-4 w-4" />
-                    请先选择组织类型以加载预设 Marker 基因
-                  </div>
-
-                  <!-- 生成 Dotplot / Feature Plot 按钮区 -->
-                  <div class="flex items-center gap-3">
-                    <button
-                      type="button"
-                      @click="handleGenerateDotplot"
-                      :disabled="dotplotLoading || markerTableRows.length === 0"
-                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Loader2 v-if="dotplotLoading" class="h-4 w-4 animate-spin" />
-                      <ScatterChart v-else class="h-4 w-4" />
-                      {{ dotplotLoading ? '生成中...' : '生成 Dotplot' }}
-                    </button>
-                    <button
-                      type="button"
-                      @click="handleGenerateFeatureplot"
-                      :disabled="featureplotLoading || markerTableRows.length === 0"
-                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 shadow-sm transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Loader2 v-if="featureplotLoading" class="h-4 w-4 animate-spin" />
-                      <Map v-else class="h-4 w-4" />
-                      {{ featureplotLoading ? '生成中...' : 'Feature Plot' }}
-                    </button>
-                  </div>
-
-                  <!-- 可视化结果 Tab 切换 -->
-                  <div v-if="dotplotUrl || featureplotUrl" class="mt-5">
-                    <!-- Tab 切换栏 -->
-                    <div class="mb-3 flex items-center gap-1 rounded-lg bg-slate-100 p-1" style="width: fit-content;">
-                      <button
-                        type="button"
-                        class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
-                        :class="activeAnnotationVizTab === 'dotplot' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-                        @click="activeAnnotationVizTab = 'dotplot'"
-                        :disabled="!dotplotUrl"
-                      >
-                        <ScatterChart class="h-4 w-4" />
-                        Dotplot
-                      </button>
-                      <button
-                        type="button"
-                        class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
-                        :class="activeAnnotationVizTab === 'featureplot' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-                        @click="activeAnnotationVizTab = 'featureplot'"
-                        :disabled="!featureplotUrl"
-                      >
-                        <Map class="h-4 w-4" />
-                        Feature Plot
-                      </button>
-                    </div>
-
-                    <!-- Dotplot 预览 -->
-                    <div
-                      v-if="activeAnnotationVizTab === 'dotplot' && dotplotUrl"
-                      class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                      @click="openLightbox(getStepChartUrl(dotplotUrl, 'annotation'))"
-                    >
-                      <img
-                        :src="getStepChartUrl(dotplotUrl, 'annotation')"
-                        alt="Marker Dotplot"
-                        class="w-full rounded-lg"
-                      />
-                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                          <ZoomIn class="h-3.5 w-3.5" />
-                          点击放大
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Feature Plot 预览 -->
-                    <div
-                      v-if="activeAnnotationVizTab === 'featureplot' && featureplotUrl"
-                      class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-2 ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                      @click="openLightbox(getStepChartUrl(featureplotUrl, 'annotation'))"
-                    >
-                      <img
-                        :src="getStepChartUrl(featureplotUrl, 'annotation')"
-                        alt="Feature Plot"
-                        class="w-full rounded-lg"
-                      />
-                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                          <ZoomIn class="h-3.5 w-3.5" />
-                          点击放大
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <template v-if="isAnnotationStep">
+                <AnnotationWorkbench
+                  :auto-annotate-loading="autoAnnotateLoading"
+                  :auto-annotate-result="autoAnnotateResult"
+                  :cluster-markers-table="clusterMarkersTable"
+                  :cluster-rows="clusterTableData"
+                  :dotplot-loading="dotplotLoading"
+                  :dotplot-url="dotplotUrl"
+                  :get-step-chart-url="getStepChartUrl"
+                  :marker-rows="markerTableRows"
+                  :running="running"
+                  :selected-tissue-type="selectedTissueType"
+                  :tissue-options="annotationTissueOptions"
+                  @add-marker-row="addMarkerRow"
+                  @apply-auto-annotation="applyAutoAnnotation"
+                  @auto-annotate="handleAutoAnnotate"
+                  @generate-dotplot="handleGenerateDotplot"
+                  @load-marker-preset="loadMarkerPreset"
+                  @open-preview="openLightbox"
+                  @remove-marker-row="removeMarkerRow"
+                  @reset-annotation="resetAllAnnotation"
+                  @submit="submitClusterAnnotation"
+                />
+                <StepResultPanel
+                  class="mt-5"
+                  :get-chart-url="getChartUrl"
+                  :step="activeStep"
+                  :step-label="STEP_LABELS[activeStep.stepType] || activeStep.stepType"
+                  @open-preview="openLightbox"
+                />
+              </template>
 
               <!-- ===== 参数配置卡片 ===== -->
-              <div class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white px-8 py-6">
-
-                <!-- 注释步骤专属：Cluster → CellType 映射表格 -->
-                <template v-if="isAnnotationStep && clusterList.length > 0">
-                  <div class="mb-4 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <Tag class="h-5 w-5 text-blue-500" />
-                      <h3 class="text-base font-bold text-slate-800">Cluster 细胞类型注释</h3>
-                      <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-                        共 {{ clusterList.length }} 个 Cluster
-                      </span>
-                    </div>
-                    <!-- 工具按钮（一键填充 / 重置） -->
-                    <div class="flex items-center gap-2">
-                      <button
-                        v-if="Object.keys(autoAnnotateResult).length > 0"
-                        type="button"
-                        @click="fillAllAutoAnnotation"
-                        class="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50"
-                      >
-                        一键填充
-                      </button>
-                      <button
-                        type="button"
-                        @click="resetAllAnnotation"
-                        class="cursor-pointer rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
-                      >
-                        重置
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="max-h-[400px] overflow-y-auto overflow-hidden rounded-lg border border-slate-200">
-                    <table class="w-full text-sm">
-                      <thead class="sticky top-0 z-10">
-                        <tr class="bg-slate-50">
-                          <th class="w-20 px-4 py-2.5 text-center font-semibold text-slate-600">Cluster</th>
-                          <th v-if="Object.keys(autoAnnotateResult).length > 0" class="w-40 px-4 py-2.5 text-left font-semibold text-purple-600">
-                            🤖 自动注释
-                          </th>
-                          <th class="px-4 py-2.5 text-left font-semibold text-slate-600">细胞类型（从 Marker 表选择或手动输入）</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr
-                          v-for="row in clusterTableData"
-                          :key="row.cluster"
-                          class="border-t border-slate-100 transition-colors"
-                          :class="row.cellType?.trim() ? 'bg-emerald-50/30 hover:bg-emerald-50/60' : 'bg-amber-50/20 hover:bg-amber-50/40'"
-                        >
-                          <td class="px-4 py-2 text-center">
-                            <span class="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-600">
-                              {{ row.cluster }}
-                            </span>
-                          </td>
-                          <!-- 自动注释参考列（只读） -->
-                          <td v-if="Object.keys(autoAnnotateResult).length > 0" class="px-4 py-2">
-                            <div v-if="autoAnnotateResult[row.cluster]" class="flex items-center gap-2">
-                              <span class="text-xs text-purple-700">{{ autoAnnotateResult[row.cluster]?.cell_type }}</span>
-                              <span
-                                class="rounded px-1.5 py-0.5 text-[10px] font-bold"
-                                :class="(autoAnnotateResult[row.cluster]?.confidence ?? 0) >= 70 ? 'bg-emerald-100 text-emerald-700' : (autoAnnotateResult[row.cluster]?.confidence ?? 0) >= 40 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'"
-                              >
-                                {{ autoAnnotateResult[row.cluster]?.confidence ?? 0 }}%
-                              </span>
-                            </div>
-                            <span v-else class="text-xs text-slate-300">—</span>
-                          </td>
-                          <td class="px-4 py-2">
-                            <div class="flex items-center gap-2">
-                              <!-- 下拉选择器（候选来自 Marker 表） -->
-                              <select
-                                v-if="candidateCellTypes.length > 0"
-                                :value="row.cellType"
-                                @change="(e: Event) => row.cellType = (e.target as HTMLSelectElement).value"
-                                class="h-8 w-48 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-                              >
-                                <option value="">选择...</option>
-                                <option v-for="ct in candidateCellTypes" :key="ct" :value="ct">{{ ct }}</option>
-                              </select>
-                              <!-- 输入框（可覆盖或直接输入） -->
-                              <input
-                                v-model="row.cellType"
-                                type="text"
-                                class="h-8 flex-1 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none"
-                                placeholder="或手动输入细胞类型..."
-                              />
-                              <!-- 已填/未填状态指示 -->
-                              <span v-if="row.cellType?.trim()" class="h-2 w-2 shrink-0 rounded-full bg-emerald-400"></span>
-                              <span v-else class="h-2 w-2 shrink-0 rounded-full bg-amber-300"></span>
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div class="mt-4 flex items-center justify-between">
-                    <p class="text-xs text-slate-400">
-                      💡 流程：① 选择组织类型自动注释 → ② 参考 Dotplot / Feature Plot 核验 → ③ 手动修改后提交
-                    </p>
-                    <button
-                      type="button"
-                      @click="submitClusterAnnotation"
-                      :disabled="running"
-                      class="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <Loader2 v-if="running" class="h-4 w-4 animate-spin" />
-                      <Check v-else class="h-4 w-4" />
-                      {{ running ? '运行中...' : '提交注释' }}
-                    </button>
-                  </div>
-                </template>
-
+              <div
+                v-else
+                class="!-mt-px overflow-hidden rounded-b-xl rounded-t-none border border-slate-200 bg-white px-8 py-6"
+              >
                 <!-- 通用参数配置 -->
-                <template v-else>
                 <div v-if="currentStepParamConfigs.length > 0">
 
                   <!-- 有分组时：卡片式分组布局 -->
                   <template v-if="paramGroups.length > 0">
-                    <div v-for="(group, gIdx) in paramGroups" :key="group" :class="gIdx > 0 ? 'mt-6 pt-2' : ''">
+                    <div v-for="(group, gIdx) in paramGroups" :key="group" :class="gIdx > 0 ? 'mt-4 pt-1' : ''">
                       <!-- 分组标题 -->
-                      <div class="mb-4 flex items-center gap-2">
+                      <div class="mb-2 flex items-center gap-2">
                         <Layers class="h-4 w-4 text-blue-500" />
                         <span class="text-base font-bold text-slate-800">{{ group }}</span>
                       </div>
                       <!-- 参数 grid -->
-                      <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
+                      <div class="pipeline-param-grid grid grid-cols-1 gap-2">
                         <template v-for="cfg in getParamsByGroup(group)" :key="cfg.key">
-                          <div class="space-y-1">
+                          <div class="pipeline-param-field flex items-center gap-3 rounded-md border border-slate-100 bg-white px-2.5 py-2">
                             <!-- 标签行：label + tooltip + 推荐值 -->
-                            <div class="mb-1.5 flex items-center justify-between">
-                              <div class="flex items-center gap-1.5">
-                                <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
-                                <div class="group relative">
-                                  <span class="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-400 transition-colors group-hover:border-blue-400 group-hover:text-blue-500">?</span>
-                                  <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                                    {{ cfg.tooltip }}
-                                    <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                                  </div>
+                            <div class="pipeline-param-label grid w-28 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5">
+                              <span class="pipeline-param-label-text min-w-0 break-all text-sm font-medium leading-snug text-slate-700">{{ cfg.label }}</span>
+                              <div class="pipeline-param-tooltip group relative mt-0.5 shrink-0">
+                                <span :class="paramTooltipIconClass">?</span>
+                                <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                                  {{ cfg.tooltip }}
+                                  <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                                 </div>
                               </div>
                             </div>
                             <!-- 输入控件 -->
-                            <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
+                            <div v-if="cfg.controlType === 'number'" class="pipeline-number-control flex h-8 min-w-0 flex-1 items-center">
                               <button
                                 type="button"
                                 @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)"
-                                class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                                class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
                               >−</button>
                               <input
                                 :value="activeStep.params[cfg.key]"
                                 @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)"
                                 type="number"
-                                class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                                class="h-8 min-w-0 flex-1 border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                               />
                               <button
                                 type="button"
                                 @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)"
-                                class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                                class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
                               >+</button>
                             </div>
                             <select
                               v-else-if="cfg.controlType === 'select'"
                               :value="activeStep.params[cfg.key]"
                               @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)"
-                              class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                             >
                               <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
@@ -1821,7 +1276,7 @@ onUnmounted(() => {
                               :value="activeStep.params[cfg.key]"
                               @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
                               type="text"
-                              class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                               placeholder="逗号分隔，如 CD3D,CD8A,MS4A1"
                             />
                           </div>
@@ -1829,26 +1284,26 @@ onUnmounted(() => {
                       </div>
                     </div>
                     <!-- 未分组的参数 -->
-                    <div v-if="ungroupedParams.length > 0" class="mt-6">
-                      <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
+                    <div v-if="ungroupedParams.length > 0" class="mt-4">
+                      <div class="pipeline-param-grid grid grid-cols-1 gap-2">
                         <template v-for="cfg in ungroupedParams" :key="cfg.key">
-                          <div class="space-y-1">
-                            <div class="mb-1.5 flex items-center gap-1.5">
-                              <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
-                              <div class="group relative">
-                                <span class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold text-slate-400 transition-colors group-hover:text-blue-500">?</span>
+                          <div class="pipeline-param-field flex items-center gap-3 rounded-md border border-slate-100 bg-white px-2.5 py-2">
+                            <div class="pipeline-param-label grid w-28 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5">
+                              <span class="pipeline-param-label-text min-w-0 break-all text-sm font-medium leading-snug text-slate-700">{{ cfg.label }}</span>
+                              <div class="pipeline-param-tooltip group relative mt-0.5 shrink-0">
+                                <span :class="paramTooltipIconClass">?</span>
                                 <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                                   {{ cfg.tooltip }}
                                   <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                                 </div>
                               </div>
                             </div>
-                            <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
-                              <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
-                              <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                              <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
+                            <div v-if="cfg.controlType === 'number'" class="pipeline-number-control flex h-8 min-w-0 flex-1 items-center">
+                              <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
+                              <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-8 min-w-0 flex-1 border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                              <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
                             </div>
-                            <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                            <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
                               <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                             </select>
                             <button
@@ -1865,7 +1320,7 @@ onUnmounted(() => {
                               :value="activeStep.params[cfg.key]"
                               @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
                               type="text"
-                              class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                               placeholder="逗号分隔，如 CD3D,CD8A,MS4A1"
                             />
                           </div>
@@ -1876,25 +1331,25 @@ onUnmounted(() => {
 
                   <!-- 无分组时：同样的卡片 grid -->
                   <template v-else>
-                    <div class="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3">
+                    <div class="pipeline-param-grid grid grid-cols-1 gap-2">
                       <template v-for="cfg in basicParamConfigs" :key="cfg.key">
-                        <div class="space-y-1">
-                          <div class="mb-1.5 flex items-center gap-1">
-                            <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
-                            <div class="group relative">
-                              <span class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold text-slate-400 transition-colors group-hover:text-blue-500">?</span>
+                        <div class="pipeline-param-field flex items-center gap-3 rounded-md border border-slate-100 bg-white px-2.5 py-2">
+                          <div class="pipeline-param-label grid w-28 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5">
+                            <span class="pipeline-param-label-text min-w-0 break-all text-sm font-medium leading-snug text-slate-700">{{ cfg.label }}</span>
+                            <div class="pipeline-param-tooltip group relative mt-0.5 shrink-0">
+                              <span :class="paramTooltipIconClass">?</span>
                               <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                                 {{ cfg.tooltip }}
                                 <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                               </div>
                             </div>
                           </div>
-                           <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
-                            <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
-                            <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                            <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
+                           <div v-if="cfg.controlType === 'number'" class="pipeline-number-control flex h-8 min-w-0 flex-1 items-center">
+                            <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
+                            <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-8 min-w-0 flex-1 border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                            <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
                           </div>
-                          <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                          <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
                             <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                           </select>
                           <button
@@ -1911,7 +1366,7 @@ onUnmounted(() => {
                             :value="activeStep.params[cfg.key]"
                             @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
                             type="text"
-                            class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                             placeholder="逗号分隔，如 CD3D,CD8A,MS4A1"
                           />
                         </div>
@@ -1921,42 +1376,42 @@ onUnmounted(() => {
 
                   <div
                     v-if="advancedParamConfigs.length > 0"
-                    class="mt-6 border-t border-slate-100 pt-4"
+                    class="mt-3 border-t border-slate-100 pt-2"
                   >
                     <button
                       type="button"
-                      class="flex w-full items-center justify-between rounded-lg bg-slate-50 px-4 py-3 text-left text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100"
-                      @click="showAdvancedParams = !showAdvancedParams"
+                      class="pipeline-advanced-toggle flex w-full items-center justify-between rounded-lg bg-slate-50 px-2.5 py-2 text-left text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100"
+                      @click="toggleAdvancedParams"
                     >
                       <span>高级参数</span>
                       <ChevronRight
                         class="h-4 w-4 transition-transform"
-                        :class="showAdvancedParams ? 'rotate-90' : ''"
+                        :class="activeStepAdvancedParamsOpen ? 'rotate-90' : ''"
                       />
                     </button>
 
                     <div
-                      v-if="showAdvancedParams"
-                      class="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-3"
+                      v-if="activeStepAdvancedParamsOpen"
+                      class="pipeline-param-grid mt-2 grid grid-cols-1 gap-2"
                     >
                       <template v-for="cfg in advancedParamConfigs" :key="cfg.key">
-                        <div class="space-y-1">
-                          <div class="mb-1.5 flex items-center gap-1">
-                            <span class="text-sm font-medium text-slate-700">{{ cfg.label }}</span>
-                            <div class="group relative">
-                              <span class="flex h-3.5 w-3.5 cursor-help items-center justify-center rounded-full text-[9px] font-bold text-slate-400 transition-colors group-hover:text-blue-500">?</span>
+                        <div class="pipeline-param-field flex items-center gap-3 rounded-md border border-slate-100 bg-white px-2.5 py-2">
+                          <div class="pipeline-param-label grid w-28 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1.5">
+                            <span class="pipeline-param-label-text min-w-0 break-all text-sm font-medium leading-snug text-slate-700">{{ cfg.label }}</span>
+                            <div class="pipeline-param-tooltip group relative mt-0.5 shrink-0">
+                              <span :class="paramTooltipIconClass">?</span>
                               <div class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-52 -translate-x-1/2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-relaxed text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                                 {{ cfg.tooltip }}
                                 <div class="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
                               </div>
                             </div>
                           </div>
-                          <div v-if="cfg.controlType === 'number'" class="flex items-center gap-0">
-                            <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
-                            <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-10 w-full min-w-0 flex-1 border border-slate-200 bg-white px-3 text-center text-sm font-medium text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                            <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-slate-50 text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
+                          <div v-if="cfg.controlType === 'number'" class="pipeline-number-control flex h-8 min-w-0 flex-1 items-center">
+                            <button type="button" @click="adjustParam(cfg.key, -(cfg.step ?? 1), cfg.min)" class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-l-lg border border-r-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">−</button>
+                            <input :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, parseFloat((e.target as HTMLInputElement).value) || 0)" type="number" class="h-8 min-w-0 flex-1 border border-slate-200 bg-white px-2 text-center text-sm font-semibold text-slate-800 [appearance:textfield] focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                            <button type="button" @click="adjustParam(cfg.key, cfg.step ?? 1, undefined, cfg.max)" class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-r-lg border border-l-0 border-slate-200 bg-white text-sm text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">+</button>
                           </div>
-                          <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
+                          <select v-else-if="cfg.controlType === 'select'" :value="activeStep.params[cfg.key]" @change="(e: Event) => setParam(cfg.key, (e.target as HTMLSelectElement).value)" class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400">
                             <option v-for="opt in cfg.options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
                           </select>
                           <button
@@ -1973,7 +1428,7 @@ onUnmounted(() => {
                             :value="activeStep.params[cfg.key]"
                             @change="(e: Event) => setParam(cfg.key, (e.target as HTMLInputElement).value)"
                             type="text"
-                            class="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                            class="h-8 min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-800 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                           />
                         </div>
                       </template>
@@ -1995,330 +1450,16 @@ onUnmounted(() => {
                     {{ STEP_DESCRIPTIONS[activeStep.stepType] }}
                   </p>
                 </div>
-                </template>
               </div>
 
-              <!-- ===== 分析结果卡片 ===== -->
-              <div v-if="activeStep.result" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                <div class="flex items-center justify-between border-b border-slate-100 px-8 py-4">
-                <div class="flex items-center gap-4">
-                <h3 class="flex items-center gap-2 text-base font-bold text-slate-800">
-                  <ScatterChart class="h-5 w-5 text-emerald-500" />
-                  分析结果
-                </h3>
-                <!-- 降维聚类图表下拉框 -->
-                <select
-                  v-if="activeStep.stepType === 'dim_cluster' && availableDimCharts.length > 0"
-                  v-model="selectedDimChart"
-                  class="h-8 cursor-pointer rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none transition-colors hover:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                >
-                  <option v-for="opt in availableDimCharts" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-                </select>
-                </div>
-                <!-- 统计指标（标题栏右侧） -->
-                <div
-                  v-if="
-                    activeStep.result.stats &&
-                    Object.keys(getSimpleStats(activeStep.result.stats)).length > 0
-                  "
-                  class="flex flex-wrap items-center gap-x-4 gap-y-1"
-                >
-                  <template
-                    v-for="(item, sIdx) in getSortedStats(activeStep.result.stats)"
-                    :key="item.key"
-                  >
-                    <span class="inline-flex items-center gap-1.5 text-sm">
-                      <span class="h-1.5 w-1.5 rounded-full" :style="{ backgroundColor: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }"></span>
-                      <span class="text-slate-400">{{ STAT_LABELS[item.key] || item.key }}</span>
-                      <span class="font-bold" :style="{ color: ['#4f46e5','#2563eb','#f59e0b','#10b981'][sIdx % 4] }">{{ formatStatValue(item.value) }}</span>
-                    </span>
-                    <span v-if="sIdx < getSortedStats(activeStep.result.stats).length - 1" class="text-slate-200">|</span>
-                  </template>
-                </div>
-                </div>
-                <div class="px-8 pt-4 pb-6">
-
-                <!-- Tab 切换栏（降维聚类步骤不显示 tab，改用下拉框） -->
-                <div
-                  v-if="activeStep.stepType !== 'dim_cluster' && ((activeStep.result.charts && activeStep.result.charts.length > 0) || (activeStep.result.tables && activeStep.result.tables.length > 0))"
-                  class="mb-3 flex gap-1 rounded-lg bg-slate-100 p-1"
-                >
-                  <button
-                    type="button"
-                    class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
-                    :class="activeResultTab === 'charts' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-                    @click="activeResultTab = 'charts'"
-                  >
-                    <ScatterChart class="h-4 w-4" />
-                    图表
-                  </button>
-                  <button
-                    type="button"
-                    class="flex items-center gap-1.5 rounded-md px-4 py-2 text-sm font-medium transition-all"
-                    :class="activeResultTab === 'tables' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
-                    @click="activeResultTab = 'tables'"
-                  >
-                    <FileText class="h-4 w-4" />
-                    数据表
-                  </button>
-                </div>
-
-                <!-- 图表展示 Tab -->
-                <div
-                  v-if="activeResultTab === 'charts' && activeStep.result.charts && activeStep.result.charts.length > 0"
-                >
-                  <template v-if="activeStep.stepType === 'qc_filter'">
-                    <!-- 质控过滤：只展示 filtered_violin 和 scrublet -->
-                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.endsWith('filtered_violin.png') || u.includes('scrublet'))" :key="idx">
-                      <div
-                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                        @click="openLightbox(getChartUrl(chartUrl))"
-                      >
-                        <img :src="getChartUrl(chartUrl)" :alt="`分析图表 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
-                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                            <ZoomIn class="h-3.5 w-3.5" />
-                            点击放大
-                          </div>
-                        </div>
-                      </div>
-                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">
-                        {{ chartUrl.includes('filtered_violin') ? '图. 过滤后各样本质控指标分布（基因数、UMI 总数、线粒体比例、基因复杂度）' : '图. Scrublet 双细胞检测得分分布' }}
-                      </p>
-                    </template>
-                  </template>
-                  <template v-else-if="activeStep.stepType === 'dim_cluster'">
-                    <!-- 降维聚类：下拉框切换图表（下拉框已移到标题栏） -->
-
-                    <!-- UMAP 类型：并排展示，限制最大宽度 -->
-                    <div v-if="selectedDimChart === 'umap_cluster' || selectedDimChart === 'umap_sample'" class="mx-auto grid max-w-3xl gap-3" :class="currentDimChartUrls.length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
-                      <template v-for="(chartUrl, idx) in currentDimChartUrls" :key="idx">
-                        <div>
-                          <div
-                            class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                            @click="openLightbox(getChartUrl(chartUrl))"
-                          >
-                            <img :src="getChartUrl(chartUrl)" :alt="selectedDimChart" class="w-full rounded-lg" loading="lazy" />
-                            <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                              <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                                <ZoomIn class="h-3.5 w-3.5" />
-                                点击放大
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </template>
-                    </div>
-
-                    <!-- 其他图表：居中限宽展示 -->
-                    <template v-else>
-                      <template v-for="(chartUrl, idx) in currentDimChartUrls" :key="idx">
-                        <div
-                          class="group relative mx-auto mb-2 max-w-3xl cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                          @click="openLightbox(getChartUrl(chartUrl))"
-                        >
-                          <img :src="getChartUrl(chartUrl)" :alt="selectedDimChart" class="w-full rounded-lg" loading="lazy" />
-                          <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                            <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                              <ZoomIn class="h-3.5 w-3.5" />
-                              点击放大
-                            </div>
-                          </div>
-                        </div>
-                      </template>
-                    </template>
-                  </template>
-
-                  <template v-else-if="activeStep.stepType === 'find_marker'">
-                    <!-- 特征基因：dotplot + heatmap 核心展示，rank_genes_groups 折叠 -->
-
-                    <!-- 核心图：dotplot -->
-                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('dotplot'))" :key="'dot'+idx">
-                      <div
-                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                        @click="openLightbox(getChartUrl(chartUrl))"
-                      >
-                        <img :src="getChartUrl(chartUrl)" alt="DotPlot" class="w-full rounded-lg" loading="lazy" />
-                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                            <ZoomIn class="h-3.5 w-3.5" />
-                            点击放大
-                          </div>
-                        </div>
-                      </div>
-                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">图. 各 Cluster Top3 Marker 基因气泡图</p>
-                    </template>
-
-                    <!-- 核心图：heatmap -->
-                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('heatmap'))" :key="'hm'+idx">
-                      <div
-                        class="group relative mb-2 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                        @click="openLightbox(getChartUrl(chartUrl))"
-                      >
-                        <img :src="getChartUrl(chartUrl)" alt="Heatmap" class="w-full rounded-lg" loading="lazy" />
-                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                            <ZoomIn class="h-3.5 w-3.5" />
-                            点击放大
-                          </div>
-                        </div>
-                      </div>
-                      <p class="mt-1 mb-4 text-center text-sm font-medium text-slate-800">图. 各 Cluster Top10 Marker 基因热图</p>
-                    </template>
-
-                    <!-- 辅助图折叠区 -->
-                    <div
-                      v-if="activeStep.result.charts.filter((u: string) => !u.includes('dotplot') && !u.includes('heatmap')).length > 0"
-                    >
-                      <button
-                        type="button"
-                        class="mb-3 flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-700"
-                        @click="showAuxCharts = !showAuxCharts"
-                      >
-                        <ChevronRight class="h-4 w-4 transition-transform" :class="showAuxCharts ? 'rotate-90' : ''" />
-                        {{ showAuxCharts ? '收起辅助图' : '查看辅助图（Marker 基因排名等）' }}
-                      </button>
-                      <div v-show="showAuxCharts">
-                        <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => !u.includes('dotplot') && !u.includes('heatmap'))" :key="'aux'+idx">
-                          <div
-                            class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                            @click="openLightbox(getChartUrl(chartUrl))"
-                          >
-                            <img :src="getChartUrl(chartUrl)" :alt="`辅助图 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
-                            <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                              <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                                <ZoomIn class="h-3.5 w-3.5" />
-                                点击放大
-                              </div>
-                            </div>
-                          </div>
-                        </template>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- 注释步骤：带图例说明的结果展示 -->
-                  <template v-else-if="isAnnotationStep">
-                    <!-- CellType + Cluster 对照 UMAP 并排 -->
-                    <div class="mb-6 grid grid-cols-2 gap-4">
-                      <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('umap_dimplot_celltype') || u.includes('umap_cluster_celltype'))" :key="'ct'+idx">
-                        <div
-                          class="group relative cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                          @click="openLightbox(getChartUrl(chartUrl))"
-                        >
-                          <img :src="getChartUrl(chartUrl)" :alt="chartUrl.includes('dimplot') ? 'CellType UMAP' : 'Cluster UMAP'" class="w-full rounded-lg" loading="lazy" />
-                          <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                            <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                              <ZoomIn class="h-3.5 w-3.5" />
-                              点击放大
-                            </div>
-                          </div>
-                          <p class="mt-2 text-center text-xs text-slate-500">
-                            {{ chartUrl.includes('dimplot') ? '图. 细胞类型注释 UMAP' : '图. Cluster 聚类 UMAP' }}
-                          </p>
-                        </div>
-                      </template>
-                    </div>
-
-                    <!-- 分组 UMAP -->
-                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('umap_split_group'))" :key="'grp'+idx">
-                      <div
-                        class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                        @click="openLightbox(getChartUrl(chartUrl))"
-                      >
-                        <img :src="getChartUrl(chartUrl)" alt="分组 UMAP" class="w-full rounded-lg" loading="lazy" />
-                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                            <ZoomIn class="h-3.5 w-3.5" />
-                            点击放大
-                          </div>
-                        </div>
-                        <p class="mt-2 text-center text-xs text-slate-500">图. 按实验组分组的细胞类型 UMAP</p>
-                      </div>
-                    </template>
-
-                    <!-- CellType 比例柱状图 -->
-                    <template v-for="(chartUrl, idx) in activeStep.result.charts.filter((u: string) => u.includes('celltype_proportion_barplot'))" :key="'bar'+idx">
-                      <div
-                        class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                        @click="openLightbox(getChartUrl(chartUrl))"
-                      >
-                        <img :src="getChartUrl(chartUrl)" alt="CellType Proportion" class="w-full rounded-lg" loading="lazy" />
-                        <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                          <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                            <ZoomIn class="h-3.5 w-3.5" />
-                            点击放大
-                          </div>
-                        </div>
-                        <p class="mt-2 text-center text-xs text-slate-500">图. 各样本细胞类型比例分布（Connected Barplot）</p>
-                      </div>
-                    </template>
-                  </template>
-
-                  <template v-else>
-                    <!-- 其他步骤：展示全部图表 -->
-                    <div
-                      v-for="(chartUrl, idx) in activeStep.result.charts"
-                      :key="idx"
-                      class="group relative mb-4 cursor-pointer overflow-hidden rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-100 transition-shadow hover:shadow-md"
-                      @click="openLightbox(getChartUrl(chartUrl))"
-                    >
-                      <img :src="getChartUrl(chartUrl)" :alt="`分析图表 ${idx + 1}`" class="w-full rounded-lg" loading="lazy" />
-                      <div class="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition-all group-hover:bg-black/5">
-                        <div class="flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-600 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover:opacity-100">
-                          <ZoomIn class="h-3.5 w-3.5" />
-                          点击放大
-                        </div>
-                      </div>
-                    </div>
-                  </template>
-                </div>
-
-                <!-- 数据表 Tab -->
-                <div
-                  v-if="activeResultTab === 'tables' && activeStep.result.tables && activeStep.result.tables.length > 0"
-                >
-                  <!-- find_marker 步骤：使用 Ant Design Table 展示 -->
-                  <template v-if="activeStep.stepType === 'find_marker'">
-                    <ATable
-                      :columns="markerTableColumns"
-                      :data-source="markerTableData"
-                      :loading="markerTableLoading"
-                      :row-key="(r: any) => r._key"
-                      :pagination="{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['20','50','100'], showTotal: (total: number) => `共 ${total} 条` }"
-                      :scroll="{ x: 'max-content', y: 480 }"
-                      size="small"
-                      bordered
-                    />
-                  </template>
-                  <!-- 其他步骤：文件下载链接 -->
-                  <template v-else>
-                    <div class="space-y-2">
-                      <a
-                        v-for="(tableUrl, idx) in activeStep.result.tables"
-                        :key="idx"
-                        :href="getChartUrl(tableUrl)"
-                        target="_blank"
-                        class="flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm text-blue-600 transition-colors hover:bg-blue-50"
-                      >
-                        <FileText class="h-4 w-4" />
-                        {{ tableUrl.split('/').pop() }}
-                      </a>
-                    </div>
-                  </template>
-                </div>
-
-              </div>
-              </div>
             </template>
+                <StepStatsSummary v-if="!isAnnotationStep" :step="activeStep" />
               </div>
-              <aside class="min-w-0 xl:sticky xl:top-24">
+              <aside v-if="!isAnnotationStep" class="min-w-0 xl:sticky xl:top-[104px]">
                 <StepResultPanel
                   :get-chart-url="getChartUrl"
-                  :logs="currentStepLogs"
                   :step="activeStep"
                   :step-label="STEP_LABELS[activeStep.stepType] || activeStep.stepType"
-                  @open-logs="openLogDrawer"
                   @open-preview="openLightbox"
                 />
               </aside>
@@ -2571,6 +1712,10 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.pipeline-param-label-text {
+  overflow-wrap: anywhere;
+}
+
 /* 抽屉动画 */
 .drawer-enter-active,
 .drawer-leave-active {

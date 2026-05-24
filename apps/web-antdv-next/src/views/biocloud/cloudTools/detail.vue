@@ -373,6 +373,7 @@ const currentMetadata = ref<
     {
       columns: string[];
       n_cells: number;
+      reductions?: string[];
       summary: Array<{ column: string; type: string; values?: string[] }>;
     }
   >
@@ -443,6 +444,19 @@ const dynamicParamSchema = computed(() => {
             prop.widget = 'select';
           }
         }
+
+        // metadata_reduction_select: 将 Seurat reductions / AnnData obsm 注入下拉选项
+        if (prop.widget === 'metadata_reduction_select') {
+          const reductions = Array.isArray(meta.reductions)
+            ? meta.reductions
+            : [];
+          if (reductions.length > 0) {
+            prop.type = 'string';
+            prop.enum = reductions;
+            prop.widget = 'select';
+          }
+        }
+
         // metadata_value_select: 依赖另一参数选中的列，填充该列唯一值
         if (
           (prop.widget === 'metadata_value_select' ||
@@ -463,7 +477,9 @@ const dynamicParamSchema = computed(() => {
                 prop.enum = values;
                 prop.widget = usesPairSelect
                   ? 'metadata_pair_select'
-                  : 'multi-select';
+                  : prop.multiple === false
+                    ? 'select'
+                    : 'multi-select';
               }
             }
           }

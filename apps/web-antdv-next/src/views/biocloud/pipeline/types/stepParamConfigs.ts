@@ -302,52 +302,6 @@ export const STEP_PARAM_CONFIGS: Record<StepType, ParamFieldConfig[]> = {
     },
   ],
 
-  // ========== 步骤5：亚群分析 ==========
-  sub_annotation: [
-    {
-      key: 'target_celltype',
-      label: '目标大群',
-      tooltip: '选择要进行亚群分析的大类细胞类型（例如：T cells）',
-      controlType: 'select',
-      defaultValue: '',
-      options: [], // 动态填充
-      group: '细胞大群选择',
-    },
-    {
-      key: 'sub_n_top_genes',
-      label: '高变基因数',
-      tooltip: '亚群重新分析时筛选的高变基因数',
-      controlType: 'number',
-      defaultValue: 2000,
-      min: 500,
-      max: 10_000,
-      step: 100,
-      group: '重聚类',
-    },
-    {
-      key: 'sub_resolution',
-      label: '分辨率',
-      tooltip: '亚群聚类分辨率，亚群分析通常需要更高的分辨率（0.5~2.0）',
-      controlType: 'number',
-      defaultValue: 0.3,
-      min: 0.1,
-      max: 2,
-      step: 0.1,
-      group: '重聚类',
-    },
-    {
-      key: 'sub_n_neighbors',
-      label: '近邻数',
-      tooltip: '亚群分析的近邻数',
-      controlType: 'number',
-      defaultValue: 20,
-      min: 2,
-      max: 50,
-      step: 1,
-      group: '重聚类',
-      advanced: true,
-    },
-  ],
 };
 
 /**

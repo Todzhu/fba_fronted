@@ -220,35 +220,37 @@ const handleChangePassword = async () => {
       class="fixed inset-x-0 top-0 z-50 border-b border-slate-200/60 bg-white/80 shadow-sm backdrop-blur-md transition-all"
     >
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex h-16 items-center justify-between">
+        <div class="flex h-16 items-center justify-between gap-3">
           <!-- Logo -->
           <div
-            class="flex cursor-pointer items-center gap-2"
+            class="flex shrink-0 cursor-pointer items-center gap-2"
             @click="router.push('/')"
           >
             <img :src="logoSvg" alt="Logo" class="h-8 w-auto" />
           </div>
 
           <!-- Desktop Navigation -->
-          <nav class="hidden items-center gap-1 md:flex">
+          <nav
+            class="hidden min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto md:flex"
+          >
             <router-link
               v-for="item in navItems"
               :key="item.name"
               :to="item.href"
-              class="group flex items-center gap-2 rounded-lg px-4 py-2 text-base font-semibold text-slate-600 transition-all hover:bg-purple-50 hover:text-purple-600"
+              class="group flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition-all hover:bg-purple-50 hover:text-purple-600 xl:px-4 xl:text-base"
               active-class="!bg-purple-50 !text-purple-600 shadow-sm ring-1 ring-purple-100"
               @click="(e: MouseEvent) => handleNavClick(item, e)"
             >
               <component
                 :is="item.icon"
-                class="h-5 w-5 opacity-70 transition-opacity group-hover:opacity-100"
+                class="h-4 w-4 opacity-70 transition-opacity group-hover:opacity-100 xl:h-5 xl:w-5"
               />
               {{ item.name }}
             </router-link>
           </nav>
 
           <!-- Right Actions -->
-          <div class="flex items-center gap-4">
+          <div class="flex shrink-0 items-center gap-4">
             <!-- User Menu (Logged In) -->
             <div v-if="isLoggedIn" ref="userMenuRef" class="relative">
               <button
