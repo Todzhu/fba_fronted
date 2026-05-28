@@ -137,13 +137,11 @@ export function generateMockResult(
       return {
         stats: {
           report_pages: 1,
-          archive_files: 1,
         },
         files: [
           { name: 'report.html', path: '/mock/sc-pipeline/report.html', type: 'html' },
-          { name: 'sc_pipeline_results.zip', path: '/mock/sc-pipeline/sc_pipeline_results.zip', type: 'zip' },
         ],
-        message: '报告生成完成，可预览 HTML 报告并下载结果压缩包。',
+        message: '报告生成完成，可预览 HTML 报告。',
       };
     default:
       return { message: '未知步骤类型' };

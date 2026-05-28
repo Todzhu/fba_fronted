@@ -11,7 +11,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
-import { Button, Empty, Modal, Table } from 'antdv-next';
+import { Button, Drawer, Empty, Modal, Table } from 'antdv-next';
 
 const props = defineProps<{
   result?: StepResult;
@@ -25,6 +25,7 @@ const chartRefs = ref<Record<string, EchartsUIType>>({});
 const imagePreviewOpen = ref(false);
 const imagePreviewSrc = ref('');
 const imagePreviewTitle = ref('');
+const reportPreviewOpen = ref(false);
 const activeResultId = ref('');
 
 type ResultItemKind = 'chart' | 'file' | 'image' | 'report' | 'table';
@@ -234,6 +235,11 @@ const openImagePreview = (imageKey: string) => {
   imagePreviewTitle.value = imageKey.replace(/_/g, ' ');
   imagePreviewOpen.value = Boolean(imagePreviewSrc.value);
 };
+
+const openReportPreview = () => {
+  if (!reportHtmlFile.value) return;
+  reportPreviewOpen.value = true;
+};
 </script>
 
 <template>
@@ -289,12 +295,20 @@ const openImagePreview = (imageKey: string) => {
             </div>
           </div>
 
-          <iframe
+          <div
             v-if="activeResult?.kind === 'report' && reportHtmlFile"
-            class="report-preview-frame"
-            :src="reportHtmlFile.path"
-            title="报告预览"
-          />
+            class="report-preview-launcher"
+          >
+            <Icon icon="mdi:file-document-outline" />
+            <div class="report-preview-copy">
+              <div class="report-preview-title">HTML 报告已生成</div>
+              <div class="report-preview-desc">点击按钮在右侧抽屉中预览完整报告。</div>
+            </div>
+            <Button type="primary" @click="openReportPreview">
+              <Icon icon="mdi:open-in-new" />
+              预览报告
+            </Button>
+          </div>
 
           <div
             v-else-if="activeResult?.kind === 'image'"
@@ -355,6 +369,22 @@ const openImagePreview = (imageKey: string) => {
         <img :src="imagePreviewSrc" :alt="imagePreviewTitle" />
       </div>
     </Modal>
+
+    <Drawer
+      v-model:open="reportPreviewOpen"
+      title="报告预览"
+      placement="right"
+      width="76vw"
+      destroy-on-close
+      class="report-preview-drawer"
+    >
+      <iframe
+        v-if="reportHtmlFile"
+        class="report-preview-frame"
+        :src="reportHtmlFile.path"
+        title="报告预览"
+      />
+    </Drawer>
   </div>
 </template>
 
@@ -584,12 +614,46 @@ const openImagePreview = (imageKey: string) => {
 
 .report-preview-frame {
   width: 100%;
-  height: min(72vh, 960px);
+  height: calc(100vh - 112px);
   min-height: 640px;
   overflow: auto;
   background: #fff;
   border: 1px solid #f0f0f0;
   border-radius: 8px;
+}
+
+.report-preview-launcher {
+  display: flex;
+  min-height: 240px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 28px;
+  background: #fbfcfe;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+}
+
+.report-preview-launcher > :deep(svg) {
+  flex: 0 0 auto;
+  font-size: 32px;
+  color: #1677ff;
+}
+
+.report-preview-copy {
+  min-width: 0;
+}
+
+.report-preview-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.report-preview-desc {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #697386;
 }
 
 .chart-container {
