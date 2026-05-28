@@ -370,7 +370,7 @@ watch(
 
 .workbench-layout {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
 }
@@ -472,7 +472,7 @@ watch(
 
 .step-main {
   display: grid;
-  grid-template-columns: minmax(440px, 500px) minmax(0, 1fr);
+  grid-template-columns: minmax(380px, 420px) minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
 }
@@ -524,7 +524,7 @@ watch(
 
 @media (max-width: 1280px) {
   .workbench-layout {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 260px minmax(0, 1fr);
   }
 
   .step-main {
