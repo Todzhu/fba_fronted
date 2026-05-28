@@ -29,12 +29,8 @@ export function generateMockResult(
           'QC violin': '/mock/sc-pipeline/orig_nCount_nFeature_voilon.png',
           'QC scatter': '/mock/sc-pipeline/orig_nCount_nFeature_scatter.png',
         },
-        files: [
-          { name: 'raw.h5ad', path: '/mock/sc-pipeline/raw.h5ad', type: 'h5ad' },
-          { name: 'qc.h5ad', path: '/mock/sc-pipeline/qc.h5ad', type: 'h5ad' },
-          { name: 'all_cell_features_raw.xls', path: '/mock/sc-pipeline/all_cell_features_raw.xls' },
-        ],
-        message: '数据导入和原始数据质控完成，已生成样本分组表、raw.h5ad 和 02-Data_QC 质控结果。',
+        files: [{ name: 'all_cell_features_raw.xls', path: '/mock/sc-pipeline/all_cell_features_raw.xls' }],
+        message: '数据导入和原始数据质控完成，已生成样本分组表和 02-Data_QC 质控结果。',
       };
     case 'cell_filter':
       return {
@@ -55,7 +51,7 @@ export function generateMockResult(
           'Filtered scatter': '/mock/sc-pipeline/filtered_nCount_nFeature_scatter.png',
           'Scrublet plot': '/mock/sc-pipeline/scrublet_plot.png',
         },
-        files: [{ name: 'filtered.h5ad', path: '/mock/sc-pipeline/filtered.h5ad', type: 'h5ad' }],
+        files: [],
         message: '细胞过滤完成，低质量细胞和疑似双细胞已剔除。',
       };
     case 'cluster':
@@ -81,7 +77,7 @@ export function generateMockResult(
           UMAP: '/mock/sc-pipeline/umap_dimplot.png',
           PCA: '/mock/sc-pipeline/pca_sample.png',
         },
-        files: [{ name: 'cluster.h5ad', path: '/mock/sc-pipeline/cluster.h5ad', type: 'h5ad' }],
+        files: [{ name: 'cluster_cells_statistics.xls', path: '/mock/sc-pipeline/cluster_cells_statistics.xls' }],
         message: '降维聚类完成，已生成 UMAP、PCA 和 cluster 统计结果。',
       };
     case 'marker_gene':
@@ -130,8 +126,8 @@ export function generateMockResult(
           'UMAP CellType': '/mock/sc-pipeline/umap_cluster_celltype.png',
           'Cell proportion': '/mock/sc-pipeline/celltype_proportion_sample.png',
         },
-        files: [{ name: 'result.h5ad', path: '/mock/sc-pipeline/result.h5ad', type: 'h5ad' }],
-        message: '细胞注释完成，已生成细胞类型结果和最终 h5ad 文件。',
+        files: [{ name: 'celltype_statistics.xls', path: '/mock/sc-pipeline/celltype_statistics.xls' }],
+        message: '细胞注释完成，已生成细胞类型结果。',
       };
     case 'report':
       return {
