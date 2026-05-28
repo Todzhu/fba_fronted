@@ -30,6 +30,7 @@ const emit = defineEmits<{
 }>();
 
 const activeStepIndex = ref(0);
+const hasInitializedActiveStep = ref(false);
 const logDrawerOpen = ref(false);
 
 const STATUS_CONFIG: Record<StepStatus, { color: string; icon: string; text: string }> = {
@@ -122,10 +123,11 @@ const handleUpdateSamples = (samples: SampleInfo[]) => {
 };
 
 watch(
-  () => props.currentStep,
-  (step) => {
-    if (props.steps.length === 0) return;
+  () => [props.steps.length, props.currentStep] as const,
+  ([stepCount, step]) => {
+    if (hasInitializedActiveStep.value || stepCount === 0) return;
     activeStepIndex.value = Math.min(step, props.steps.length - 1);
+    hasInitializedActiveStep.value = true;
   },
   { immediate: true },
 );

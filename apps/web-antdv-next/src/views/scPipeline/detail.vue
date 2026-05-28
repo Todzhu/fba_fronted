@@ -304,6 +304,7 @@ onUnmounted(() => {
         <!-- 卡片式流程工作区 -->
         <div class="workspace-container">
           <PipelineWorkspace
+            :key="pipeline.id"
             :steps="pipeline.steps"
             :current-step="pipeline.currentStep"
             :is-multi-sample="(pipeline as any).isMultiSample"
