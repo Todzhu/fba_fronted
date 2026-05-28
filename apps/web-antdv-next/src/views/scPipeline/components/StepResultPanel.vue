@@ -120,10 +120,11 @@ const hiddenTableSteps: StepType[] = ['cell_annotation'];
 const tableKeys = () => hiddenTableSteps.includes(props.stepType as StepType) ? [] : Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
+const isReportStep = computed(() => props.stepType === 'report');
 const hiddenFileSteps: StepType[] = ['cell_annotation', 'cell_filter', 'cluster', 'data_load', 'marker_gene'];
 const visibleFiles = computed(() => hiddenFileSteps.includes(props.stepType as StepType) ? [] : fileList());
 const reportHtmlFile = computed(() => visibleFiles.value.find((file) => file.type === 'html' || file.name.endsWith('.html')));
-const visibleDownloadFiles = computed(() => visibleFiles.value.filter((file) => file !== reportHtmlFile.value));
+const visibleDownloadFiles = computed(() => isReportStep.value ? [] : visibleFiles.value.filter((file) => file !== reportHtmlFile.value));
 const resultLogs = computed(() => props.logs?.length ? props.logs : props.result?.logs || []);
 const hasVisualResult = computed(() => {
   return chartKeys().length > 0 || imageKeys().length > 0 || tableKeys().length > 0 || visibleFiles.value.length > 0;
@@ -202,6 +203,7 @@ const resultSections = computed(() => {
 });
 const activeResult = computed(() => resultItems.value.find((item) => item.id === activeResultId.value) || resultItems.value[0]);
 const activeFile = computed(() => visibleDownloadFiles.value.find((file) => file.path === activeResult.value?.key));
+const showResultNav = computed(() => !isReportStep.value && resultItems.value.length > 1);
 
 const setChartRef = (chartKey: string | undefined, el: EchartsUIType | null) => {
   if (!chartKey || !el) return;
@@ -269,7 +271,7 @@ const openReportPreview = () => {
     <!-- Result Content -->
     <div v-else class="result-content">
       <div v-if="hasVisualResult" class="result-browser">
-        <aside class="result-nav">
+        <aside v-if="showResultNav" class="result-nav">
           <div class="result-nav-summary">{{ resultItems.length }} 项结果</div>
           <div v-for="section in resultSections" :key="section.name" class="result-nav-section">
             <div class="result-nav-section-title">{{ section.name }}</div>
