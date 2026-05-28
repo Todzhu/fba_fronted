@@ -80,7 +80,7 @@ const imageKeys = () => {
 const tableKeys = () => Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
-const visibleFiles = computed(() => ['cell_filter', 'cluster', 'data_load'].includes(props.stepType || '') ? [] : fileList());
+const visibleFiles = computed(() => ['cell_filter', 'cluster', 'data_load', 'marker_gene'].includes(props.stepType || '') ? [] : fileList());
 const reportHtmlFile = computed(() => visibleFiles.value.find((file) => file.type === 'html' || file.name.endsWith('.html')));
 const resultLogs = computed(() => props.logs?.length ? props.logs : props.result?.logs || []);
 const hasVisualResult = computed(() => {
