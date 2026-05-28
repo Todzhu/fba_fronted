@@ -79,11 +79,10 @@ export function generateMockResult(
         },
         images: {
           UMAP: '/mock/sc-pipeline/umap_dimplot.png',
-          TSNE: '/mock/sc-pipeline/tsne_dimplot.png',
           PCA: '/mock/sc-pipeline/pca_sample.png',
         },
         files: [{ name: 'cluster.h5ad', path: '/mock/sc-pipeline/cluster.h5ad', type: 'h5ad' }],
-        message: '降维聚类完成，已生成 UMAP、tSNE、PCA 和 cluster 统计结果。',
+        message: '降维聚类完成，已生成 UMAP、PCA 和 cluster 统计结果。',
       };
     case 'marker_gene':
       return {

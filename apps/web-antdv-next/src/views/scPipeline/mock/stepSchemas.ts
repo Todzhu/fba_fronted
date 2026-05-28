@@ -318,7 +318,7 @@ export const STEP_DEFINITIONS: Record<StepType, StepDefinition> = {
   cluster: {
     stepType: 'cluster',
     displayName: '降维聚类',
-    description: '标准化、高变基因筛选、PCA、UMAP/tSNE 和图聚类',
+    description: '标准化、高变基因筛选、PCA、UMAP 和图聚类',
     icon: 'mdi:chart-scatter-plot',
     paramSchema: clusterSchema,
   },

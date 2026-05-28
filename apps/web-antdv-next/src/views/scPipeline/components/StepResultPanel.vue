@@ -63,7 +63,12 @@ const getTableColumns = (columns: string[]) => {
 
 // Chart 数量
 const chartKeys = () => Object.keys(props.result?.charts || {});
-const imageKeys = () => Object.keys(props.result?.images || {});
+const imageKeys = () => {
+  const keys = Object.keys(props.result?.images || {});
+  return props.stepType === 'cluster'
+    ? keys.filter((key) => !key.toLowerCase().includes('tsne'))
+    : keys;
+};
 const tableKeys = () => Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
