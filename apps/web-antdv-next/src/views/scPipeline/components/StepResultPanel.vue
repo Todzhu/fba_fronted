@@ -65,14 +65,22 @@ const getTableColumns = (columns: string[]) => {
 const chartKeys = () => Object.keys(props.result?.charts || {});
 const imageKeys = () => {
   const keys = Object.keys(props.result?.images || {});
-  return props.stepType === 'cluster'
-    ? keys.filter((key) => !key.toLowerCase().includes('tsne'))
-    : keys;
+  if (props.stepType !== 'cluster') return keys;
+  const visibleKeys = keys.filter((key) => !key.toLowerCase().includes('tsne'));
+  const preferredOrder = ['umap', 'pca', 'gene counts', 'cluster correlation'];
+  return [...visibleKeys].sort((left, right) => {
+    const leftIndex = preferredOrder.indexOf(left.toLowerCase());
+    const rightIndex = preferredOrder.indexOf(right.toLowerCase());
+    if (leftIndex === -1 && rightIndex === -1) return 0;
+    if (leftIndex === -1) return 1;
+    if (rightIndex === -1) return -1;
+    return leftIndex - rightIndex;
+  });
 };
 const tableKeys = () => Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
-const visibleFiles = computed(() => ['cell_filter', 'data_load'].includes(props.stepType || '') ? [] : fileList());
+const visibleFiles = computed(() => ['cell_filter', 'cluster', 'data_load'].includes(props.stepType || '') ? [] : fileList());
 const reportHtmlFile = computed(() => visibleFiles.value.find((file) => file.type === 'html' || file.name.endsWith('.html')));
 const resultLogs = computed(() => props.logs?.length ? props.logs : props.result?.logs || []);
 const hasVisualResult = computed(() => {
