@@ -53,12 +53,22 @@ watch(
 );
 
 // 表格列定义
-const getTableColumns = (columns: string[]) => {
-  return columns.map((col) => ({
-    title: col,
-    dataIndex: col,
-    key: col,
-  }));
+const getTableColumns = (tableKey: string) => {
+  const table = getTable(tableKey);
+  return table.columns.map((col) => {
+    const column: Record<string, unknown> = {
+      title: col,
+      dataIndex: col,
+      key: col,
+    };
+    if (col.toLowerCase() === 'cluster') {
+      column.filters = Array.from(new Set(table.data.map((row) => row[col]).filter((value) => value !== undefined && value !== null)))
+        .sort((left, right) => String(left).localeCompare(String(right), undefined, { numeric: true }))
+        .map((value) => ({ text: String(value), value: String(value) }));
+      column.onFilter = (value: unknown, record: Record<string, unknown>) => String(record[col]) === String(value);
+    }
+    return column;
+  });
 };
 
 // Chart 数量
@@ -169,7 +179,7 @@ const openImagePreview = (imageKey: string) => {
           :tab="tableKey.replace(/_/g, ' ')"
         >
           <Table
-            :columns="getTableColumns(getTable(tableKey).columns)"
+            :columns="getTableColumns(tableKey)"
             :data-source="getTable(tableKey).data"
             :pagination="{ pageSize: 10, showSizeChanger: true }"
             :scroll="{ y: 300 }"
