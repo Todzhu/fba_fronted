@@ -4,7 +4,7 @@
  * 支持统计卡片、ECharts 图表和数据表格
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
-import type { StepResult } from '../types/pipeline';
+import type { StepResult, StepType } from '../types/pipeline';
 
 import { computed, nextTick, ref, watch } from 'vue';
 
@@ -15,6 +15,7 @@ import { Button, Empty, Modal, Table, Tabs } from 'antdv-next';
 
 const props = defineProps<{
   result?: StepResult;
+  stepType?: StepType;
   loading?: boolean;
   logs?: string[];
 }>();
@@ -66,10 +67,11 @@ const imageKeys = () => Object.keys(props.result?.images || {});
 const tableKeys = () => Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
-const reportHtmlFile = computed(() => fileList().find((file) => file.type === 'html' || file.name.endsWith('.html')));
+const visibleFiles = computed(() => props.stepType === 'data_load' ? [] : fileList());
+const reportHtmlFile = computed(() => visibleFiles.value.find((file) => file.type === 'html' || file.name.endsWith('.html')));
 const resultLogs = computed(() => props.logs?.length ? props.logs : props.result?.logs || []);
 const hasVisualResult = computed(() => {
-  return chartKeys().length > 0 || imageKeys().length > 0 || tableKeys().length > 0 || fileList().length > 0;
+  return chartKeys().length > 0 || imageKeys().length > 0 || tableKeys().length > 0 || visibleFiles.value.length > 0;
 });
 
 const openImagePreview = (imageKey: string) => {
@@ -164,9 +166,9 @@ const openImagePreview = (imageKey: string) => {
         </Tabs.TabPane>
 
         <!-- Files -->
-        <Tabs.TabPane v-if="fileList().length > 0" key="files" tab="结果文件">
+        <Tabs.TabPane v-if="visibleFiles.length > 0" key="files" tab="结果文件">
           <div class="file-list">
-            <div v-for="file in fileList()" :key="file.path" class="file-item">
+            <div v-for="file in visibleFiles" :key="file.path" class="file-item">
               <div class="file-info">
                 <Icon icon="mdi:file-outline" />
                 <div>

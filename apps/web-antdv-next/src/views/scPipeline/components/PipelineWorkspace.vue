@@ -256,6 +256,7 @@ watch(
               </template>
               <StepResultPanel
                 :result="activeStep.result"
+                :step-type="activeStep.stepType"
                 :loading="activeStep.status === 'running'"
                 :logs="activeStep.status === 'running' || activeStep.status === 'error' || activeStep.result?.logs?.length ? activeStepLogs : []"
               />
