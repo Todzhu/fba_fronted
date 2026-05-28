@@ -11,7 +11,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
-import { Button, Empty, Modal, Table, Tabs } from 'antdv-next';
+import { Button, Empty, Modal, Table } from 'antdv-next';
 
 const props = defineProps<{
   result?: StepResult;
@@ -25,6 +25,20 @@ const chartRefs = ref<Record<string, EchartsUIType>>({});
 const imagePreviewOpen = ref(false);
 const imagePreviewSrc = ref('');
 const imagePreviewTitle = ref('');
+const activeResultId = ref('');
+
+type ResultItemKind = 'chart' | 'file' | 'image' | 'report' | 'table';
+
+interface ResultItem {
+  id: string;
+  icon: string;
+  key: string;
+  kind: ResultItemKind;
+  label: string;
+  section: string;
+}
+
+const formatResultLabel = (key: string) => key.replace(/_/g, ' ');
 
 // 渲染图表
 const renderCharts = () => {
@@ -38,6 +52,20 @@ const renderCharts = () => {
         renderEcharts(options as any);
       }
     }
+  });
+};
+
+const renderActiveChart = () => {
+  const item = activeResult.value;
+  if (!item || item.kind !== 'chart') return;
+
+  nextTick(() => {
+    const chartRef = chartRefs.value[item.key];
+    const options = props.result?.charts?.[item.key];
+    if (!chartRef || !options) return;
+
+    const { renderEcharts } = useEcharts(ref(chartRef));
+    renderEcharts(options as any);
   });
 };
 
@@ -93,10 +121,112 @@ const fileList = () => props.result?.files || [];
 const hiddenFileSteps: StepType[] = ['cell_annotation', 'cell_filter', 'cluster', 'data_load', 'marker_gene'];
 const visibleFiles = computed(() => hiddenFileSteps.includes(props.stepType as StepType) ? [] : fileList());
 const reportHtmlFile = computed(() => visibleFiles.value.find((file) => file.type === 'html' || file.name.endsWith('.html')));
+const visibleDownloadFiles = computed(() => visibleFiles.value.filter((file) => file !== reportHtmlFile.value));
 const resultLogs = computed(() => props.logs?.length ? props.logs : props.result?.logs || []);
 const hasVisualResult = computed(() => {
   return chartKeys().length > 0 || imageKeys().length > 0 || tableKeys().length > 0 || visibleFiles.value.length > 0;
 });
+const resultItems = computed<ResultItem[]>(() => {
+  const items: ResultItem[] = [];
+
+  if (reportHtmlFile.value) {
+    items.push({
+      id: 'report-preview',
+      icon: 'mdi:file-document-outline',
+      key: reportHtmlFile.value.path,
+      kind: 'report',
+      label: '报告预览',
+      section: '报告',
+    });
+  }
+
+  for (const imageKey of imageKeys()) {
+    items.push({
+      id: `image-${imageKey}`,
+      icon: 'mdi:image-outline',
+      key: imageKey,
+      kind: 'image',
+      label: formatResultLabel(imageKey),
+      section: '图像',
+    });
+  }
+
+  for (const chartKey of chartKeys()) {
+    items.push({
+      id: `chart-${chartKey}`,
+      icon: 'mdi:chart-line',
+      key: chartKey,
+      kind: 'chart',
+      label: formatResultLabel(chartKey),
+      section: '图表',
+    });
+  }
+
+  for (const tableKey of tableKeys()) {
+    items.push({
+      id: `table-${tableKey}`,
+      icon: 'mdi:table',
+      key: tableKey,
+      kind: 'table',
+      label: formatResultLabel(tableKey),
+      section: '表格',
+    });
+  }
+
+  for (const file of visibleDownloadFiles.value) {
+    items.push({
+      id: `file-${file.path}`,
+      icon: 'mdi:file-outline',
+      key: file.path,
+      kind: 'file',
+      label: file.name,
+      section: '文件',
+    });
+  }
+
+  return items;
+});
+const resultSections = computed(() => {
+  const sections: Array<{ items: ResultItem[]; name: string }> = [];
+  for (const item of resultItems.value) {
+    const section = sections.find((entry) => entry.name === item.section);
+    if (section) {
+      section.items.push(item);
+    } else {
+      sections.push({ name: item.section, items: [item] });
+    }
+  }
+  return sections;
+});
+const activeResult = computed(() => resultItems.value.find((item) => item.id === activeResultId.value) || resultItems.value[0]);
+const activeFile = computed(() => visibleDownloadFiles.value.find((file) => file.path === activeResult.value?.key));
+
+const setChartRef = (chartKey: string | undefined, el: EchartsUIType | null) => {
+  if (!chartKey || !el) return;
+  chartRefs.value[chartKey] = el;
+};
+
+watch(
+  resultItems,
+  (items) => {
+    if (!items.length) {
+      activeResultId.value = '';
+      return;
+    }
+    if (!items.some((item) => item.id === activeResultId.value)) {
+      activeResultId.value = items[0]?.id || '';
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => [activeResultId.value, props.result?.charts],
+  () => {
+    renderActiveChart();
+  },
+  { immediate: true },
+);
 
 const openImagePreview = (imageKey: string) => {
   imagePreviewSrc.value = props.result?.images?.[imageKey] || '';
@@ -131,83 +261,85 @@ const openImagePreview = (imageKey: string) => {
 
     <!-- Result Content -->
     <div v-else class="result-content">
-      <!-- Charts & Tables -->
-      <Tabs
-        v-if="hasVisualResult"
-        class="result-tabs"
-      >
-        <!-- Report preview -->
-        <Tabs.TabPane v-if="reportHtmlFile" key="report-preview" tab="报告预览">
+      <div v-if="hasVisualResult" class="result-browser">
+        <aside class="result-nav">
+          <div class="result-nav-summary">{{ resultItems.length }} 项结果</div>
+          <div v-for="section in resultSections" :key="section.name" class="result-nav-section">
+            <div class="result-nav-section-title">{{ section.name }}</div>
+            <button
+              v-for="item in section.items"
+              :key="item.id"
+              class="result-nav-item"
+              :class="{ active: item.id === activeResult?.id }"
+              type="button"
+              @click="activeResultId = item.id"
+            >
+              <Icon :icon="item.icon" />
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="result-viewer">
+          <div v-if="activeResult" class="result-viewer-header">
+            <div class="result-viewer-title">
+              <Icon :icon="activeResult.icon" />
+              <span>{{ activeResult.label }}</span>
+            </div>
+          </div>
+
           <iframe
+            v-if="activeResult?.kind === 'report' && reportHtmlFile"
             class="report-preview-frame"
             :src="reportHtmlFile.path"
             title="报告预览"
           />
-        </Tabs.TabPane>
 
-        <!-- Images -->
-        <Tabs.TabPane
-          v-for="imageKey in imageKeys()"
-          :key="`image-${imageKey}`"
-          :tab="imageKey.replace(/_/g, ' ')"
-        >
-          <div class="image-preview" @click="openImagePreview(imageKey)">
+          <div
+            v-else-if="activeResult?.kind === 'image'"
+            class="image-preview"
+            @click="openImagePreview(activeResult.key)"
+          >
             <img
-              :src="result.images![imageKey]"
-              :alt="imageKey"
+              :src="result.images![activeResult.key]"
+              :alt="activeResult.label"
               class="result-image"
             />
           </div>
-        </Tabs.TabPane>
 
-        <!-- Charts -->
-        <Tabs.TabPane
-          v-for="chartKey in chartKeys()"
-          :key="`chart-${chartKey}`"
-          :tab="chartKey.replace(/_/g, ' ')"
-        >
-          <div class="chart-container">
+          <div v-else-if="activeResult?.kind === 'chart'" class="chart-container">
             <EchartsUI
-              :ref="(el: any) => { if (el) chartRefs[chartKey] = el; }"
+              :ref="(el: any) => setChartRef(activeResult?.key, el)"
             />
           </div>
-        </Tabs.TabPane>
 
-        <!-- Tables -->
-        <Tabs.TabPane
-          v-for="tableKey in tableKeys()"
-          :key="`table-${tableKey}`"
-          :tab="tableKey.replace(/_/g, ' ')"
-        >
           <Table
-            :columns="getTableColumns(tableKey)"
-            :data-source="getTable(tableKey).data"
+            v-else-if="activeResult?.kind === 'table'"
+            :columns="getTableColumns(activeResult.key)"
+            :data-source="getTable(activeResult.key).data"
             :pagination="{ pageSize: 10, showSizeChanger: true }"
-            :scroll="{ y: 300 }"
+            :scroll="{ y: 420 }"
             size="small"
             bordered
           />
-        </Tabs.TabPane>
 
-        <!-- Files -->
-        <Tabs.TabPane v-if="visibleFiles.length > 0" key="files" tab="结果文件">
-          <div class="file-list">
-            <div v-for="file in visibleFiles" :key="file.path" class="file-item">
+          <div v-else-if="activeResult?.kind === 'file' && activeFile" class="file-list">
+            <div class="file-item">
               <div class="file-info">
                 <Icon icon="mdi:file-outline" />
                 <div>
-                  <div class="file-name">{{ file.name }}</div>
-                  <div class="file-path">{{ file.path }}</div>
+                  <div class="file-name">{{ activeFile.name }}</div>
+                  <div class="file-path">{{ activeFile.path }}</div>
                 </div>
               </div>
-              <Button size="small" type="link" :href="file.path" target="_blank">
+              <Button size="small" type="link" :href="activeFile.path" target="_blank">
                 <Icon icon="mdi:download" />
-                {{ file.type === 'html' || file.name.endsWith('.html') ? '打开' : '下载' }}
+                {{ activeFile.type === 'html' || activeFile.name.endsWith('.html') ? '打开' : '下载' }}
               </Button>
             </div>
           </div>
-        </Tabs.TabPane>
-      </Tabs>
+        </section>
+      </div>
     </div>
 
     <Modal
@@ -316,12 +448,119 @@ const openImagePreview = (imageKey: string) => {
 .result-content {
   display: flex;
   flex-direction: column;
+  min-height: 0;
   gap: 16px;
 }
 
-.result-tabs {
-  flex: 1;
+.result-browser {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 520px;
+}
+
+.result-nav {
   min-width: 0;
+  max-height: 70vh;
+  padding: 10px;
+  overflow: auto;
+  background: #f8fafc;
+  border: 1px solid #e8edf5;
+  border-radius: 8px;
+}
+
+.result-nav-summary {
+  padding: 4px 6px 10px;
+  font-size: 12px;
+  color: #697386;
+}
+
+.result-nav-section + .result-nav-section {
+  margin-top: 12px;
+}
+
+.result-nav-section-title {
+  padding: 0 6px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #617089;
+}
+
+.result-nav-item {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  overflow: hidden;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.result-nav-item:hover {
+  color: #1677ff;
+  background: #fff;
+  border-color: #d7e7ff;
+}
+
+.result-nav-item.active {
+  color: #0958d9;
+  background: #eaf4ff;
+  border-color: #91caff;
+}
+
+.result-nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-nav-item :deep(svg) {
+  flex: 0 0 auto;
+}
+
+.result-viewer {
+  min-width: 0;
+  padding: 14px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e8edf5;
+  border-radius: 8px;
+}
+
+.result-viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.result-viewer-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.result-viewer-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .report-preview-frame {
@@ -344,12 +583,12 @@ const openImagePreview = (imageKey: string) => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 360px;
+  min-height: 440px;
   padding: 16px;
   overflow: hidden;
   cursor: zoom-in;
-  background: #fafafa;
-  border: 1px solid #f0f0f0;
+  background: #fbfcfe;
+  border: 1px solid #eef2f7;
   border-radius: 8px;
 }
 
@@ -375,6 +614,14 @@ const openImagePreview = (imageKey: string) => {
 }
 
 @media (max-width: 900px) {
+  .result-browser {
+    grid-template-columns: 1fr;
+  }
+
+  .result-nav {
+    max-height: 220px;
+  }
+
   .image-preview {
     min-height: 300px;
     padding: 12px;
