@@ -109,8 +109,8 @@ const chartKeys = () => Object.keys(props.result?.charts || {});
 const imageKeys = () => {
   const keys = Object.keys(props.result?.images || {});
   if (props.stepType !== 'cluster') return keys;
-  const visibleKeys = keys.filter((key) => !key.toLowerCase().includes('tsne'));
-  const preferredOrder = ['umap', 'pca', 'gene counts', 'cluster correlation'];
+  const visibleKeys = keys;
+  const preferredOrder = ['umap', 'tsne', 't-sne', 'pca', 'gene counts', 'cluster correlation'];
   return [...visibleKeys].sort((left, right) => {
     const leftIndex = preferredOrder.indexOf(left.toLowerCase());
     const rightIndex = preferredOrder.indexOf(right.toLowerCase());
