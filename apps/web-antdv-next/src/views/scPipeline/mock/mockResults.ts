@@ -1,5 +1,5 @@
 /**
- * scVision 主流程模拟结果数据
+ * 单细胞主流程模拟结果数据
  */
 import type { StepResult, StepType } from '../types/pipeline';
 

@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 /**
- * scVision 风格单细胞分析工作台
+ * 单细胞分析工作台
  */
 import type { StepState, StepStatus } from '../types/pipeline';
 import type { SampleInfo } from '../mock/myDataMock';
@@ -141,7 +141,7 @@ watch(
             <div>
               <div class="workflow-title-text">单细胞分析流程</div>
               <div class="workflow-subtitle">
-                按 scVision 模式逐步完成数据导入、质控、过滤、聚类、注释和报告生成
+                逐步完成数据导入、质控、过滤、聚类、注释和报告生成
               </div>
             </div>
           </div>

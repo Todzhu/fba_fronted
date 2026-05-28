@@ -1,5 +1,5 @@
 /**
- * scVision 风格单细胞分析步骤参数定义
+ * 单细胞分析步骤参数定义
  */
 import type { ParamSchema, StepDefinition, StepType } from '../types/pipeline';
 
@@ -114,14 +114,14 @@ const clusterSchema: ParamSchema = {
       title: 'cluster_method',
       description: '图聚类算法',
       enum: ['louvain', 'leiden'],
-      default: 'louvain',
+      default: 'leiden',
       group: '聚类设置',
     },
     n_pcs: {
       type: 'integer',
       title: 'n_pcs',
       description: '用于邻域图构建的主成分数量',
-      default: 10,
+      default: 20,
       minimum: 5,
       maximum: 50,
       step: 1,
@@ -143,7 +143,7 @@ const clusterSchema: ParamSchema = {
       type: 'number',
       title: 'resolution',
       description: '聚类分辨率',
-      default: 0.8,
+      default: 0.5,
       minimum: 0.1,
       maximum: 1,
       step: 0.1,
@@ -280,7 +280,7 @@ export const STEP_DEFINITIONS: Record<StepType, StepDefinition> = {
   data_load: {
     stepType: 'data_load',
     displayName: '数据导入',
-    description: '选择单细胞CellRanger输出结果，维护样本分组，并同步生成原始 QC 结果',
+    description: '选择单细胞 CellRanger 输出结果，维护样本分组，并同步生成原始 QC 结果',
     icon: 'mdi:database-import',
     paramSchema: dataLoadSchema,
   },
