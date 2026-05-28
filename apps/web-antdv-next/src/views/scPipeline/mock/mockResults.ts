@@ -53,6 +53,7 @@ export function generateMockResult(
         images: {
           'Filtered violin': '/mock/sc-pipeline/filtered_nCount_nFeature_voilon.png',
           'Filtered scatter': '/mock/sc-pipeline/filtered_nCount_nFeature_scatter.png',
+          'Scrublet plot': '/mock/sc-pipeline/scrublet_plot.png',
         },
         files: [{ name: 'filtered.h5ad', path: '/mock/sc-pipeline/filtered.h5ad', type: 'h5ad' }],
         message: '细胞过滤完成，低质量细胞和疑似双细胞已剔除。',

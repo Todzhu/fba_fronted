@@ -67,7 +67,7 @@ const imageKeys = () => Object.keys(props.result?.images || {});
 const tableKeys = () => Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
-const visibleFiles = computed(() => props.stepType === 'data_load' ? [] : fileList());
+const visibleFiles = computed(() => ['cell_filter', 'data_load'].includes(props.stepType || '') ? [] : fileList());
 const reportHtmlFile = computed(() => visibleFiles.value.find((file) => file.type === 'html' || file.name.endsWith('.html')));
 const resultLogs = computed(() => props.logs?.length ? props.logs : props.result?.logs || []);
 const hasVisualResult = computed(() => {
