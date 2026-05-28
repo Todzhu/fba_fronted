@@ -273,7 +273,16 @@ export function seedMockData(): void {
             {
                 stepType: 'cell_filter',
                 status: 'pending',
-                params: { min_genes: 200, min_cells: 10, pct_counts_mt: 20, pct_counts_ribo: 30 },
+                params: {
+                    min_genes: 200,
+                    min_cells: 10,
+                    pct_counts_mt: 20,
+                    pct_counts_ribo: 30,
+                    max_genes: 7000,
+                    total_counts: 25_000,
+                    doublet_rate: 5,
+                    doublet_score: 0.25,
+                },
                 history: [],
             },
             {

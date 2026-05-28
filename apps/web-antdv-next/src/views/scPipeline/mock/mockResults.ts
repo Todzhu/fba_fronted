@@ -43,8 +43,12 @@ export function generateMockResult(
           cells_after: 2385,
           genes_before: 32738,
           genes_after: 18642,
+          max_genes: Number(params.max_genes ?? 7000),
+          total_counts: Number(params.total_counts ?? 25_000),
           pct_counts_mt: String(params.pct_counts_mt ?? 20),
           pct_counts_ribo: String(params.pct_counts_ribo ?? 30),
+          doublet_rate: Number(params.doublet_rate ?? 5),
+          doublet_score: Number(params.doublet_score ?? 0.25),
         },
         images: {
           'Filtered violin': '/mock/sc-pipeline/filtered_nCount_nFeature_voilon.png',

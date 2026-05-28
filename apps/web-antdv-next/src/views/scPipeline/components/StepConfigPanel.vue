@@ -4,13 +4,13 @@
  * 封装 DynamicForm，根据当前步骤加载对应 Schema
  * 对于数据读取步骤，显示样本信息表格
  */
-import type { ParamSchema, StepResult, StepStatus, StepType } from '../types/pipeline';
+import type { ParamSchema, ParamSchemaProperty, StepResult, StepStatus, StepType } from '../types/pipeline';
 import type { SampleInfo } from '../mock/myDataMock';
 
 import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import { Button, Input, message, Spin } from 'antdv-next';
+import { Button, Input, InputNumber, message, Spin, Tooltip } from 'antdv-next';
 
 import DynamicForm from '../../cloudTools/components/DynamicForm.vue';
 import { getMarkerDictApi, type MarkerDictItem } from '../api';
@@ -36,6 +36,7 @@ const emit = defineEmits<{
 
 // 是否为数据读取步骤
 const isDataLoadStep = computed(() => props.stepType === 'data_load');
+const isCellFilterStep = computed(() => props.stepType === 'cell_filter');
 
 // 当前步骤定义
 const stepDef = computed(() => STEP_DEFINITIONS[props.stepType]);
@@ -56,6 +57,20 @@ const paramGroupCount = computed(() => {
     groups.add(String(prop.group || '默认参数'));
   }
   return groups.size;
+});
+
+type CellFilterField = ParamSchemaProperty & { key: string };
+
+const cellFilterFields = computed<CellFilterField[]>(() => {
+  const schema = paramSchema.value;
+  if (!schema?.properties) return [];
+  const order = schema.order || Object.keys(schema.properties);
+  return order
+    .map((key) => {
+      const prop = schema.properties[key];
+      return prop ? { key, ...prop } : null;
+    })
+    .filter((item): item is CellFilterField => Boolean(item));
 });
 
 // 本地参数副本
@@ -104,6 +119,40 @@ watch(
 const handleParamsChange = (params: Record<string, unknown>) => {
   localParams.value = params;
   emit('update:params', params);
+};
+
+const getParamNumberValue = (field: CellFilterField) => {
+  const value = localParams.value[field.key];
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return typeof field.default === 'number' ? field.default : 0;
+};
+
+const getParamPrecision = (field: CellFilterField) => {
+  if (field.type === 'integer') return 0;
+  const stepText = String(field.step ?? 0.01);
+  return stepText.includes('.') ? stepText.split('.')[1]?.length ?? 0 : 0;
+};
+
+const normalizeParamNumberValue = (field: CellFilterField, value: number) => {
+  const precision = getParamPrecision(field);
+  let nextValue = field.type === 'integer' ? Math.round(value) : Number(value.toFixed(precision));
+  if (typeof field.minimum === 'number') nextValue = Math.max(field.minimum, nextValue);
+  if (typeof field.maximum === 'number') nextValue = Math.min(field.maximum, nextValue);
+  return precision > 0 ? Number(nextValue.toFixed(precision)) : nextValue;
+};
+
+const updateCellFilterParam = (field: CellFilterField, value: number | null) => {
+  const fallback = getParamNumberValue(field);
+  const nextParams = {
+    ...localParams.value,
+    [field.key]: normalizeParamNumberValue(field, value ?? fallback),
+  };
+  localParams.value = nextParams;
+  emit('update:params', nextParams);
 };
 
 // 样本变更
@@ -230,6 +279,48 @@ watch(
           :model-value="localSamples"
           @update:model-value="handleSamplesChange"
         />
+      </template>
+
+      <!-- 细胞过滤步骤：紧凑两列参数网格 -->
+      <template v-else-if="isCellFilterStep">
+        <section class="config-section cell-filter-section">
+          <div class="cell-filter-grid">
+            <div
+              v-for="field in cellFilterFields"
+              :key="field.key"
+              class="cell-filter-item"
+            >
+              <label class="cell-filter-label">
+                <span>{{ field.title || field.key }}:</span>
+                <Tooltip
+                  v-if="field.description"
+                  placement="topLeft"
+                  :overlay-style="{ maxWidth: '320px' }"
+                >
+                  <template #title>
+                    <div class="cell-filter-tooltip">
+                      <div class="cell-filter-tooltip-title">{{ field.title || field.key }}</div>
+                      <div>{{ field.description }}</div>
+                    </div>
+                  </template>
+                  <Icon icon="ant-design:question-circle-outlined" class="cell-filter-help" />
+                </Tooltip>
+              </label>
+              <div class="cell-filter-stepper">
+                <InputNumber
+                  :value="getParamNumberValue(field)"
+                  :min="field.minimum"
+                  :max="field.maximum"
+                  :step="field.step ?? 1"
+                  :precision="getParamPrecision(field)"
+                  :disabled="disabled"
+                  class="cell-filter-input"
+                  @change="(val) => updateCellFilterParam(field, val as number | null)"
+                />
+              </div>
+            </div>
+          </div>
+        </section>
       </template>
 
       <!-- 其他步骤：显示 DynamicForm -->
@@ -378,6 +469,108 @@ watch(
 
 .config-section:last-child {
   margin-bottom: 0;
+}
+
+.cell-filter-section {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.cell-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+
+.cell-filter-item {
+  min-width: 0;
+}
+
+.cell-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+.cell-filter-help {
+  width: 13px;
+  height: 13px;
+  color: #8ba0bd;
+  cursor: help;
+  transition: color 0.18s ease;
+}
+
+.cell-filter-help:hover {
+  color: #1677ff;
+}
+
+.cell-filter-tooltip {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cell-filter-tooltip-title {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.cell-filter-stepper {
+  height: 38px;
+  overflow: hidden;
+  background: #f0f3f8;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.cell-filter-stepper:focus-within {
+  background: #fff;
+  border-color: #ff4d4f;
+}
+
+.cell-filter-input {
+  width: 100%;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.cell-filter-input:hover,
+.cell-filter-input:focus,
+.cell-filter-input:focus-within {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.cell-filter-input :deep(.ant-input-number) {
+  width: 100%;
+}
+
+.cell-filter-input :deep(.ant-input-number-input) {
+  height: 36px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: #111827;
+}
+
+.cell-filter-input :deep(.ant-input-number),
+.cell-filter-input :deep(.ant-input-number:hover),
+.cell-filter-input :deep(.ant-input-number-focused) {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.cell-filter-input :deep(.ant-input-number-handler-wrap) {
+  display: none;
 }
 
 .section-header {
@@ -593,6 +786,12 @@ watch(
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .cell-filter-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>
