@@ -16,6 +16,7 @@ import StepConfigPanel from './StepConfigPanel.vue';
 import StepResultPanel from './StepResultPanel.vue';
 
 const props = defineProps<{
+  pipelineId?: string;
   steps: StepState[];
   currentStep: number;
   isMultiSample?: boolean;
@@ -32,6 +33,7 @@ const emit = defineEmits<{
 const activeStepIndex = ref(0);
 const hasInitializedActiveStep = ref(false);
 const logDrawerOpen = ref(false);
+const ACTIVE_STEP_STORAGE_PREFIX = 'sc-pipeline-active-step';
 
 const STATUS_CONFIG: Record<StepStatus, { color: string; icon: string; text: string }> = {
   pending: { color: 'default', icon: 'mdi:circle-outline', text: '待执行' },
@@ -78,9 +80,58 @@ const canRunActiveStep = computed(() => {
   return isStepAvailable(activeStepIndex.value) && step.status !== 'running';
 });
 
+const normalizeStepIndex = (index: number, stepCount = props.steps.length) => {
+  if (stepCount <= 0) return 0;
+  return Math.min(Math.max(index, 0), stepCount - 1);
+};
+
+const getActiveStepStorageKey = () => {
+  return props.pipelineId ? `${ACTIVE_STEP_STORAGE_PREFIX}:${props.pipelineId}` : '';
+};
+
+const readStoredActiveStepIndex = (stepCount: number) => {
+  const storageKey = getActiveStepStorageKey();
+  if (!storageKey) return null;
+  try {
+    const rawValue = window.sessionStorage.getItem(storageKey);
+    if (rawValue === null) return null;
+    const index = Number.parseInt(rawValue, 10);
+    return Number.isInteger(index) ? normalizeStepIndex(index, stepCount) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveActiveStepIndex = () => {
+  const storageKey = getActiveStepStorageKey();
+  if (!storageKey || !hasInitializedActiveStep.value) return;
+  try {
+    window.sessionStorage.setItem(storageKey, String(activeStepIndex.value));
+  } catch {
+    // Session persistence is only a UI convenience; analysis state remains server-driven.
+  }
+};
+
+const getFallbackActiveStepIndex = (stepCount: number, currentStep: number) => {
+  const normalizedCurrentStep = normalizeStepIndex(currentStep, stepCount);
+  const previousStep = props.steps[normalizedCurrentStep - 1];
+  const currentStepState = props.steps[normalizedCurrentStep];
+
+  if (
+    normalizedCurrentStep > 0
+    && currentStepState?.status === 'pending'
+    && (previousStep?.status === 'completed' || previousStep?.status === 'skipped')
+  ) {
+    return normalizedCurrentStep - 1;
+  }
+
+  return normalizedCurrentStep;
+};
+
 const selectStep = (index: number) => {
   if (!props.steps[index]) return;
   activeStepIndex.value = index;
+  saveActiveStepIndex();
 };
 
 const handleRunStep = () => {
@@ -126,11 +177,14 @@ watch(
   () => [props.steps.length, props.currentStep] as const,
   ([stepCount, step]) => {
     if (hasInitializedActiveStep.value || stepCount === 0) return;
-    activeStepIndex.value = Math.min(step, props.steps.length - 1);
+    activeStepIndex.value = readStoredActiveStepIndex(stepCount) ?? getFallbackActiveStepIndex(stepCount, step);
     hasInitializedActiveStep.value = true;
+    saveActiveStepIndex();
   },
   { immediate: true },
 );
+
+watch(activeStepIndex, saveActiveStepIndex);
 </script>
 
 <template>

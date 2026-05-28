@@ -305,6 +305,7 @@ onUnmounted(() => {
         <div class="workspace-container">
           <PipelineWorkspace
             :key="pipeline.id"
+            :pipeline-id="pipeline.id"
             :steps="pipeline.steps"
             :current-step="pipeline.currentStep"
             :is-multi-sample="(pipeline as any).isMultiSample"
