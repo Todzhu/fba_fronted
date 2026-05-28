@@ -179,6 +179,7 @@ const clusterSchema: ParamSchema = {
       title: '批次校正',
       description: '多样本合并分析时选择是否去除批次效应',
       enum: ['none', 'bbknn', 'harmony'],
+      disabledEnum: ['bbknn'],
       default: 'none',
       group: '批次处理',
     },

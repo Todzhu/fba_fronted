@@ -32,6 +32,7 @@ interface SchemaProperty {
   default?: unknown;
   widget?: string;
   enum?: string[];
+  disabledEnum?: string[];
   minimum?: number;
   maximum?: number;
   step?: number;
@@ -204,7 +205,9 @@ const getEnumOptions = (prop: SchemaPropertyWithKey): string[] => {
 };
 
 const getSelectOptions = (prop: SchemaPropertyWithKey) => {
+  const disabledValues = new Set(prop.disabledEnum || []);
   return getEnumOptions(prop).map((value) => ({
+    disabled: disabledValues.has(value),
     label: value,
     value,
   }));

@@ -102,6 +102,7 @@ export interface ParamSchemaProperty {
   description?: string;
   default?: unknown;
   enum?: unknown[];
+  disabledEnum?: unknown[];
   minimum?: number;
   maximum?: number;
   step?: number;
