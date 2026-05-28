@@ -1,9 +1,9 @@
 <script lang="ts" setup>
 /**
  * SampleTableEditor - 样本信息可编辑表格
- * 支持编辑样本名称、分组、启用状态，以及分组模板管理
+ * 支持编辑样本名称、分组和启用状态
  */
-import type { SampleInfo, GroupTemplate } from '../mock/myDataMock';
+import type { SampleInfo } from '../mock/myDataMock';
 
 import { computed, ref, watch } from 'vue';
 
@@ -11,23 +11,12 @@ import { Icon } from '@iconify/vue';
 import {
   Button,
   Checkbox,
-  Dropdown,
   Input,
-  Menu,
   message,
-  Modal,
-  Select,
   Space,
   Table,
-  Tag,
   Tooltip,
 } from 'antdv-next';
-
-import {
-  deleteGroupTemplate,
-  getGroupTemplates,
-  saveGroupTemplate,
-} from '../mock/myDataMock';
 
 const props = defineProps<{
   modelValue: SampleInfo[];
@@ -40,14 +29,6 @@ const emit = defineEmits<{
 // 本地数据副本
 const samples = ref<SampleInfo[]>([]);
 
-// 分组模板
-const templates = ref<GroupTemplate[]>([]);
-const loadingTemplates = ref(false);
-
-// 保存模板对话框
-const saveTemplateVisible = ref(false);
-const newTemplateName = ref('');
-
 // 同步外部数据
 watch(
   () => props.modelValue,
@@ -57,36 +38,11 @@ watch(
   { immediate: true, deep: true },
 );
 
-// 获取当前所有分组（去重）
-const currentGroups = computed(() => {
-  const groups = new Set<string>();
-  samples.value.forEach((s) => {
-    if (s.group) groups.add(s.group);
-  });
-  return Array.from(groups);
-});
-
-// 分组选项
-const groupOptions = computed(() => {
-  return currentGroups.value.map((g) => ({ value: g, label: g }));
-});
-
-// 加载分组模板
-const loadTemplates = async () => {
-  loadingTemplates.value = true;
-  try {
-    templates.value = await getGroupTemplates();
-  } finally {
-    loadingTemplates.value = false;
-  }
-};
-
-// 初始化
-loadTemplates();
-
 // 更新单个样本
 const updateSample = (index: number, field: keyof SampleInfo, value: any) => {
-  samples.value[index][field] = value;
+  const sample = samples.value[index];
+  if (!sample) return;
+  samples.value[index] = { ...sample, [field]: value };
   emitChange();
 };
 
@@ -104,60 +60,13 @@ const allEnabled = computed({
   },
 });
 
-// 应用分组模板
-const applyTemplate = (template: GroupTemplate) => {
-  if (template.groups.length === 0) return;
-
-  // 按顺序循环分配分组
-  samples.value.forEach((sample, index) => {
-    sample.group = template.groups[index % template.groups.length];
-  });
-  emitChange();
-  message.success(`已应用模板「${template.name}」`);
-};
-
-// 保存当前分组为模板
-const showSaveTemplateDialog = () => {
-  if (currentGroups.value.length === 0) {
-    message.warning('请先设置分组信息');
-    return;
-  }
-  newTemplateName.value = '';
-  saveTemplateVisible.value = true;
-};
-
-const handleSaveTemplate = async () => {
-  if (!newTemplateName.value.trim()) {
-    message.warning('请输入模板名称');
-    return;
-  }
-
-  await saveGroupTemplate(newTemplateName.value, currentGroups.value);
-  message.success('模板保存成功');
-  saveTemplateVisible.value = false;
-  loadTemplates();
-};
-
-// 删除模板
-const handleDeleteTemplate = async (template: GroupTemplate) => {
-  Modal.confirm({
-    title: '确认删除',
-    content: `确定要删除模板「${template.name}」吗？`,
-    async onOk() {
-      await deleteGroupTemplate(template.id);
-      message.success('已删除');
-      loadTemplates();
-    },
-  });
-};
-
 // 快速填充：按前缀分组
 const autoGroupByPrefix = () => {
   samples.value.forEach((sample) => {
     // 提取下划线或连字符前的部分作为分组
     const match = sample.folderName.match(/^([a-zA-Z]+)/);
     if (match) {
-      sample.group = match[1];
+      sample.group = match[1] || '';
     }
   });
   emitChange();
@@ -170,26 +79,26 @@ const columns = [
     title: '启用',
     dataIndex: 'enabled',
     key: 'enabled',
-    width: 70,
+    width: 44,
     align: 'center' as const,
   },
   {
     title: '文件夹名称',
     dataIndex: 'folderName',
     key: 'folderName',
-    width: 180,
+    width: 104,
   },
   {
     title: '样本名称',
     dataIndex: 'sampleName',
     key: 'sampleName',
-    width: 200,
+    width: 110,
   },
   {
     title: '分组',
     dataIndex: 'group',
     key: 'group',
-    width: 180,
+    width: 110,
   },
 ];
 </script>
@@ -199,45 +108,8 @@ const columns = [
     <!-- 工具栏 -->
     <div class="toolbar">
       <Space>
-        <Dropdown :trigger="['click']">
-          <Button>
-            <Icon icon="mdi:bookmark-outline" />
-            应用模板
-            <Icon icon="mdi:chevron-down" />
-          </Button>
-          <template #overlay>
-            <Menu>
-              <Menu.Item
-                v-for="tpl in templates"
-                :key="tpl.id"
-                @click="applyTemplate(tpl)"
-              >
-                <div class="template-item">
-                  <span>{{ tpl.name }}</span>
-                  <div class="template-tags">
-                    <Tag v-for="g in tpl.groups" :key="g" size="small">{{ g }}</Tag>
-                  </div>
-                  <Button
-                    type="text"
-                    size="small"
-                    danger
-                    @click.stop="handleDeleteTemplate(tpl)"
-                  >
-                    <Icon icon="mdi:delete" />
-                  </Button>
-                </div>
-              </Menu.Item>
-              <Menu.Divider v-if="templates.length > 0" />
-              <Menu.Item key="save" @click="showSaveTemplateDialog">
-                <Icon icon="mdi:content-save" />
-                保存当前分组为模板
-              </Menu.Item>
-            </Menu>
-          </template>
-        </Dropdown>
-
         <Tooltip title="根据文件夹名称前缀自动分组">
-          <Button @click="autoGroupByPrefix">
+          <Button size="small" @click="autoGroupByPrefix">
             <Icon icon="mdi:auto-fix" />
             按前缀分组
           </Button>
@@ -255,10 +127,12 @@ const columns = [
       :columns="columns"
       :data-source="samples"
       :pagination="false"
-      :scroll="{ y: 300 }"
+      :scroll="{ x: 368, y: 260 }"
+      table-layout="fixed"
       row-key="folderName"
       size="small"
       bordered
+      class="sample-table"
     >
       <!-- 启用列 -->
       <template #headerCell="{ column }">
@@ -289,46 +163,24 @@ const columns = [
         <template v-else-if="column.key === 'sampleName'">
           <Input
             :value="record.sampleName"
+            class="sample-input"
             size="small"
             @change="(e: any) => updateSample(index, 'sampleName', e.target.value)"
           />
         </template>
 
-        <!-- 分组（可编辑/选择） -->
+        <!-- 分组（可编辑） -->
         <template v-else-if="column.key === 'group'">
-          <Select
+          <Input
             :value="record.group"
-            mode="tags"
-            :max-tag-count="1"
+            class="sample-input"
             size="small"
-            style="width: 100%"
-            placeholder="输入或选择分组"
-            :options="groupOptions"
-            @change="(val: any) => updateSample(index, 'group', Array.isArray(val) ? val[0] || '' : val)"
+            placeholder="输入分组"
+            @change="(e: any) => updateSample(index, 'group', e.target.value)"
           />
         </template>
       </template>
     </Table>
-
-    <!-- 保存模板对话框 -->
-    <Modal
-      v-model:open="saveTemplateVisible"
-      title="保存分组模板"
-      :width="400"
-      @ok="handleSaveTemplate"
-    >
-      <div class="save-template-form">
-        <p>当前分组：</p>
-        <div class="current-groups">
-          <Tag v-for="g in currentGroups" :key="g" color="blue">{{ g }}</Tag>
-        </div>
-        <Input
-          v-model:value="newTemplateName"
-          placeholder="输入模板名称"
-          style="margin-top: 12px"
-        />
-      </div>
-    </Modal>
   </div>
 </template>
 
@@ -336,56 +188,92 @@ const columns = [
 .sample-table-editor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
 }
 
 .sample-count {
+  flex-shrink: 0;
   font-size: 13px;
-  color: #8c8c8c;
-}
-
-.template-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 200px;
-}
-
-.template-tags {
-  display: flex;
-  flex: 1;
-  gap: 4px;
+  color: #595959;
 }
 
 .folder-name {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
   color: #595959;
+}
+
+.folder-name :deep(svg) {
+  flex-shrink: 0;
 }
 
 .folder-icon {
   color: #faad14;
 }
 
-.save-template-form p {
-  margin-bottom: 8px;
-  font-weight: 500;
+.sample-input {
+  width: 100%;
 }
 
-.current-groups {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+:deep(.sample-table) {
+  max-width: 100%;
+  overflow: auto hidden;
+  border-radius: 8px;
+}
+
+:deep(.ant-table) {
+  font-size: 13px;
+  background: #fff;
+}
+
+:deep(.ant-table-thead > tr > th) {
+  padding: 9px 6px !important;
+  font-weight: 600;
+  color: #262626;
+  background: #fafafa !important;
 }
 
 :deep(.ant-table-cell) {
-  padding: 8px !important;
+  padding: 7px 6px !important;
+  vertical-align: middle;
+}
+
+:deep(.ant-table-cell .ant-input) {
+  height: 28px;
+  padding: 2px 6px;
+  font-size: 13px;
+  border-color: #d9d9d9;
+  border-radius: 6px;
+}
+
+:deep(.ant-table-cell .ant-input:focus) {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.08);
+}
+
+:deep(.ant-table-tbody > tr:hover > td) {
+  background: #f8fbff !important;
+}
+
+:deep(.ant-table-tbody > tr > td) {
+  border-color: #f0f0f0;
+}
+
+:deep(.ant-table-body) {
+  overflow-x: hidden !important;
+}
+
+:deep(.ant-table-content) {
+  overflow-x: hidden !important;
 }
 </style>

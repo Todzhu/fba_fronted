@@ -26,6 +26,7 @@
     "#/*": "./src/*"
   },
   "dependencies": {
+    "@iconify/vue": "catalog:",
     "@vben/access": "workspace:*",
     "@vben/common-ui": "workspace:*",
     "@vben/constants": "workspace:*",
@@ -44,6 +45,7 @@
     "antdv-next": "catalog:",
     "croner": "catalog:",
     "dayjs": "catalog:",
+    "lucide-vue-next": "catalog:",
     "markdown-it": "^14.1.1",
     "mitt": "catalog:",
     "pinia": "catalog:",

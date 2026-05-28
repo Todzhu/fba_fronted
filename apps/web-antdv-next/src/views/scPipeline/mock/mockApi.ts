@@ -261,7 +261,7 @@ export function seedMockData(): void {
     mockPipelines.set(demoId, {
         id: demoId,
         name: 'PBMC 3K 示例分析',
-        currentStep: 2,
+        currentStep: 1,
         steps: [
             {
                 stepType: 'data_load',
@@ -271,22 +271,15 @@ export function seedMockData(): void {
                 history: [],
             },
             {
-                stepType: 'qc_filter',
-                status: 'completed',
-                params: { min_genes: 200, max_genes: 5000, max_mito_pct: 20, min_cells: 3 },
-                result: generateMockResult('qc_filter', { min_genes: 200, max_mito_pct: 20 }),
+                stepType: 'cell_filter',
+                status: 'pending',
+                params: { min_genes: 200, min_cells: 10, pct_counts_mt: 20, pct_counts_ribo: 30 },
                 history: [],
             },
             {
-                stepType: 'dim_reduce',
+                stepType: 'cluster',
                 status: 'pending',
-                params: { n_pcs: 50, use_highly_variable: true, n_neighbors: 15, resolution: 0.5 },
-                history: [],
-            },
-            {
-                stepType: 'annotation',
-                status: 'pending',
-                params: { annotation_method: 'marker_genes', marker_genes: 'CD3D,CD4,CD8A,MS4A1,CD14,FCGR3A,NKG7,PPBP', show_gene_scores: true },
+                params: { cluster_method: 'louvain', n_pcs: 10, n_neighbors: 20, resolution: 0.8 },
                 history: [],
             },
         ],

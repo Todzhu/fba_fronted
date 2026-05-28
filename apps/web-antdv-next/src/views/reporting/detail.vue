@@ -8,6 +8,7 @@ import { useTabs } from '@vben/hooks';
 import { Alert, Button, Card, Empty, Spin, Tag, message } from 'antdv-next';
 
 import {
+  downloadReportPdfApi,
   getReportFileUrl,
   getReportHtmlApi,
   getReportJobApi,
@@ -156,6 +157,36 @@ const downloadReport = () => {
   link.remove();
 };
 
+const downloadPdfReport = async () => {
+  if (!job.value || job.value.status !== 'completed') {
+    message.warning('报告内容尚未加载完成');
+    return;
+  }
+  message.loading({ content: '正在生成 PDF...', key: 'download-report-pdf' });
+  let pdfUrl = '';
+  const link = document.createElement('a');
+  try {
+    const blob = await downloadReportPdfApi(job.value.id);
+    pdfUrl = URL.createObjectURL(blob);
+    const projectId = job.value.project_id || job.value.id;
+    link.href = pdfUrl;
+    link.download = `report-${projectId}.pdf`;
+    document.body.append(link);
+    link.click();
+    message.success({ content: 'PDF 下载已开始', key: 'download-report-pdf' });
+  } catch (error: any) {
+    message.error({
+      content: error?.message || error?.msg || 'PDF 下载失败',
+      key: 'download-report-pdf',
+    });
+  } finally {
+    link.remove();
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+    }
+  }
+};
+
 const retryJob = async () => {
   if (!job.value) return;
   retrying.value = true;
@@ -271,6 +302,7 @@ onBeforeUnmount(() => {
           <div class="mb-3 flex items-center gap-3">
             <Button type="primary" @click="openReport">新窗口打开</Button>
             <Button @click="downloadReport">下载报告</Button>
+            <Button type="primary" ghost @click="downloadPdfReport">下载PDF</Button>
           </div>
           <Alert
             v-if="previewError"

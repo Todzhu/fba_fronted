@@ -1,474 +1,509 @@
 <script lang="ts" setup>
 /**
- * 单细胞分析流程工作区 - 卡片式界面
- * 10 个步骤以卡片形式展示，支持查看状态、配置参数、执行分析
+ * scVision 风格单细胞分析工作台
  */
-import type { StepState, StepType, StepStatus } from '../types/pipeline';
+import type { StepState, StepStatus } from '../types/pipeline';
+import type { SampleInfo } from '../mock/myDataMock';
 
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 import { Icon } from '@iconify/vue';
-import {
-  Badge,
-  Button,
-  Card,
-  Drawer,
-  Empty,
-  Progress,
-  Space,
-  Spin,
-  Tag,
-  Tooltip,
-} from 'antdv-next';
+import { Button, Card, Drawer, Empty, Progress, Space, Spin, Tag, Tooltip } from 'antdv-next';
 
-import { STEP_LABELS, STEP_ORDER, SKIPPABLE_STEPS } from '../types/pipeline';
+import { STEP_DEFINITIONS, getStepDefinition } from '../mock/stepSchemas';
+import { STEP_LABELS } from '../types/pipeline';
 import StepConfigPanel from './StepConfigPanel.vue';
 import StepResultPanel from './StepResultPanel.vue';
 
-// Props
 const props = defineProps<{
   steps: StepState[];
   currentStep: number;
   isMultiSample?: boolean;
+  samples?: SampleInfo[];
   loading?: boolean;
 }>();
 
-// Emits
 const emit = defineEmits<{
   (e: 'run-step', stepIndex: number, params: Record<string, unknown>): void;
   (e: 'skip-step', stepIndex: number): void;
   (e: 'update-params', stepIndex: number, params: Record<string, unknown>): void;
 }>();
 
-// 当前打开的步骤详情
-const activeStepIndex = ref<number | null>(null);
-const drawerVisible = ref(false);
-const drawerTab = ref<'config' | 'result'>('config');
+const activeStepIndex = ref(0);
+const logDrawerOpen = ref(false);
 
-// 步骤图标映射
-const STEP_ICONS: Record<StepType, string> = {
-  data_load: 'mdi:database-import',
-  qc_filter: 'mdi:filter-check',
-  normalize: 'mdi:chart-bell-curve',
-  merge: 'mdi:merge',
-  batch_correct: 'mdi:format-paint',
-  dim_reduce: 'mdi:scatter-plot',
-  annotation: 'mdi:tag-text',
-  diff_expr: 'mdi:chart-box',
-  enrichment: 'mdi:dna',
-  advanced: 'mdi:chart-timeline-variant',
+const STATUS_CONFIG: Record<StepStatus, { color: string; icon: string; text: string }> = {
+  pending: { color: 'default', icon: 'mdi:circle-outline', text: '待执行' },
+  running: { color: 'processing', icon: 'mdi:loading', text: '执行中' },
+  completed: { color: 'success', icon: 'mdi:check-circle', text: '已完成' },
+  error: { color: 'error', icon: 'mdi:alert-circle', text: '失败' },
+  skipped: { color: 'warning', icon: 'mdi:skip-next-circle', text: '已跳过' },
 };
 
-// 状态颜色映射
-const STATUS_CONFIG: Record<StepStatus | 'skipped', { color: string; icon: string; text: string }> = {
-  pending: { color: '#d9d9d9', icon: 'mdi:circle-outline', text: '待执行' },
-  running: { color: '#1890ff', icon: 'mdi:loading', text: '执行中' },
-  completed: { color: '#52c41a', icon: 'mdi:check-circle', text: '已完成' },
-  error: { color: '#ff4d4f', icon: 'mdi:alert-circle', text: '失败' },
-  skipped: { color: '#faad14', icon: 'mdi:skip-next-circle', text: '已跳过' },
-};
-
-// 计算进度
-const progressPercent = computed(() => {
-  const completed = props.steps.filter(s => s.status === 'completed' || s.status === 'skipped').length;
-  return Math.round((completed / props.steps.length) * 100);
+const completedCount = computed(() => {
+  return props.steps.filter((step) => step.status === 'completed' || step.status === 'skipped').length;
 });
 
-// 获取步骤状态配置
-const getStepStatusConfig = (step: StepState) => {
-  const status = step.status === 'pending' && isStepSkipped(step) ? 'skipped' : step.status;
-  return STATUS_CONFIG[status] || STATUS_CONFIG.pending;
-};
+const progressPercent = computed(() => {
+  if (props.steps.length === 0) return 0;
+  return Math.round((completedCount.value / props.steps.length) * 100);
+});
 
-// 判断步骤是否被跳过
-const isStepSkipped = (step: StepState) => {
-  if (!props.isMultiSample && SKIPPABLE_STEPS.includes(step.stepType)) {
-    return step.status === 'pending';
-  }
-  return false;
-};
+const activeStep = computed(() => props.steps[activeStepIndex.value] || null);
 
-// 判断步骤是否可执行
-const canRunStep = (index: number) => {
+const activeDefinition = computed(() => {
+  return activeStep.value ? getStepDefinition(activeStep.value.stepType) : null;
+});
+
+const activeStepLogs = computed(() => {
+  const step = activeStep.value;
+  if (!step) return [];
+  const logs = step.result?.logs || [];
+  if (logs.length > 0) return logs;
+  if (step.errorMessage) return [`错误信息: ${step.errorMessage}`];
+  if (step.result?.message) return [step.result.message];
+  return ['暂无运行日志'];
+});
+
+const isStepAvailable = (index: number) => {
   if (index === 0) return true;
   const prevStep = props.steps[index - 1];
-  return prevStep?.status === 'completed' || isStepSkipped(prevStep);
+  return prevStep?.status === 'completed' || prevStep?.status === 'skipped';
 };
 
-// 判断步骤是否可跳过
-const canSkipStep = (step: StepState) => {
-  return SKIPPABLE_STEPS.includes(step.stepType) && step.status === 'pending';
-};
-
-// 打开步骤详情
-const openStepDetail = (index: number, tab: 'config' | 'result' = 'config') => {
-  activeStepIndex.value = index;
-  drawerTab.value = tab;
-  drawerVisible.value = true;
-};
-
-// 关闭抽屉
-const closeDrawer = () => {
-  drawerVisible.value = false;
-  activeStepIndex.value = null;
-};
-
-// 当前活动步骤
-const activeStep = computed(() => {
-  if (activeStepIndex.value === null) return null;
-  return props.steps[activeStepIndex.value] || null;
+const canRunActiveStep = computed(() => {
+  const step = activeStep.value;
+  if (!step) return false;
+  return isStepAvailable(activeStepIndex.value) && step.status !== 'running';
 });
 
-// 执行步骤
-const handleRunStep = (params: Record<string, unknown>) => {
-  if (activeStepIndex.value !== null) {
-    emit('run-step', activeStepIndex.value, params);
-  }
+const selectStep = (index: number) => {
+  if (!props.steps[index]) return;
+  activeStepIndex.value = index;
 };
 
-// 跳过步骤
-const handleSkipStep = (index: number) => {
-  emit('skip-step', index);
+const handleRunStep = () => {
+  const step = activeStep.value;
+  if (!step) return;
+  emit('run-step', activeStepIndex.value, { ...step.params });
 };
 
-// 更新参数
+const handleRunStepWithParams = (params?: Record<string, unknown>) => {
+  const step = activeStep.value;
+  if (!step) return;
+  emit('run-step', activeStepIndex.value, { ...step.params, ...(params || {}) });
+};
+
+const openLogDrawer = () => {
+  logDrawerOpen.value = true;
+};
+
 const handleUpdateParams = (params: Record<string, unknown>) => {
-  if (activeStepIndex.value !== null) {
-    emit('update-params', activeStepIndex.value, params);
-  }
+  emit('update-params', activeStepIndex.value, params);
 };
+
+const activeSamples = computed(() => {
+  const paramSamples = activeStep.value?.params?.samples;
+  return Array.isArray(paramSamples) ? (paramSamples as SampleInfo[]) : props.samples || [];
+});
+
+const handleUpdateSamples = (samples: SampleInfo[]) => {
+  const enabledSamples = samples
+    .filter((sample) => sample.enabled)
+    .map((sample) => ({
+      sample: sample.sampleName || sample.folderName,
+      group: sample.group || sample.sampleName || sample.folderName,
+    }));
+  emit('update-params', activeStepIndex.value, {
+    ...(activeStep.value?.params || {}),
+    samples,
+    sample_groups: enabledSamples,
+  });
+};
+
+watch(
+  () => props.currentStep,
+  (step) => {
+    if (props.steps.length === 0) return;
+    activeStepIndex.value = Math.min(step, props.steps.length - 1);
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="pipeline-workspace">
-    <!-- 进度概览 -->
-    <div class="progress-header">
-      <div class="progress-info">
-        <span class="progress-label">分析进度</span>
-        <Progress
-          :percent="progressPercent"
-          :stroke-color="{ '0%': '#108ee9', '100%': '#52c41a' }"
-          :stroke-width="8"
-          style="width: 200px"
-        />
-      </div>
-      <div class="step-summary">
-        <Tag color="success">
-          {{ steps.filter(s => s.status === 'completed').length }} 已完成
-        </Tag>
-        <Tag v-if="steps.some(s => s.status === 'running')" color="processing">
-          1 执行中
-        </Tag>
-        <Tag color="default">
-          {{ steps.filter(s => s.status === 'pending').length }} 待执行
-        </Tag>
-      </div>
-    </div>
-
-    <!-- 步骤卡片网格 -->
     <Spin :spinning="loading">
-      <div class="step-grid">
-        <div
-          v-for="(step, index) in steps"
-          :key="step.stepType"
-          class="step-card-wrapper"
-        >
-          <!-- 连接线 -->
-          <div v-if="index > 0" class="connector-line" :class="{ completed: step.status === 'completed' }" />
-          
-          <Card 
-            class="step-card"
-            :class="{
-              'is-active': index === currentStep,
-              'is-completed': step.status === 'completed',
-              'is-running': step.status === 'running',
-              'is-error': step.status === 'error',
-              'is-skipped': isStepSkipped(step),
-            }"
-            hoverable
-            @click="openStepDetail(index)"
-          >
-            <!-- 步骤序号 -->
-            <div class="step-number">
-              <Badge
-                :count="index + 1"
-                :number-style="{
-                  backgroundColor: getStepStatusConfig(step).color,
-                  fontWeight: 600,
-                }"
-              />
-            </div>
-
-            <!-- 卡片内容 -->
-            <div class="step-content">
-              <div class="step-icon">
-                <Icon :icon="STEP_ICONS[step.stepType]" />
+      <template v-if="steps.length > 0">
+        <div class="workflow-header">
+          <div class="workflow-title">
+            <Icon icon="mdi:timeline-check-outline" />
+            <div>
+              <div class="workflow-title-text">单细胞分析流程</div>
+              <div class="workflow-subtitle">
+                按 scVision 模式逐步完成数据导入、质控、过滤、聚类、注释和报告生成
               </div>
-              <div class="step-info">
-                <div class="step-name">{{ STEP_LABELS[step.stepType] }}</div>
-                <div class="step-status">
-                  <Icon 
-                    :icon="getStepStatusConfig(step).icon" 
-                    :class="{ spinning: step.status === 'running' }"
-                  />
-                  <span>{{ getStepStatusConfig(step).text }}</span>
+            </div>
+          </div>
+          <div class="workflow-progress">
+            <Progress
+              :percent="progressPercent"
+              :stroke-width="8"
+              :stroke-color="{ '0%': '#1890ff', '100%': '#52c41a' }"
+              style="width: 220px"
+            />
+            <Tag color="success">{{ completedCount }}/{{ steps.length }} 已完成</Tag>
+          </div>
+        </div>
+
+        <div class="workbench-layout">
+          <aside class="step-sidebar">
+            <div
+              v-for="(step, index) in steps"
+              :key="`${step.stepType}-${index}`"
+              class="step-row"
+              :class="{
+                active: index === activeStepIndex,
+                disabled: !isStepAvailable(index),
+                completed: step.status === 'completed',
+                running: step.status === 'running',
+                error: step.status === 'error',
+              }"
+              @click="selectStep(index)"
+            >
+              <div class="step-index">{{ index + 1 }}</div>
+              <div class="step-body">
+                <div class="step-name">
+                  <Icon :icon="STEP_DEFINITIONS[step.stepType]?.icon || 'mdi:cog'" />
+                  <span>{{ STEP_LABELS[step.stepType] || step.stepType }}</span>
+                </div>
+                <div class="step-desc">
+                  {{ STEP_DEFINITIONS[step.stepType]?.description || '等待配置分析参数' }}
                 </div>
               </div>
+              <Tag :color="STATUS_CONFIG[step.status]?.color || 'default'" class="step-status">
+                <Icon
+                  :icon="STATUS_CONFIG[step.status]?.icon || 'mdi:circle-outline'"
+                  :class="{ spinning: step.status === 'running' }"
+                />
+                {{ STATUS_CONFIG[step.status]?.text || step.status }}
+              </Tag>
             </div>
+          </aside>
 
-            <!-- 操作按钮 -->
-            <div class="step-actions" @click.stop>
-              <Space>
-                <!-- 查看结果 -->
-                <Tooltip v-if="step.status === 'completed'" title="查看结果">
-                  <Button 
-                    type="text" 
-                    size="small"
-                    @click.stop="openStepDetail(index, 'result')"
+          <main v-if="activeStep && activeDefinition" class="step-main">
+            <Card class="config-card" :bordered="false">
+              <template #title>
+                <div class="panel-title">
+                  <Icon :icon="activeDefinition.icon" />
+                  <span>{{ activeDefinition.displayName }}</span>
+                  <Tag :color="STATUS_CONFIG[activeStep.status]?.color || 'default'" class="title-status">
+                    <Icon
+                      :icon="STATUS_CONFIG[activeStep.status]?.icon || 'mdi:circle-outline'"
+                      :class="{ spinning: activeStep.status === 'running' }"
+                    />
+                    {{ STATUS_CONFIG[activeStep.status]?.text || activeStep.status }}
+                  </Tag>
+                </div>
+              </template>
+              <template #extra>
+                <Space>
+                  <Tooltip v-if="!canRunActiveStep" title="请先完成前置步骤">
+                    <Button disabled>
+                      <Icon icon="mdi:play" />
+                      执行
+                    </Button>
+                  </Tooltip>
+                  <Button
+                    v-else
+                    type="primary"
+                    :loading="activeStep.status === 'running'"
+                    @click="handleRunStep"
                   >
-                    <Icon icon="mdi:chart-box" />
+                    <Icon icon="mdi:play" />
+                    {{ activeStep.status === 'completed' ? '重新执行' : '执行当前步骤' }}
                   </Button>
-                </Tooltip>
+                </Space>
+              </template>
+              <StepConfigPanel
+                :step-type="activeStep.stepType"
+                :params="activeStep.params"
+                :status="activeStep.status"
+                :result="activeStep.result"
+                :disabled="!canRunActiveStep"
+                :history-count="activeStep.history.length"
+                :samples="activeSamples"
+                @update:params="handleUpdateParams"
+                @update:samples="handleUpdateSamples"
+                @run="handleRunStepWithParams"
+              />
+            </Card>
 
-                <!-- 配置参数 -->
-                <Tooltip title="配置参数">
-                  <Button 
-                    type="text" 
-                    size="small"
-                    @click.stop="openStepDetail(index, 'config')"
-                  >
-                    <Icon icon="mdi:cog" />
-                  </Button>
-                </Tooltip>
+            <Card class="result-card" :bordered="false">
+              <template #title>
+                <div class="panel-title">
+                  <Icon icon="mdi:chart-box-outline" />
+                  <span>分析结果</span>
+                </div>
+              </template>
+              <template #extra>
+                <Button @click="openLogDrawer">
+                  <Icon icon="mdi:text-box-search-outline" />
+                  日志
+                </Button>
+              </template>
+              <StepResultPanel
+                :result="activeStep.result"
+                :loading="activeStep.status === 'running'"
+                :logs="activeStep.status === 'running' || activeStep.result?.logs?.length ? activeStepLogs : []"
+              />
+            </Card>
+          </main>
+        </div>
 
-                <!-- 跳过 -->
-                <Tooltip v-if="canSkipStep(step)" title="跳过此步骤">
-                  <Button 
-                    type="text" 
-                    size="small"
-                    @click.stop="handleSkipStep(index)"
-                  >
-                    <Icon icon="mdi:skip-next" />
-                  </Button>
-                </Tooltip>
-              </Space>
+        <Drawer
+          v-model:open="logDrawerOpen"
+          title="运行日志"
+          placement="right"
+          :width="520"
+        >
+          <div v-if="activeStep" class="log-drawer">
+            <div class="log-meta">
+              <Tag :color="STATUS_CONFIG[activeStep.status]?.color || 'default'">
+                {{ STATUS_CONFIG[activeStep.status]?.text || activeStep.status }}
+              </Tag>
+              <span>{{ STEP_LABELS[activeStep.stepType] || activeStep.stepType }}</span>
             </div>
-          </Card>
-        </div>
-      </div>
-
-      <Empty v-if="steps.length === 0" description="暂无步骤数据" />
-    </Spin>
-
-    <!-- 步骤详情抽屉 -->
-    <Drawer
-      v-model:open="drawerVisible"
-      :title="activeStep ? STEP_LABELS[activeStep.stepType] : '步骤详情'"
-      placement="right"
-      :width="520"
-      @close="closeDrawer"
-    >
-      <template v-if="activeStep">
-        <div class="drawer-tabs">
-          <Button 
-            :type="drawerTab === 'config' ? 'primary' : 'default'"
-            @click="drawerTab = 'config'"
-          >
-            <Icon icon="mdi:cog" />
-            参数配置
-          </Button>
-          <Button 
-            :type="drawerTab === 'result' ? 'primary' : 'default'"
-            :disabled="activeStep.status !== 'completed'"
-            @click="drawerTab = 'result'"
-          >
-            <Icon icon="mdi:chart-box" />
-            分析结果
-          </Button>
-        </div>
-
-        <!-- 参数配置 -->
-        <div v-if="drawerTab === 'config'" class="drawer-content">
-          <StepConfigPanel
-            :step-type="activeStep.stepType"
-            :params="activeStep.params"
-            :status="activeStep.status"
-            :disabled="activeStepIndex !== null && !canRunStep(activeStepIndex)"
-            :history-count="0"
-            :samples="[]"
-            @update:params="handleUpdateParams"
-            @run="handleRunStep"
-          />
-        </div>
-
-        <!-- 分析结果 -->
-        <div v-else class="drawer-content">
-          <StepResultPanel
-            :result="activeStep.result"
-            :loading="activeStep.status === 'running'"
-          />
-        </div>
+            <pre class="log-content">{{ activeStepLogs.join('\n') }}</pre>
+          </div>
+        </Drawer>
       </template>
-    </Drawer>
+
+      <Empty v-else description="暂无步骤数据" />
+    </Spin>
   </div>
 </template>
 
 <style scoped>
 .pipeline-workspace {
+  height: 100%;
   padding: 16px;
 }
 
-.progress-header {
+:deep(.ant-spin-nested-loading),
+:deep(.ant-spin-container) {
+  height: 100%;
+}
+
+.workflow-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  gap: 16px;
   padding: 16px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
-  color: white;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
 }
 
-.progress-info {
+.workflow-title {
   display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.progress-label {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.progress-info :deep(.ant-progress-text) {
-  color: white !important;
-}
-
-.step-summary {
-  display: flex;
-  gap: 8px;
-}
-
-.step-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-  position: relative;
-}
-
-@media (max-width: 1400px) {
-  .step-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@media (max-width: 1100px) {
-  .step-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 800px) {
-  .step-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.step-card-wrapper {
-  position: relative;
-}
-
-.step-card {
-  border-radius: 12px;
-  transition: all 0.3s ease;
-  border: 2px solid transparent;
-  min-height: 140px;
-}
-
-.step-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-}
-
-.step-card.is-active {
-  border-color: #1890ff;
-  box-shadow: 0 0 0 4px rgba(24, 144, 255, 0.1);
-}
-
-.step-card.is-completed {
-  border-color: #52c41a;
-  background: linear-gradient(135deg, #f6ffed 0%, #ffffff 100%);
-}
-
-.step-card.is-running {
-  border-color: #1890ff;
-  background: linear-gradient(135deg, #e6f7ff 0%, #ffffff 100%);
-}
-
-.step-card.is-error {
-  border-color: #ff4d4f;
-  background: linear-gradient(135deg, #fff2f0 0%, #ffffff 100%);
-}
-
-.step-card.is-skipped {
-  opacity: 0.6;
-  border-style: dashed;
-}
-
-.step-number {
-  position: absolute;
-  top: -8px;
-  left: -8px;
-  z-index: 1;
-}
-
-.step-content {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding-top: 8px;
 }
 
-.step-icon {
-  font-size: 32px;
+.log-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #595959;
+}
+
+.log-content {
+  min-height: 360px;
+  padding: 12px;
+  margin: 0;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #262626;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+}
+
+.workflow-title > svg,
+.workflow-title :deep(svg) {
+  font-size: 24px;
   color: #1890ff;
 }
 
-.step-card.is-completed .step-icon {
-  color: #52c41a;
-}
-
-.step-card.is-error .step-icon {
-  color: #ff4d4f;
-}
-
-.step-info {
-  text-align: center;
-}
-
-.step-name {
-  font-size: 14px;
+.workflow-title-text {
+  font-size: 16px;
   font-weight: 600;
   color: #262626;
-  margin-bottom: 4px;
 }
 
-.step-status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+.workflow-subtitle {
+  margin-top: 2px;
   font-size: 12px;
   color: #8c8c8c;
 }
 
-.step-actions {
+.workflow-progress {
   display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.workbench-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+}
+
+.step-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.step-row:hover {
+  border-color: #91caff;
+}
+
+.step-row.active {
+  background: #f0f7ff;
+  border-color: #1890ff;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.12);
+}
+
+.step-row.disabled {
+  cursor: pointer;
+  opacity: 0.62;
+}
+
+.step-index {
+  display: flex;
+  align-items: center;
   justify-content: center;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #f0f0f0;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1890ff;
+  background: #e6f4ff;
+  border-radius: 50%;
+}
+
+.step-row.completed .step-index {
+  color: #fff;
+  background: #52c41a;
+}
+
+.step-row.running .step-index {
+  color: #fff;
+  background: #1890ff;
+}
+
+.step-row.error .step-index {
+  color: #fff;
+  background: #ff4d4f;
+}
+
+.step-body {
+  min-width: 0;
+}
+
+.step-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #262626;
+}
+
+.step-name :deep(svg) {
+  color: #1890ff;
+}
+
+.step-desc {
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 12px;
+  color: #8c8c8c;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.step-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-end: 0;
+}
+
+.step-main {
+  display: grid;
+  grid-template-columns: minmax(440px, 500px) minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.config-card,
+.result-card {
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.config-card :deep(.ant-card-head) {
+  min-height: 58px;
+  background: #fbfdff;
+  border-bottom-color: #edf1f7;
+}
+
+.config-card :deep(.ant-card-body) {
+  padding: 14px;
+  background: #fff;
+}
+
+.result-card :deep(.ant-card-body) {
+  padding-top: 4px;
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.panel-title :deep(svg) {
+  color: #1890ff;
 }
 
 .spinning {
@@ -476,32 +511,32 @@ const handleUpdateParams = (params: Record<string, unknown>) => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-.drawer-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+@media (max-width: 1280px) {
+  .workbench-layout {
+    grid-template-columns: 280px minmax(0, 1fr);
+  }
+
+  .step-main {
+    grid-template-columns: 1fr;
+  }
 }
 
-.drawer-content {
-  padding-top: 8px;
-}
+@media (max-width: 900px) {
+  .workflow-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 
-/* 连接线样式 */
-.connector-line {
-  position: absolute;
-  top: 50%;
-  left: -16px;
-  width: 16px;
-  height: 2px;
-  background: #d9d9d9;
-  transform: translateY(-50%);
-}
-
-.connector-line.completed {
-  background: #52c41a;
+  .workbench-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

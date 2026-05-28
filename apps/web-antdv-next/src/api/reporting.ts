@@ -77,7 +77,15 @@ export async function getReportHtmlApi(id: number | string, filePath = 'report.h
   });
 }
 
+export async function downloadReportPdfApi(id: number | string) {
+  return requestClient.download<Blob>(getReportPdfUrl(id));
+}
+
 export function getReportFileUrl(id: number | string, filePath = 'report.html') {
   const normalized = filePath.replace(/^\/+/, '');
   return `/api/v1/sys/reporting/jobs/${id}/report/${normalized}`;
+}
+
+export function getReportPdfUrl(id: number | string) {
+  return `/api/v1/sys/reporting/jobs/${id}/report.pdf`;
 }

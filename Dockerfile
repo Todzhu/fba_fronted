@@ -5,13 +5,13 @@ WORKDIR /fba_ui
 COPY . .
 
 RUN pnpm install \
-    && pnpm build
+    && pnpm --filter=@vben/web-antdv-next... build
 
 FROM nginx
 
 COPY scripts/deploy/nginx.conf /etc/nginx/nginx.conf
 
-COPY --from=build /fba_ui/apps/web-antd/dist /var/www/fba_ui
+COPY --from=build /fba_ui/apps/web-antdv-next/dist /var/www/fba_ui
 
 EXPOSE 80
 

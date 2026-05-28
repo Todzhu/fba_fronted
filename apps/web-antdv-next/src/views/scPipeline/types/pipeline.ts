@@ -4,45 +4,33 @@
 
 // ========== 步骤类型枚举 ==========
 export type StepType =
-  | 'data_load'      // ① 数据导入
-  | 'qc_filter'      // ② 质控过滤
-  | 'normalize'      // ③ 标准化
-  | 'merge'          // ④ 多样本合并
-  | 'batch_correct'  // ⑤ 批次校正
-  | 'dim_reduce'     // ⑥ 降维/聚类
-  | 'annotation'     // ⑦ 细胞注释
-  | 'diff_expr'      // ⑧ 差异分析
-  | 'enrichment'     // ⑨ 富集分析
-  | 'advanced';      // ⑩ 高级分析
+  | 'data_load'       // ① 数据导入
+  | 'cell_filter'     // ② 细胞过滤
+  | 'cluster'         // ③ 降维聚类
+  | 'marker_gene'     // ④ Marker Gene
+  | 'cell_annotation' // ⑤ 细胞注释
+  | 'report';         // ⑥ 报告生成
 
 export const STEP_ORDER: StepType[] = [
   'data_load',
-  'qc_filter',
-  'normalize',
-  'merge',
-  'batch_correct',
-  'dim_reduce',
-  'annotation',
-  'diff_expr',
-  'enrichment',
-  'advanced',
+  'cell_filter',
+  'cluster',
+  'marker_gene',
+  'cell_annotation',
+  'report',
 ];
 
 export const STEP_LABELS: Record<StepType, string> = {
   data_load: '数据导入',
-  qc_filter: '质控过滤',
-  normalize: '标准化',
-  merge: '多样本合并',
-  batch_correct: '批次校正',
-  dim_reduce: '降维/聚类',
-  annotation: '细胞注释',
-  diff_expr: '差异分析',
-  enrichment: '富集分析',
-  advanced: '高级分析',
+  cell_filter: '细胞过滤',
+  cluster: '降维聚类',
+  marker_gene: 'Marker Gene',
+  cell_annotation: '细胞注释',
+  report: '报告生成',
 };
 
-// 可跳过的步骤（单样本分析时跳过）
-export const SKIPPABLE_STEPS: StepType[] = ['merge', 'batch_correct', 'advanced'];
+// 主流程步骤默认不跳过；高级工具在主流程完成后单独开放
+export const SKIPPABLE_STEPS: StepType[] = [];
 
 // ========== 步骤状态 ==========
 export type StepStatus = 'pending' | 'running' | 'completed' | 'error' | 'skipped';
@@ -57,6 +45,10 @@ export interface StepResult {
   images?: Record<string, string>;
   /** 表格数据 */
   tables?: Record<string, { columns: string[]; data: Record<string, unknown>[] }>;
+  /** 输出文件 */
+  files?: Array<{ name: string; path: string; type?: string }>;
+  /** 运行日志 */
+  logs?: string[];
   /** 消息提示 */
   message?: string;
 }
@@ -75,11 +67,12 @@ export interface StepState {
   status: StepStatus;
   params: Record<string, unknown>;
   result?: StepResult;
+  errorMessage?: string;
   history: StepExecution[];
 }
 
 // ========== 流程状态 ==========
-export type PipelineStatus = 'created' | 'running' | 'paused' | 'completed';
+export type PipelineStatus = 'created' | 'running' | 'in_progress' | 'paused' | 'completed' | 'error';
 
 export interface PipelineState {
   id: string;
@@ -87,6 +80,13 @@ export interface PipelineState {
   description?: string;
   dataPath?: string;
   species?: string;
+  metadata?: Record<string, unknown>;
+  samples?: Array<{
+    folderName: string;
+    sampleName: string;
+    group: string;
+    enabled: boolean;
+  }>;
   currentStep: number;
   status?: PipelineStatus;
   isMultiSample?: boolean;
@@ -104,6 +104,7 @@ export interface ParamSchemaProperty {
   enum?: unknown[];
   minimum?: number;
   maximum?: number;
+  step?: number;
   widget?: string;
   group?: string;
 }

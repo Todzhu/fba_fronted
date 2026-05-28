@@ -8,3 +8,4 @@ export * from './plugin';
 export * from './role';
 export * from './scheduler';
 export * from './my-data';
+export * from './platform';

@@ -2,7 +2,7 @@
 import type { VbenFormSchema } from '@vben/common-ui';
 import type { Recordable } from '@vben/types';
 
-import { computed, h, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { AuthenticationRegister, z } from '@vben/common-ui';
@@ -114,27 +114,6 @@ const formSchema = computed((): VbenFormSchema[] => {
       },
       fieldName: 'confirmPassword',
       label: $t('authentication.confirmPassword'),
-    },
-    {
-      component: 'VbenCheckbox',
-      fieldName: 'agreePolicy',
-      renderComponentContent: () => ({
-        default: () =>
-          h('span', [
-            $t('authentication.agree'),
-            h(
-              'a',
-              {
-                class: 'vben-link ml-1 ',
-                href: '',
-              },
-              `${$t('authentication.privacyPolicy')} & ${$t('authentication.terms')}`,
-            ),
-          ]),
-      }),
-      rules: z.boolean().refine((value) => !!value, {
-        message: $t('authentication.agreeTip'),
-      }),
     },
   ];
 });

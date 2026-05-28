@@ -127,6 +127,32 @@ async function generateAccess(options: GenerateMenuAndRoutesOptions) {
         alwaysAccessible: true,
       },
     },
+    {
+      name: 'ScPipelineDetail',
+      path: 'sc-pipeline/:id',
+      component: () => import('#/views/scPipeline/detail.vue'),
+      meta: {
+        title: '单细胞分析流程',
+        hideInMenu: true,
+        alwaysAccessible: true,
+        fullPathKey: true,
+      },
+    },
+    {
+      name: 'ScPipelineDetailLegacy',
+      path: 'analysis/sc-pipeline/:id',
+      redirect: (to: any) => ({
+        name: 'ScPipelineDetail',
+        params: to.params,
+        query: to.query,
+      }),
+      meta: {
+        title: '单细胞分析流程',
+        hideInMenu: true,
+        alwaysAccessible: true,
+        fullPathKey: true,
+      },
+    },
   ];
 
   analysisHiddenRoutes.forEach((route) => {

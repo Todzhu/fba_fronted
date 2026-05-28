@@ -210,6 +210,64 @@ const getSelectOptions = (prop: SchemaPropertyWithKey) => {
   }));
 };
 
+const getNumberValue = (prop: SchemaPropertyWithKey) => {
+  const value = props.modelValue[prop.key];
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return typeof prop.default === 'number' ? prop.default : 0;
+};
+
+const normalizeIntegerValue = (prop: SchemaPropertyWithKey, value: number) => {
+  const min = prop.minimum;
+  const max = prop.maximum;
+  let nextValue = Math.round(value);
+  if (typeof min === 'number') nextValue = Math.max(min, nextValue);
+  if (typeof max === 'number') nextValue = Math.min(max, nextValue);
+  return nextValue;
+};
+
+const updateIntegerField = (prop: SchemaPropertyWithKey, value: number | null) => {
+  const fallback = getNumberValue(prop);
+  updateField(prop.key, normalizeIntegerValue(prop, value ?? fallback));
+};
+
+const stepIntegerField = (prop: SchemaPropertyWithKey, direction: -1 | 1) => {
+  const step = Number.isFinite(prop.step) ? Number(prop.step) : 1;
+  const current = getNumberValue(prop);
+  updateIntegerField(prop, current + direction * Math.max(1, Math.round(step)));
+};
+
+const getNumberPrecision = (prop: SchemaPropertyWithKey) => {
+  const step = prop.step ?? 0.01;
+  const stepText = String(step);
+  if (!stepText.includes('.')) return 0;
+  return stepText.split('.')[1]?.length ?? 0;
+};
+
+const normalizeNumberValue = (prop: SchemaPropertyWithKey, value: number) => {
+  const min = prop.minimum;
+  const max = prop.maximum;
+  const precision = getNumberPrecision(prop);
+  let nextValue = Number(value.toFixed(precision));
+  if (typeof min === 'number') nextValue = Math.max(min, nextValue);
+  if (typeof max === 'number') nextValue = Math.min(max, nextValue);
+  return Number(nextValue.toFixed(precision));
+};
+
+const updateNumberField = (prop: SchemaPropertyWithKey, value: number | null) => {
+  const fallback = getNumberValue(prop);
+  updateField(prop.key, normalizeNumberValue(prop, value ?? fallback));
+};
+
+const stepNumberField = (prop: SchemaPropertyWithKey, direction: -1 | 1) => {
+  const step = typeof prop.step === 'number' ? prop.step : 0.01;
+  const current = getNumberValue(prop);
+  updateNumberField(prop, current + direction * step);
+};
+
 // 确定渲染的组件类型
 const getWidgetType = (prop: SchemaPropertyWithKey): string => {
   // metadata 联动 widget：有选项时降级为 select/multi-select，无选项时降级为 text
@@ -377,6 +435,64 @@ const handleSubmit = () => {
                   "
                   @change="(checked) => updateField(prop.key, checked)"
                 />
+              </template>
+
+              <!-- 整数步进输入 -->
+              <template v-else-if="getWidgetType(prop) === 'integer-stepper'">
+                <div class="integer-stepper">
+                  <Button
+                    class="stepper-button"
+                    size="small"
+                    @click="stepIntegerField(prop, -1)"
+                  >
+                    <Icon icon="mdi:minus" />
+                  </Button>
+                  <InputNumber
+                    :value="getNumberValue(prop)"
+                    :min="prop.minimum"
+                    :max="prop.maximum"
+                    :step="prop.step ?? 1"
+                    :precision="0"
+                    class="stepper-input"
+                    @change="(val) => updateIntegerField(prop, val as number | null)"
+                  />
+                  <Button
+                    class="stepper-button"
+                    size="small"
+                    @click="stepIntegerField(prop, 1)"
+                  >
+                    <Icon icon="mdi:plus" />
+                  </Button>
+                </div>
+              </template>
+
+              <!-- 小数步进输入 -->
+              <template v-else-if="getWidgetType(prop) === 'number-stepper'">
+                <div class="integer-stepper">
+                  <Button
+                    class="stepper-button"
+                    size="small"
+                    @click="stepNumberField(prop, -1)"
+                  >
+                    <Icon icon="mdi:minus" />
+                  </Button>
+                  <InputNumber
+                    :value="getNumberValue(prop)"
+                    :min="prop.minimum"
+                    :max="prop.maximum"
+                    :step="prop.step ?? 0.01"
+                    :precision="getNumberPrecision(prop)"
+                    class="stepper-input"
+                    @change="(val) => updateNumberField(prop, val as number | null)"
+                  />
+                  <Button
+                    class="stepper-button"
+                    size="small"
+                    @click="stepNumberField(prop, 1)"
+                  >
+                    <Icon icon="mdi:plus" />
+                  </Button>
+                </div>
               </template>
 
               <!-- 整数输入 -->
@@ -635,6 +751,35 @@ const handleSubmit = () => {
 .number-input-only {
   flex: 1;
   width: 100%;
+}
+
+.integer-stepper {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.stepper-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+}
+
+.stepper-button :deep(svg) {
+  font-size: 16px;
+}
+
+.stepper-input {
+  width: 100%;
+}
+
+.stepper-input :deep(.ant-input-number-handler-wrap) {
+  display: none;
 }
 
 .text-input {

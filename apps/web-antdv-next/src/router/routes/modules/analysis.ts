@@ -43,8 +43,10 @@ const routes: RouteRecordRaw[] = [
         path: '/analysis/sc-pipeline/:id',
         component: () => import('#/views/scPipeline/detail.vue'),
         meta: {
-          title: '分析详情',
+          title: '单细胞分析流程',
           hideInMenu: true,
+          alwaysAccessible: true,
+          fullPathKey: true,
         },
       },
       {
