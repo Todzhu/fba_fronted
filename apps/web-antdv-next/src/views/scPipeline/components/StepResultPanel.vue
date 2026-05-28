@@ -11,11 +11,14 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 
 import { Icon } from '@iconify/vue';
-import { Button, Drawer, Empty, Modal, Table } from 'antdv-next';
+import { Button, Drawer, Empty, Modal, Table, message } from 'antdv-next';
+
+import { downloadPipelineResultsApi } from '../api';
 
 const props = defineProps<{
   result?: StepResult;
   stepType?: StepType;
+  pipelineId?: number | string;
   loading?: boolean;
   logs?: string[];
 }>();
@@ -26,6 +29,7 @@ const imagePreviewOpen = ref(false);
 const imagePreviewSrc = ref('');
 const imagePreviewTitle = ref('');
 const reportPreviewOpen = ref(false);
+const reportDownloadLoading = ref(false);
 const activeResultId = ref('');
 
 type ResultItemKind = 'chart' | 'file' | 'image' | 'report' | 'table';
@@ -242,6 +246,37 @@ const openReportPreview = () => {
   if (!reportHtmlFile.value) return;
   reportPreviewOpen.value = true;
 };
+
+const downloadReportResults = async () => {
+  if (!props.pipelineId) {
+    message.warning('未找到分析项目 ID，无法下载报告');
+    return;
+  }
+  reportDownloadLoading.value = true;
+  message.loading({ content: '正在打包分析结果...', key: 'sc-report-download' });
+  let downloadUrl = '';
+  const link = document.createElement('a');
+  try {
+    const blob = await downloadPipelineResultsApi(props.pipelineId);
+    downloadUrl = URL.createObjectURL(blob);
+    link.href = downloadUrl;
+    link.download = `sc_pipeline_${props.pipelineId}_results.zip`;
+    document.body.append(link);
+    link.click();
+    message.success({ content: '报告下载已开始', key: 'sc-report-download' });
+  } catch (error: any) {
+    message.error({
+      content: error?.message || error?.msg || '报告下载失败',
+      key: 'sc-report-download',
+    });
+  } finally {
+    link.remove();
+    if (downloadUrl) {
+      URL.revokeObjectURL(downloadUrl);
+    }
+    reportDownloadLoading.value = false;
+  }
+};
 </script>
 
 <template>
@@ -304,12 +339,18 @@ const openReportPreview = () => {
             <Icon icon="mdi:file-document-outline" />
             <div class="report-preview-copy">
               <div class="report-preview-title">HTML 报告已生成</div>
-              <div class="report-preview-desc">点击按钮在右侧抽屉中预览完整报告。</div>
+              <div class="report-preview-desc">点击按钮在右侧抽屉中预览完整报告，或打包下载分析结果。</div>
             </div>
-            <Button type="primary" @click="openReportPreview">
-              <Icon icon="mdi:open-in-new" />
-              预览报告
-            </Button>
+            <div class="report-preview-actions">
+              <Button type="primary" @click="openReportPreview">
+                <Icon icon="mdi:open-in-new" />
+                预览报告
+              </Button>
+              <Button :loading="reportDownloadLoading" @click="downloadReportResults">
+                <Icon icon="mdi:download" />
+                下载报告
+              </Button>
+            </div>
           </div>
 
           <div
@@ -643,6 +684,7 @@ const openReportPreview = () => {
 }
 
 .report-preview-copy {
+  flex: 1;
   min-width: 0;
 }
 
@@ -656,6 +698,19 @@ const openReportPreview = () => {
   margin-top: 4px;
   font-size: 13px;
   color: #697386;
+}
+
+.report-preview-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-preview-actions :deep(.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .chart-container {
@@ -710,6 +765,15 @@ const openReportPreview = () => {
 
   .result-image {
     width: 100%;
+  }
+
+  .report-preview-launcher {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .report-preview-actions {
+    flex-wrap: wrap;
   }
 }
 

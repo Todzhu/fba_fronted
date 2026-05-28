@@ -311,6 +311,7 @@ watch(activeStepIndex, saveActiveStepIndex);
               <StepResultPanel
                 :result="activeStep.result"
                 :step-type="activeStep.stepType"
+                :pipeline-id="pipelineId"
                 :loading="activeStep.status === 'running'"
                 :logs="activeStep.status === 'running' || activeStep.status === 'error' || activeStep.result?.logs?.length ? activeStepLogs : []"
               />

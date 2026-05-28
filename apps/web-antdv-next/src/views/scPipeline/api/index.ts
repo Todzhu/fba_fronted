@@ -89,6 +89,11 @@ export async function getMarkerDictApi(organism?: string) {
     });
 }
 
+/** 打包并下载分析结果 */
+export async function downloadPipelineResultsApi(id: number | string) {
+    return requestClient.download<Blob>(`${API_PREFIX}/${id}/download-results`);
+}
+
 // ========== Step API ==========
 
 /** 获取步骤详情 */
