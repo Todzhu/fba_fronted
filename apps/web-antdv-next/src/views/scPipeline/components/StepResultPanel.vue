@@ -453,50 +453,68 @@ const openImagePreview = (imageKey: string) => {
 }
 
 .result-browser {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 14px;
-  min-height: 520px;
+  display: flex;
+  min-height: 560px;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .result-nav {
+  display: flex;
   min-width: 0;
-  max-height: 70vh;
-  padding: 10px;
-  overflow: auto;
+  max-height: 112px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 10px;
+  overflow-y: auto;
   background: #f8fafc;
   border: 1px solid #e8edf5;
   border-radius: 8px;
 }
 
 .result-nav-summary {
-  padding: 4px 6px 10px;
+  flex: 0 0 auto;
+  padding: 6px 12px 6px 2px;
+  margin-right: 2px;
+  border-right: 1px solid #e4eaf2;
   font-size: 12px;
+  line-height: 20px;
   color: #697386;
 }
 
+.result-nav-section {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .result-nav-section + .result-nav-section {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .result-nav-section-title {
-  padding: 0 6px 6px;
+  flex: 0 0 auto;
+  padding: 5px 2px;
   font-size: 12px;
   font-weight: 600;
+  line-height: 20px;
   color: #617089;
 }
 
 .result-nav-item {
   display: flex;
-  width: 100%;
-  min-height: 34px;
+  width: auto;
+  max-width: 190px;
+  min-height: 30px;
   align-items: center;
   gap: 8px;
-  padding: 7px 8px;
+  padding: 5px 9px;
   overflow: hidden;
   cursor: pointer;
-  background: transparent;
-  border: 1px solid transparent;
+  background: #fff;
+  border: 1px solid #e6edf5;
   border-radius: 6px;
   transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
 }
@@ -529,7 +547,7 @@ const openImagePreview = (imageKey: string) => {
 
 .result-viewer {
   min-width: 0;
-  padding: 14px;
+  padding: 10px;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e8edf5;
@@ -583,8 +601,8 @@ const openImagePreview = (imageKey: string) => {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 440px;
-  padding: 16px;
+  min-height: clamp(520px, 62vh, 760px);
+  padding: 12px;
   overflow: hidden;
   cursor: zoom-in;
   background: #fbfcfe;
@@ -594,7 +612,7 @@ const openImagePreview = (imageKey: string) => {
 
 .result-image {
   display: block;
-  width: 100%;
+  width: auto;
   max-width: 100%;
   height: auto;
   object-fit: contain;
@@ -614,12 +632,8 @@ const openImagePreview = (imageKey: string) => {
 }
 
 @media (max-width: 900px) {
-  .result-browser {
-    grid-template-columns: 1fr;
-  }
-
   .result-nav {
-    max-height: 220px;
+    max-height: 180px;
   }
 
   .image-preview {
