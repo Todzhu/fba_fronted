@@ -115,7 +115,8 @@ const imageKeys = () => {
     return leftIndex - rightIndex;
   });
 };
-const tableKeys = () => Object.keys(props.result?.tables || {});
+const hiddenTableSteps: StepType[] = ['cell_annotation'];
+const tableKeys = () => hiddenTableSteps.includes(props.stepType as StepType) ? [] : Object.keys(props.result?.tables || {});
 const getTable = (tableKey: string) => props.result?.tables?.[tableKey] || { columns: [], data: [] };
 const fileList = () => props.result?.files || [];
 const hiddenFileSteps: StepType[] = ['cell_annotation', 'cell_filter', 'cluster', 'data_load', 'marker_gene'];
