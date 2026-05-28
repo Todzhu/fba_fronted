@@ -255,7 +255,7 @@ watch(
               <StepResultPanel
                 :result="activeStep.result"
                 :loading="activeStep.status === 'running'"
-                :logs="activeStep.status === 'running' || activeStep.result?.logs?.length ? activeStepLogs : []"
+                :logs="activeStep.status === 'running' || activeStep.status === 'error' || activeStep.result?.logs?.length ? activeStepLogs : []"
               />
             </Card>
           </main>
