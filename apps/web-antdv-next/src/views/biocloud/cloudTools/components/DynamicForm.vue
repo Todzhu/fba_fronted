@@ -40,6 +40,7 @@ interface SchemaProperty {
   group?: string; // 分组名称
   required?: boolean; // 支持属性内部的 required 标记
   multiple?: boolean; // metadata_value_select 是否允许多选
+  palettePreview?: string; // 调色板预览类型
 }
 
 interface SchemaPropertyWithKey extends SchemaProperty {
@@ -186,6 +187,150 @@ const updatePairValue = (key: string, side: 0 | 1, value: unknown) => {
   updateField(key, `${pair[0]},${pair[1]}`);
 };
 
+const palettePreviewColors: Record<string, string[]> = {
+  nature36: [
+    '#3B6EA8',
+    '#E64B35',
+    '#00A087',
+    '#4DBBD5',
+    '#F39B7F',
+    '#8491B4',
+    '#91D1C2',
+    '#DC0000',
+    '#7E6148',
+    '#B09C85',
+    '#6F99AD',
+    '#D98C3F',
+  ],
+  polychrome36: [
+    '#5A5156',
+    '#E4E1E3',
+    '#F6222E',
+    '#FE00FA',
+    '#16FF32',
+    '#3283FE',
+    '#FEAF16',
+    '#B00068',
+    '#1CFFCE',
+    '#90AD1C',
+    '#2ED9FF',
+    '#DEA0FD',
+  ],
+  tableau20: [
+    '#4E79A7',
+    '#A0CBE8',
+    '#F28E2B',
+    '#FFBE7D',
+    '#59A14F',
+    '#8CD17D',
+    '#B6992D',
+    '#F1CE63',
+    '#499894',
+    '#86BCB6',
+  ],
+  npg: [
+    '#E64B35',
+    '#4DBBD5',
+    '#00A087',
+    '#3C5488',
+    '#F39B7F',
+    '#8491B4',
+    '#91D1C2',
+    '#DC0000',
+    '#7E6148',
+    '#B09C85',
+  ],
+  lancet: [
+    '#00468B',
+    '#ED0000',
+    '#42B540',
+    '#0099B4',
+    '#925E9F',
+    '#FDAF91',
+    '#AD002A',
+    '#ADB6B6',
+    '#1B1919',
+  ],
+  jco: [
+    '#0073C2',
+    '#EFC000',
+    '#868686',
+    '#CD534C',
+    '#7AA6DC',
+    '#003C67',
+    '#8F7700',
+    '#3B3B3B',
+    '#A73030',
+    '#4A6990',
+  ],
+  okabe_ito: [
+    '#0072B2',
+    '#E69F00',
+    '#009E73',
+    '#D55E00',
+    '#CC79A7',
+    '#56B4E9',
+    '#F0E442',
+    '#000000',
+  ],
+  clinical: [
+    '#4E79A7',
+    '#E15759',
+    '#59A14F',
+    '#B07AA1',
+    '#F28E2B',
+    '#76B7B2',
+    '#EDC948',
+    '#9C755F',
+  ],
+  jama: [
+    '#374E55',
+    '#DF8F44',
+    '#00A1D5',
+    '#B24745',
+    '#79AF97',
+    '#6A6599',
+    '#80796B',
+  ],
+  nejm: [
+    '#BC3C29',
+    '#0072B5',
+    '#E18727',
+    '#20854E',
+    '#7876B1',
+    '#6F99AD',
+    '#FFDC91',
+    '#EE4C97',
+  ],
+  tableau10: [
+    '#4E79A7',
+    '#F28E2B',
+    '#59A14F',
+    '#E15759',
+    '#76B7B2',
+    '#EDC948',
+    '#B07AA1',
+    '#FF9DA7',
+    '#9C755F',
+    '#BAB0AC',
+  ],
+};
+
+const inferPalettePreview = (prop: SchemaPropertyWithKey) => {
+  if (prop.palettePreview) return prop.palettePreview;
+  if (prop.key === 'celltype_palette') return 'celltype';
+  if (prop.key === 'group_palette') return 'group';
+  return '';
+};
+
+const hasPalettePreview = (prop: SchemaPropertyWithKey) =>
+  Boolean(inferPalettePreview(prop));
+
+const getPalettePreviewColors = (value: unknown) => {
+  if (typeof value !== 'string') return [];
+  return palettePreviewColors[value] || [];
+};
+
 // 确定渲染的组件类型
 const getWidgetType = (prop: SchemaPropertyWithKey): string => {
   if (prop.widget) return prop.widget;
@@ -323,9 +468,36 @@ const handleSubmit = () => {
                     :key="opt"
                     :value="opt"
                   >
-                    {{ opt }}
+                    <div
+                      v-if="hasPalettePreview(prop)"
+                      class="palette-select-option"
+                    >
+                      <span class="palette-option-label">{{ opt }}</span>
+                      <span class="palette-swatch-row">
+                        <span
+                          v-for="(color, index) in getPalettePreviewColors(opt)"
+                          :key="`${opt}-${index}`"
+                          class="palette-swatch"
+                          :style="{ backgroundColor: color }"
+                        ></span>
+                      </span>
+                    </div>
+                    <template v-else>{{ opt }}</template>
                   </Select.Option>
                 </Select>
+                <div
+                  v-if="hasPalettePreview(prop)"
+                  class="palette-selected-preview"
+                >
+                  <span
+                    v-for="(color, index) in getPalettePreviewColors(
+                      (modelValue[prop.key] as string) ?? prop.default,
+                    )"
+                    :key="`${prop.key}-selected-${index}`"
+                    class="palette-selected-swatch"
+                    :style="{ backgroundColor: color }"
+                  ></span>
+                </div>
               </template>
 
               <!-- 多选下拉（metadata_value_select 运行时转为 multi-select） -->
@@ -675,6 +847,59 @@ const handleSubmit = () => {
 .select-input {
   flex: 1;
   min-width: 200px;
+}
+
+.palette-select-option {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 220px;
+}
+
+.palette-option-label {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.palette-swatch-row {
+  display: inline-flex;
+  flex: 1;
+  gap: 2px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 86px;
+  max-width: 132px;
+}
+
+.palette-swatch {
+  width: 10px;
+  height: 18px;
+  border: 1px solid rgb(15 23 42 / 10%);
+  border-radius: 2px;
+}
+
+.palette-selected-preview {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  width: 100%;
+  max-width: 260px;
+  height: 20px;
+  padding: 2px;
+  margin-top: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.palette-selected-swatch {
+  flex: 1;
+  height: 100%;
+  min-width: 6px;
+  border: 1px solid rgb(15 23 42 / 8%);
+  border-radius: 2px;
 }
 
 .pair-select-control {

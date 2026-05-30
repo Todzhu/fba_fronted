@@ -18,6 +18,16 @@ interface Props {
   noUploadImg?: boolean;
 }
 
+type UploadImgCallBackParam =
+  | string[]
+  | Array<{
+      alt: string;
+      title: string;
+      url: string;
+    }>;
+
+type UploadImgCallBack = (urls: UploadImgCallBackParam) => void;
+
 const props = withDefaults(defineProps<Props>(), {
   height: 'auto',
   id: '',
@@ -35,6 +45,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   mounted: [];
+  uploadImg: [files: File[], callback: UploadImgCallBack];
 }>();
 
 const { isDark } = usePreferences();
@@ -59,6 +70,10 @@ const editorStyle = computed(() => {
 function onMounted() {
   emit('mounted');
 }
+
+function onUploadImg(files: File[], callback: UploadImgCallBack) {
+  emit('uploadImg', files, callback);
+}
 </script>
 
 <template>
@@ -77,5 +92,6 @@ function onMounted() {
     no-katex
     no-highlight
     @on-mounted="onMounted"
+    @on-upload-img="onUploadImg"
   />
 </template>

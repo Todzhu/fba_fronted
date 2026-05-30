@@ -71,6 +71,7 @@ const loading = ref(false);
 const saving = ref(false);
 const uploadingCover = ref(false);
 const uploadingAttachment = ref(false);
+const uploadingInlineImage = ref(false);
 let articleLoadToken = 0;
 
 const formModel = reactive<ArticleFormModel>({
@@ -186,6 +187,36 @@ async function handleAttachmentUpload(file: File) {
     uploadingAttachment.value = false;
   }
   return false;
+}
+
+async function handleInlineImageUpload(
+  files: File[],
+  callback: (urls: Array<{ alt: string; title: string; url: string }>) => void,
+) {
+  if (!files.length) return;
+  uploadingInlineImage.value = true;
+  try {
+    const uploadedImages = await Promise.all(
+      files.map(async (file) => {
+        if (!file.type.startsWith('image/')) {
+          throw new Error('只能上传图片文件');
+        }
+        const url = await uploadFile(file);
+        return {
+          alt: file.name,
+          title: file.name,
+          url,
+        };
+      }),
+    );
+    callback(uploadedImages);
+    message.success('图片已插入正文');
+  } catch (error) {
+    console.error('Inline image upload failed:', error);
+    message.error('正文图片上传失败');
+  } finally {
+    uploadingInlineImage.value = false;
+  }
 }
 
 function removeAttachment(url: string) {
@@ -327,7 +358,12 @@ async function handleSave() {
           v-model:value="formModel.content_markdown"
           :height="360"
           mode="wysiwyg"
+          :no-upload-img="false"
+          @upload-img="handleInlineImageUpload"
         />
+        <div v-if="uploadingInlineImage" class="mt-2 text-xs text-slate-500">
+          正在上传正文图片...
+        </div>
       </Form.Item>
     </Form>
 

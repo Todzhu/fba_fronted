@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { message } from 'ant-design-vue';
-import { ArrowRight, Lock, User, X } from 'lucide-vue-next';
+import { ArrowRight, Lock, Mail, ShieldCheck, User, X } from 'lucide-vue-next';
 
 import { useAuthStore } from '#/store';
 
@@ -19,12 +19,17 @@ const emit = defineEmits(['close']);
 const router = useRouter();
 const authStore = useAuthStore();
 const isLogin = ref(true); // true: Login, false: Register
+const countdown = ref(0);
+const captchaSending = ref(false);
+let countdownTimer: null | ReturnType<typeof setInterval> = null;
 
 // 表单数据
 const formData = ref({
   username: '',
   password: '',
   nickname: '',
+  confirmPassword: '',
+  captcha: '',
 });
 
 // 加载状态
@@ -33,9 +38,64 @@ const loading = ref(false);
 // 错误信息
 const errorMsg = ref('');
 
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      isLogin.value = true;
+      errorMsg.value = '';
+    }
+  },
+);
+
+const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const startCountdown = () => {
+  countdown.value = 60;
+  countdownTimer = setInterval(() => {
+    countdown.value -= 1;
+    if (countdown.value <= 0 && countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  }, 1000);
+};
+
 const handleClose = () => {
   emit('close');
   errorMsg.value = '';
+};
+
+const switchMode = (nextIsLogin: boolean) => {
+  isLogin.value = nextIsLogin;
+  errorMsg.value = '';
+};
+
+const handleSendRegisterCaptcha = async () => {
+  if (captchaSending.value || countdown.value > 0) {
+    return;
+  }
+
+  const registerEmail = formData.value.username.trim();
+  if (!isEmail(registerEmail)) {
+    errorMsg.value = '请输入有效邮箱后再获取验证码';
+    return;
+  }
+
+  captchaSending.value = true;
+  errorMsg.value = '';
+  try {
+    await authStore.sendRegisterEmailCaptcha(
+      registerEmail,
+      formData.value.nickname.trim() || registerEmail,
+    );
+    message.success('验证码已发送，请查收邮箱');
+    startCountdown();
+  } catch (error: any) {
+    errorMsg.value = error?.message || '验证码发送失败，请稍后重试';
+  } finally {
+    captchaSending.value = false;
+  }
 };
 
 // 登录处理
@@ -55,7 +115,7 @@ const handleSubmit = async () => {
         {
           username: formData.value.username,
           password: formData.value.password,
-          uuid: '', // 简化版无验证码
+          uuid: '',
           captcha: '',
         },
         () => {
@@ -77,10 +137,56 @@ const handleSubmit = async () => {
       loading.value = false;
     }
   } else {
-    // 注册模式 - 暂时提示功能未开放
-    message.info('注册功能即将开放，敬请期待！');
+    const registerEmail = formData.value.username.trim();
+    if (!formData.value.nickname.trim()) {
+      errorMsg.value = '请输入昵称';
+      return;
+    }
+    if (!isEmail(registerEmail)) {
+      errorMsg.value = '请输入有效邮箱';
+      return;
+    }
+    if (!formData.value.password) {
+      errorMsg.value = '请输入密码';
+      return;
+    }
+    if (formData.value.password !== formData.value.confirmPassword) {
+      errorMsg.value = '两次输入的密码不一致';
+      return;
+    }
+    if (!formData.value.captcha.trim()) {
+      errorMsg.value = '请输入邮箱验证码';
+      return;
+    }
+
+    loading.value = true;
+    try {
+      await authStore.authRegister({
+        nickname: formData.value.nickname.trim(),
+        email: registerEmail,
+        password: formData.value.password,
+        confirm_password: formData.value.confirmPassword,
+        captcha: formData.value.captcha.trim(),
+      });
+      message.success('注册成功，请登录');
+      isLogin.value = true;
+      formData.value.password = '';
+      formData.value.confirmPassword = '';
+      formData.value.captcha = '';
+    } catch (error: any) {
+      errorMsg.value = error?.message || '注册失败，请稍后重试';
+    } finally {
+      loading.value = false;
+    }
   }
 };
+
+onUnmounted(() => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+});
 </script>
 
 <template>
@@ -97,7 +203,7 @@ const handleSubmit = async () => {
 
       <!-- Modal Content -->
       <div
-        class="auth-modal-card relative w-full max-w-[460px] overflow-hidden bg-white transition-all"
+        class="auth-modal-card relative max-h-[calc(100vh-32px)] w-full max-w-[460px] overflow-hidden bg-white transition-all"
         @click.stop
       >
         <div class="auth-modal-glow"></div>
@@ -111,7 +217,9 @@ const handleSubmit = async () => {
           <X class="h-4 w-4" />
         </button>
 
-        <div class="relative p-7 sm:p-9">
+        <div
+          class="relative max-h-[calc(100vh-32px)] overflow-y-auto p-7 sm:p-9"
+        >
           <!-- Header -->
           <div class="mb-7 text-center">
             <h2 class="text-[28px] font-bold leading-tight text-slate-950">
@@ -137,7 +245,7 @@ const handleSubmit = async () => {
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               "
-              @click="isLogin = true"
+              @click="switchMode(true)"
             >
               登录
             </button>
@@ -148,7 +256,7 @@ const handleSubmit = async () => {
                   ? 'bg-white text-slate-950 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               "
-              @click="isLogin = false"
+              @click="switchMode(false)"
             >
               注册
             </button>
@@ -182,21 +290,58 @@ const handleSubmit = async () => {
 
             <div>
               <label class="mb-2 block text-sm font-semibold text-slate-700">
-                {{ isLogin ? '用户名' : '账号' }}
+                {{ isLogin ? '用户名' : '邮箱' }}
               </label>
               <div class="auth-input-wrap">
                 <div
                   class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
                 >
-                  <User class="h-4 w-4" />
+                  <component :is="isLogin ? User : Mail" class="h-4 w-4" />
                 </div>
                 <input
                   v-model="formData.username"
-                  type="text"
+                  :type="isLogin ? 'text' : 'email'"
                   autocomplete="off"
                   class="auth-input"
-                  :placeholder="isLogin ? '输入用户名或邮箱' : '输入邮箱作为登录账号'"
+                  :placeholder="
+                    isLogin ? '输入用户名或邮箱' : '输入邮箱作为登录账号'
+                  "
                 />
+              </div>
+            </div>
+
+            <div v-if="!isLogin">
+              <label class="mb-2 block text-sm font-semibold text-slate-700">
+                邮箱验证码
+              </label>
+              <div class="auth-input-wrap">
+                <div
+                  class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                >
+                  <ShieldCheck class="h-4 w-4" />
+                </div>
+                <input
+                  v-model="formData.captcha"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  class="auth-input auth-input-with-action"
+                  placeholder="输入邮箱验证码"
+                />
+                <button
+                  type="button"
+                  class="auth-send-code"
+                  :disabled="
+                    captchaSending ||
+                    countdown > 0 ||
+                    !isEmail(formData.username.trim())
+                  "
+                  @click="handleSendRegisterCaptcha"
+                >
+                  <span v-if="captchaSending">发送中</span>
+                  <span v-else-if="countdown > 0">{{ countdown }}秒后重发</span>
+                  <span v-else>获取验证码</span>
+                </button>
               </div>
             </div>
 
@@ -216,6 +361,26 @@ const handleSubmit = async () => {
                   autocomplete="new-password"
                   class="auth-input"
                   placeholder="输入密码"
+                />
+              </div>
+            </div>
+
+            <div v-if="!isLogin">
+              <label class="mb-2 block text-sm font-semibold text-slate-700">
+                确认密码
+              </label>
+              <div class="auth-input-wrap">
+                <div
+                  class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                >
+                  <Lock class="h-4 w-4" />
+                </div>
+                <input
+                  v-model="formData.confirmPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  class="auth-input"
+                  placeholder="再次输入密码"
                 />
               </div>
             </div>
@@ -256,7 +421,7 @@ const handleSubmit = async () => {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                   />
                 </svg>
-                登录中...
+                {{ isLogin ? '登录中...' : '注册中...' }}
               </span>
               <template v-else>
                 {{ isLogin ? '立即登录' : '创建账户' }}
@@ -364,6 +529,46 @@ const handleSubmit = async () => {
   box-shadow:
     0 0 0 4px rgb(6 182 212 / 12%),
     0 12px 26px rgb(15 23 42 / 6%);
+}
+
+.auth-input-with-action {
+  padding-right: 128px;
+}
+
+.auth-send-code {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 108px;
+  min-height: 34px;
+  padding: 0 10px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgb(37 99 235);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgb(239 246 255);
+  border: 1px solid rgb(191 219 254);
+  border-radius: 11px;
+  transform: translateY(-50%);
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.auth-send-code:hover:not(:disabled) {
+  color: rgb(29 78 216);
+  background: rgb(219 234 254);
+  border-color: rgb(147 197 253);
+}
+
+.auth-send-code:disabled {
+  cursor: not-allowed;
+  color: rgb(148 163 184);
+  background: rgb(241 245 249);
+  border-color: rgb(226 232 240);
 }
 
 @media (max-width: 480px) {

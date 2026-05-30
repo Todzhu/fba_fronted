@@ -110,6 +110,7 @@ interface ParamItem {
   group: string; // 分组，默认 "通用参数"
   format?: string;
   depends_on?: string; // 联动依赖的参数 key
+  palettePreview?: string; // 调色板预览类型，用于云工具前台色块展示
 }
 const paramItems = ref<ParamItem[]>([]);
 
@@ -244,6 +245,7 @@ watch(
           group: p.group || '通用参数',
           format: p.format,
           depends_on: p.depends_on,
+          palettePreview: p.palettePreview,
         };
       });
     } else {
@@ -499,6 +501,7 @@ const handleSave = async () => {
     if (p.minimum !== undefined) prop.minimum = p.minimum;
     if (p.maximum !== undefined) prop.maximum = p.maximum;
     if (p.depends_on) prop.depends_on = p.depends_on;
+    if (p.palettePreview) prop.palettePreview = p.palettePreview;
     properties[p.key] = prop;
     order.push(p.key); // 按顺序添加 key
   }

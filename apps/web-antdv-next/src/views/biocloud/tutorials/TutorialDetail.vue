@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import type { TutorialArticleDetail } from '#/api/tutorials';
+import type {
+  TutorialArticleDetail,
+  TutorialArticleListItem,
+} from '#/api/tutorials';
 
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import {
   ArrowLeft,
-  CalendarDays,
   Download,
   Eye,
   FileQuestion,
@@ -15,7 +17,11 @@ import {
   Tag,
 } from 'lucide-vue-next';
 
-import { getTutorialArticle, increaseTutorialView } from '#/api/tutorials';
+import {
+  getTutorialArticle,
+  getTutorialArticles,
+  increaseTutorialView,
+} from '#/api/tutorials';
 
 import { extractHeadings, markdownToTutorialHtml } from './markdown';
 
@@ -23,6 +29,7 @@ const route = useRoute();
 const router = useRouter();
 
 const article = ref<null | TutorialArticleDetail>(null);
+const recentArticles = ref<TutorialArticleListItem[]>([]);
 const loading = ref(false);
 const errorMessage = ref('');
 
@@ -35,6 +42,22 @@ const articleHtml = computed(() =>
     ? markdownToTutorialHtml(article.value.content_markdown || '')
     : '',
 );
+const readingMinutes = computed(() => {
+  const textLength = article.value?.content_markdown?.replace(/\s+/g, '').length ?? 0;
+  return Math.max(5, Math.ceil(textLength / 900));
+});
+const recentByYear = computed(() => {
+  const groups = new Map<string, TutorialArticleListItem[]>();
+  for (const item of recentArticles.value) {
+    const dateValue = item.published_at || item.created_time || '';
+    const date = new Date(dateValue);
+    const year = Number.isNaN(date.getTime())
+      ? '最近'
+      : String(date.getFullYear());
+    groups.set(year, [...(groups.get(year) ?? []), item]);
+  }
+  return [...groups.entries()].map(([year, items]) => ({ items, year }));
+});
 
 function formatDate(value?: null | string) {
   if (!value) return '未发布';
@@ -42,8 +65,6 @@ function formatDate(value?: null | string) {
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('zh-CN', {
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
     month: '2-digit',
     year: 'numeric',
   });
@@ -87,11 +108,29 @@ async function loadArticle() {
   }
 }
 
+async function loadRecentArticles() {
+  try {
+    const result = await getTutorialArticles({ page: 1, size: 8 });
+    recentArticles.value = result.items ?? [];
+  } catch (error) {
+    console.error('获取最近教程失败:', error);
+    recentArticles.value = [];
+  }
+}
+
 function goBack() {
   router.push('/tutorials');
 }
 
-onMounted(loadArticle);
+function goToArticle(nextSlug: string) {
+  if (nextSlug === slug.value) return;
+  router.push(`/tutorials/${nextSlug}`);
+}
+
+onMounted(() => {
+  loadArticle();
+  loadRecentArticles();
+});
 
 watch(slug, () => {
   loadArticle();
@@ -99,50 +138,19 @@ watch(slug, () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-50 pb-16">
-    <div class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div
-        class="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] sm:flex-row sm:items-center sm:justify-between sm:px-6"
-      >
-        <div class="flex items-center gap-4">
-          <button
-            class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-            type="button"
-            @click="goBack"
-          >
-            <ArrowLeft class="h-5 w-5" />
-          </button>
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wide text-cyan-700">
-              Tutorial
-            </p>
-            <h1 class="mt-1 text-lg font-bold tracking-tight text-slate-900">
-              教程详情
-            </h1>
-          </div>
-        </div>
-        <button
-          class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-          type="button"
-          @click="goBack"
-        >
-          返回列表
-        </button>
-      </div>
-    </div>
-
-    <main class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-white pb-20 text-[#171b21]">
+    <main class="mx-auto max-w-[1760px] px-5 pt-10 sm:px-8 lg:px-12">
       <div
         v-if="loading"
-        class="flex flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white py-24"
+        class="flex min-h-[50vh] flex-col items-center justify-center py-24"
       >
-        <Loader2 class="mb-3 h-10 w-10 animate-spin text-cyan-600" />
+        <Loader2 class="mb-3 h-10 w-10 animate-spin text-emerald-700" />
         <span class="text-sm text-slate-500">加载教程内容中...</span>
       </div>
 
       <div
         v-else-if="errorMessage || !article"
-        class="rounded-2xl border border-slate-200 bg-white px-6 py-16 text-center"
+        class="mx-auto max-w-xl px-6 py-24 text-center"
       >
         <FileQuestion class="mx-auto mb-3 h-10 w-10 text-slate-300" />
         <h2 class="text-base font-semibold text-slate-900">
@@ -157,35 +165,87 @@ watch(slug, () => {
         </button>
       </div>
 
-      <div v-else class="grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <article class="min-w-0 rounded-2xl border border-slate-200 bg-white">
-          <header class="border-b border-slate-200 px-5 py-6 sm:px-8">
-            <h2 class="text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
-              {{ article.title }}
+      <div
+        v-else
+        class="grid items-start gap-10 xl:grid-cols-[300px_minmax(0,860px)_260px] 2xl:grid-cols-[340px_minmax(0,900px)_300px]"
+      >
+        <aside class="hidden xl:block">
+          <div class="sticky top-24 pr-8">
+            <h2 class="text-lg font-black tracking-normal text-slate-950">
+              最近文章
             </h2>
+            <div class="mt-10 space-y-10">
+              <section
+                v-for="group in recentByYear"
+                :key="group.year"
+                class="space-y-5"
+              >
+                <h3 class="text-lg font-black text-slate-950">
+                  {{ group.year }}
+                </h3>
+                <button
+                  v-for="item in group.items"
+                  :key="item.id"
+                  class="block w-full text-left text-sm leading-6 transition-colors hover:text-emerald-700"
+                  :class="
+                    item.slug === slug
+                      ? 'font-semibold text-emerald-700'
+                      : 'font-medium text-slate-800'
+                  "
+                  type="button"
+                  @click="goToArticle(item.slug)"
+                >
+                  {{ item.title }}
+                </button>
+              </section>
+            </div>
+          </div>
+        </aside>
+
+        <article class="min-w-0">
+          <button
+            class="mb-8 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition-colors hover:text-slate-950"
+            type="button"
+            @click="goBack"
+          >
+            <ArrowLeft class="h-4 w-4" />
+            返回教程列表
+          </button>
+
+          <header>
+            <h1
+              class="article-title text-[clamp(1.55rem,2.45vw,2.35rem)] font-black leading-[1.18] tracking-normal text-emerald-700"
+            >
+              {{ article.title }}
+            </h1>
+
+            <div
+              class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-slate-950"
+            >
+              <span>
+                {{ formatDate(article.published_at || article.created_time) }}
+              </span>
+              <span class="text-slate-300">|</span>
+              <span>阅读需 {{ readingMinutes }} 分钟</span>
+              <span class="text-slate-300">|</span>
+              <span class="inline-flex items-center gap-1.5 text-slate-500">
+                <Eye class="h-3.5 w-3.5" />
+                {{ article.view_count ?? 0 }}
+              </span>
+            </div>
+
             <p
               v-if="article.summary"
-              class="mt-4 max-w-3xl text-sm leading-6 text-slate-600"
+              class="mt-4 text-sm leading-[1.7] text-slate-950"
             >
               {{ article.summary }}
             </p>
-
-            <div class="mt-5 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-              <span class="inline-flex items-center gap-1.5">
-                <CalendarDays class="h-3.5 w-3.5" />
-                {{ formatDate(article.published_at || article.created_time) }}
-              </span>
-              <span class="inline-flex items-center gap-1.5">
-                <Eye class="h-3.5 w-3.5" />
-                {{ article.view_count ?? 0 }} 次浏览
-              </span>
-            </div>
 
             <div v-if="article.tags?.length" class="mt-5 flex flex-wrap gap-2">
               <span
                 v-for="tag in article.tags"
                 :key="tag"
-                class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
+                class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"
               >
                 <Tag class="h-3 w-3" />
                 {{ tag }}
@@ -195,7 +255,7 @@ watch(slug, () => {
 
           <section
             v-if="article.attachment_urls?.length"
-            class="border-b border-slate-200 bg-slate-50/60 px-5 py-4 sm:px-8"
+            class="mt-8 border-y border-slate-200 py-4"
           >
             <div class="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-800">
               <Paperclip class="h-4 w-4 text-cyan-700" />
@@ -206,7 +266,7 @@ watch(slug, () => {
                 v-for="url in article.attachment_urls"
                 :key="url"
                 :href="url"
-                class="inline-flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-cyan-200 hover:text-cyan-700"
+                class="inline-flex max-w-full items-center gap-2 border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-cyan-200 hover:text-cyan-700"
                 rel="noopener noreferrer"
                 target="_blank"
               >
@@ -216,29 +276,29 @@ watch(slug, () => {
             </div>
           </section>
 
-          <section class="px-5 py-7 sm:px-8">
+          <section class="pt-12">
             <div class="tutorial-markdown" v-html="articleHtml"></div>
           </section>
         </article>
 
         <aside class="hidden lg:block">
-          <div class="sticky top-24 rounded-2xl border border-slate-200 bg-white p-5">
-            <h3 class="text-sm font-bold text-slate-900">目录</h3>
-            <nav v-if="headings.length" class="mt-4 space-y-1">
+          <div class="sticky top-24 border-l border-slate-200 pl-7">
+            <nav v-if="headings.length" class="space-y-5">
               <a
                 v-for="heading in headings"
                 :key="heading.id"
                 :class="[
-                  'block rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50 hover:text-cyan-700',
-                  heading.depth === 2 ? 'ml-3' : '',
-                  heading.depth === 3 ? 'ml-6 text-xs' : '',
+                  'block text-sm font-medium leading-6 text-slate-500 transition-colors hover:text-emerald-700',
+                  heading.depth === 1 ? 'text-slate-700' : '',
+                  heading.depth === 2 ? 'pl-0' : '',
+                  heading.depth === 3 ? 'pl-4 text-xs' : '',
                 ]"
                 :href="`#${heading.id}`"
               >
                 {{ heading.text }}
               </a>
             </nav>
-            <p v-else class="mt-4 text-sm text-slate-400">暂无目录</p>
+            <p v-else class="text-sm text-slate-400">暂无目录</p>
           </div>
         </aside>
       </div>
@@ -248,63 +308,109 @@ watch(slug, () => {
 
 <style scoped>
 .tutorial-markdown {
-  color: rgb(51 65 85);
-  font-size: 15px;
-  line-height: 1.85;
+  color: rgb(15 23 42);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Microsoft YaHei', sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.72;
+}
+
+.article-title {
+  color: rgb(4 120 87);
 }
 
 .tutorial-markdown :deep(h1),
 .tutorial-markdown :deep(h2),
 .tutorial-markdown :deep(h3) {
-  color: rgb(15 23 42);
-  font-weight: 800;
+  color: rgb(23 27 33);
+  font-weight: 900;
   letter-spacing: 0;
   scroll-margin-top: 96px;
 }
 
 .tutorial-markdown :deep(h1) {
-  font-size: 1.75rem;
-  line-height: 1.25;
+  font-size: 1.45rem;
+  line-height: 1.18;
   margin: 0 0 1rem;
 }
 
 .tutorial-markdown :deep(h2) {
-  border-top: 1px solid rgb(226 232 240);
-  font-size: 1.35rem;
-  line-height: 1.35;
-  margin: 2rem 0 0.85rem;
-  padding-top: 1.35rem;
+  font-size: 1.18rem;
+  line-height: 1.22;
+  margin: 2.2rem 0 0.8rem;
 }
 
 .tutorial-markdown :deep(h3) {
-  font-size: 1.08rem;
+  font-size: 1rem;
   line-height: 1.4;
-  margin: 1.5rem 0 0.7rem;
+  margin: 1.5rem 0 0.55rem;
 }
 
 .tutorial-markdown :deep(p) {
-  margin: 0 0 1rem;
+  margin: 0 0 0.9rem;
+}
+
+.tutorial-markdown :deep(strong) {
+  color: rgb(23 27 33);
+  font-weight: 900;
+}
+
+.tutorial-markdown :deep(ul),
+.tutorial-markdown :deep(ol) {
+  margin: 0 0 1.25rem 1.35rem;
+  padding: 0;
+}
+
+.tutorial-markdown :deep(ul) {
+  list-style: disc;
+}
+
+.tutorial-markdown :deep(ol) {
+  list-style: decimal;
+}
+
+.tutorial-markdown :deep(li) {
+  margin: 0.32rem 0;
+  padding-left: 0.25rem;
 }
 
 .tutorial-markdown :deep(a) {
-  color: rgb(14 116 144);
+  color: rgb(4 120 87);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
+.tutorial-markdown :deep(hr) {
+  border: 0;
+  border-top: 1px solid rgb(221 214 254);
+  margin: 1.8rem 0;
+}
+
+.tutorial-markdown :deep(figure) {
+  margin: 1.4rem 0 1.6rem;
+}
+
+.tutorial-markdown :deep(img) {
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgb(15 23 42 / 12%);
+  display: block;
+  height: auto;
+  margin: 0 auto;
+  max-width: 100%;
+}
+
 .tutorial-markdown :deep(pre) {
-  background: rgb(15 23 42);
-  border-radius: 12px;
+  background: rgb(17 24 39);
   color: rgb(226 232 240);
-  margin: 1.25rem 0;
+  margin: 1.35rem 0;
   overflow-x: auto;
-  padding: 1rem;
+  padding: 1rem 1.1rem;
 }
 
 .tutorial-markdown :deep(code) {
   background: rgb(241 245 249);
-  border-radius: 6px;
   color: rgb(15 23 42);
   font-family:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
@@ -315,10 +421,69 @@ watch(slug, () => {
 
 .tutorial-markdown :deep(pre code) {
   background: transparent;
-  border-radius: 0;
   color: inherit;
   display: block;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   padding: 0;
+}
+
+.tutorial-markdown :deep(table) {
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  margin: 1.5rem 0 1.75rem;
+  width: 100%;
+}
+
+.tutorial-markdown :deep(th),
+.tutorial-markdown :deep(td) {
+  border: 1px solid rgb(214 219 226);
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tutorial-markdown :deep(th) {
+  background: rgb(248 250 252);
+  color: rgb(15 23 42);
+  font-weight: 900;
+  text-align: center;
+}
+
+.tutorial-markdown :deep(tr:nth-child(even) td) {
+  background: rgb(248 250 252);
+}
+
+.tutorial-markdown :deep(.callout) {
+  border-left: 4px solid rgb(16 185 129);
+  background: rgb(240 253 244);
+  margin: 1.5rem 0;
+  padding: 0.9rem 1rem 0.1rem;
+}
+
+.tutorial-markdown :deep(.callout h2),
+.tutorial-markdown :deep(.callout h3) {
+  font-size: 0.95rem;
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .tutorial-markdown {
+    font-size: 0.86rem;
+  }
+
+  .tutorial-markdown :deep(h1) {
+    font-size: 1.25rem;
+  }
+
+  .tutorial-markdown :deep(h2) {
+    font-size: 1.08rem;
+  }
+
+  .tutorial-markdown :deep(table) {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }
 </style>

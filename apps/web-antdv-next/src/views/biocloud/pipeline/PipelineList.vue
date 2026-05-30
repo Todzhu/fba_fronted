@@ -19,7 +19,7 @@ import {
 
 import AuthModal from '../landing/components/AuthModal.vue';
 import { PIPELINE_TYPES } from './constants';
-import { STEP_LABELS, STEP_ORDER } from './types/pipeline';
+import { PIPELINE_STEP_ORDERS, STEP_LABELS } from './types/pipeline';
 
 const router = useRouter();
 const accessStore = useAccessStore();
@@ -31,6 +31,10 @@ const authRedirectPath = ref('/pipeline/create?type=scrna');
 const selectedPipelineType = ref<null | (typeof PIPELINE_TYPES)[number]>(null);
 
 const pipelineTypes = PIPELINE_TYPES;
+const selectedStepOrder = computed(() => {
+  const id = selectedPipelineType.value?.id || 'scrna';
+  return PIPELINE_STEP_ORDERS[id] ?? PIPELINE_STEP_ORDERS.scrna;
+});
 
 const handleTypeClick = (type: (typeof PIPELINE_TYPES)[number]) => {
   selectedPipelineType.value = type;
@@ -78,57 +82,80 @@ watch(isLoggedIn, (loggedIn) => {
 
     <!-- 流程类型卡片 -->
     <div class="mx-auto mt-8 max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         <div
           v-for="type in pipelineTypes"
           :key="type.id"
-          class="group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg"
-          :class="{ 'opacity-75': !type.available }"
+          class="group cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_10px_28px_-22px_rgba(15,23,42,0.45)] transition-all duration-300 ease-out hover:-translate-y-1 hover:scale-[1.025] hover:border-slate-300 hover:shadow-[0_24px_54px_-28px_rgba(15,23,42,0.5)]"
           @click="handleTypeClick(type)"
         >
-          <div
-            class="relative flex h-36 items-center justify-center overflow-hidden"
-            :style="{
-              background: `linear-gradient(135deg, ${type.gradientFrom}, ${type.gradientTo})`,
-            }"
-          >
-            <div class="relative z-10 text-center">
-              <div class="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm transition-transform group-hover:scale-110">
-                <component :is="type.icon" class="h-8 w-8 text-white" />
-              </div>
-              <p class="text-sm font-medium text-white/80">
-                {{ type.subtitle }}
-              </p>
-            </div>
+          <div class="relative h-40 overflow-hidden bg-slate-100 sm:h-44 lg:h-48">
+            <img
+              :src="type.previewImage"
+              :alt="type.title"
+              class="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+            />
+            <div class="absolute inset-0 ring-1 ring-inset ring-slate-900/5"></div>
             <div
               v-if="!type.available"
-              class="absolute right-4 top-4 rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm"
+              class="absolute right-4 top-4 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur"
             >
               即将上线
             </div>
           </div>
 
-          <div class="p-5">
-            <h3 class="mb-2 text-lg font-bold text-slate-900">
-              {{ type.title }}
-            </h3>
-            <p class="mb-4 line-clamp-2 text-sm leading-relaxed text-slate-500">
+          <div class="flex min-h-[152px] flex-col p-3.5">
+            <div class="mb-2 flex items-start justify-between gap-3">
+              <div>
+                <p class="mb-1 text-xs font-medium text-slate-400">
+                  {{ type.subtitle }}
+                </p>
+                <h3 class="text-base font-bold text-slate-900">
+                  {{ type.title }}
+                </h3>
+              </div>
+              <div
+                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                :style="{
+                  backgroundColor: `${type.gradientFrom}12`,
+                  color: type.gradientFrom,
+                }"
+              >
+                <component :is="type.icon" class="h-4 w-4" />
+              </div>
+            </div>
+            <p class="mb-2.5 line-clamp-2 text-[13px] leading-5 text-slate-500">
               {{ type.description }}
             </p>
-            <div class="mb-4 flex flex-wrap gap-2">
+            <div class="mb-3 flex flex-wrap gap-1.5">
               <span
                 v-for="tag in type.tags"
                 :key="tag"
-                class="rounded-md px-2 py-0.5 text-xs font-medium"
+                class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors group-hover:bg-white"
                 :style="{
-                  backgroundColor: `${type.gradientFrom}12`,
+                  backgroundColor: `${type.gradientFrom}0D`,
+                  borderColor: `${type.gradientFrom}24`,
                   color: type.gradientFrom,
                 }"
               >
                 {{ tag }}
               </span>
             </div>
-            <div class="flex items-center justify-between">
+            <div class="mt-auto flex items-center justify-between border-t border-slate-100 pt-2.5">
+              <span
+                class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold shadow-[0_1px_2px_rgba(15,23,42,0.05)]"
+                :style="{
+                  backgroundColor: `${type.gradientFrom}10`,
+                  borderColor: `${type.gradientFrom}26`,
+                  color: type.gradientFrom,
+                }"
+              >
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :style="{ backgroundColor: type.gradientFrom }"
+                ></span>
+                {{ type.category === 'spatial' ? 'Spatial' : 'Single Cell' }}
+              </span>
               <span
                 v-if="type.available"
                 class="inline-flex items-center gap-1 text-sm font-medium transition-colors"
@@ -256,7 +283,7 @@ watch(isLoggedIn, (loggedIn) => {
               <h3 class="mb-3 text-base font-bold text-slate-800">分析步骤</h3>
               <div class="space-y-2">
                 <div
-                  v-for="(step, idx) in STEP_ORDER"
+                  v-for="(step, idx) in selectedStepOrder"
                   :key="step"
                   class="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3"
                 >

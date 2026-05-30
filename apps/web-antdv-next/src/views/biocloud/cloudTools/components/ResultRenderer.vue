@@ -7,7 +7,7 @@
  */
 import type { EchartsUIType } from '@vben/plugins/echarts';
 
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { onUnmounted, ref, watch } from 'vue';
 
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
 import { useAccessStore } from '@vben/stores';
@@ -29,7 +29,7 @@ import { getTaskFileUrl } from '#/api/analysis-tools';
 interface OutputItem {
   key: string;
   path: string;
-  type: 'download' | 'echarts' | 'image' | 'pdf' | 'table';
+  type: 'download' | 'echarts' | 'file' | 'html' | 'image' | 'pdf' | 'table';
   title?: string;
 }
 
@@ -67,30 +67,46 @@ const buildFileUrl = (filePath: string): string => {
 const hasHtmlReport = ref(false);
 const htmlReportUrl = ref('');
 
+const getAuthHeaders = (): HeadersInit => {
+  const token = useAccessStore().accessToken;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const setHtmlReportBlob = async (response: Response) => {
+  const blob = await response.blob();
+  if (htmlReportUrl.value) {
+    URL.revokeObjectURL(htmlReportUrl.value);
+  }
+  htmlReportUrl.value = URL.createObjectURL(blob);
+  hasHtmlReport.value = true;
+};
+
+const tryLoadHtmlReport = async (path = 'report.html') => {
+  const url = buildFileUrl(path);
+  if (!url) return false;
+
+  try {
+    const response = await fetch(url, { headers: getAuthHeaders() });
+    if (!response.ok) return false;
+    await setHtmlReportBlob(response);
+    return true;
+  } catch (error) {
+    console.error(`加载 HTML 报告失败: ${path}`, error);
+    return false;
+  }
+};
+
 // 获取结果数据
 const fetchOutputData = async () => {
   if ((!props.taskId && !props.outputDir)) return;
 
   loading.value = true;
+  hasHtmlReport.value = false;
+  fetchErrors.value = {};
   try {
-    // 检查是否存在 HTML 报告
-    if (props.taskId) {
-      try {
-        const { requestClient } = await import('#/api/request');
-        const files = await requestClient.get(`/api/v1/sys/analysis-tools/tasks/${props.taskId}/result-files`);
-        if (files.some((f: any) => f.name === 'report.html' || f.name.endsWith('/report.html'))) {
-          hasHtmlReport.value = true;
-          const headers: HeadersInit = {};
-          const token = useAccessStore().accessToken;
-          if (token) headers.Authorization = `Bearer ${token}`;
-          
-          const blob = await fetch(buildFileUrl('report.html'), { headers }).then(r => r.blob());
-          htmlReportUrl.value = URL.createObjectURL(blob);
-          return; // 存在报告直接返回，不渲染图表
-        }
-      } catch (e) {
-        console.error('获取结果文件列表失败:', e);
-      }
+    // 很多单细胞工具会生成 report.html，直接尝试读取，避免递归扫描结果目录。
+    if (await tryLoadHtmlReport('report.html')) {
+      return;
     }
 
     if (!props.config?.outputs) return;
@@ -99,16 +115,7 @@ const fetchOutputData = async () => {
       const url = buildFileUrl(output.path);
       if (!url) continue;
 
-      // 使用 store 获取 Token
-      const accessStore = useAccessStore();
-      const token = accessStore.accessToken;
-
-      const headers: HeadersInit = {};
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
-      const response = await fetch(url, { headers });
+      const response = await fetch(url, { headers: getAuthHeaders() });
 
       if (!response.ok) {
         console.error(
@@ -129,6 +136,11 @@ const fetchOutputData = async () => {
           outputData.value[output.key] = await response.json();
 
           break;
+        }
+        case 'html': {
+          await setHtmlReportBlob(response);
+
+          return;
         }
         case 'image': {
           const blob = await response.blob();
@@ -221,12 +233,6 @@ watch(activeKey, (key) => {
   }
 });
 
-onMounted(() => {
-  if (props.taskId || props.outputDir) {
-    fetchOutputData();
-  }
-});
-
 onUnmounted(() => {
   if (htmlReportUrl.value) URL.revokeObjectURL(htmlReportUrl.value);
   Object.values(imageBlobUrls.value).forEach(URL.revokeObjectURL);
@@ -288,7 +294,11 @@ onUnmounted(() => {
 
             <!-- Download -->
             <div
-              v-else-if="output.type === 'download'"
+              v-else-if="
+                output.type === 'download' ||
+                output.type === 'file' ||
+                output.type === 'pdf'
+              "
               class="download-container"
             >
               <Space direction="vertical" align="center">

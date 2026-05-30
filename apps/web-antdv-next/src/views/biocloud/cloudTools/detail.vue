@@ -9,6 +9,7 @@ import type { EchartsUIType } from '@vben/plugins/echarts';
 import type {
   AnalysisTool,
   TaskInputFileRestoreInfo,
+  TaskResultFile,
   TaskStatusResponse,
 } from '#/api/analysis-tools';
 
@@ -34,10 +35,15 @@ import {
 import {
   executeAnalysisTool,
   getAnalysisTool,
+  getTaskFileUrl,
   getTaskInputData,
+  getTaskResultFiles,
   getTaskStatus,
+  replaceRunAnalysisTask,
   rerunAnalysisTask,
+  saveTaskResultFile,
 } from '#/api/analysis-tools';
+import { getUserFolderTree } from '#/api/my-data';
 
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
@@ -498,6 +504,140 @@ const taskId = ref<string>('');
 const rerunTaskId = ref<number | null>(null);
 const outputDir = ref<string>('');
 const isRerunMode = computed(() => rerunTaskId.value !== null);
+const sessionTaskId = ref<number | null>(null);
+const isHistoricalTaskView = computed(() => Boolean(route.query.task_id));
+const shouldReplaceCurrentShortTask = computed(
+  () =>
+    !tool.value?.is_long_running &&
+    !isRerunMode.value &&
+    !isHistoricalTaskView.value &&
+    sessionTaskId.value !== null,
+);
+
+interface ConverterSummary {
+  input_file_name?: string;
+  output_file_name?: string;
+  conversion_direction?: string;
+  source_extension?: string;
+  target_extension?: string;
+  n_cells?: number;
+  n_features?: number;
+  assays?: string[];
+  reductions?: string[];
+  retained_content?: string[];
+  output_file_size?: number;
+  warnings?: string[];
+}
+
+interface ConverterFolderNode {
+  children?: ConverterFolderNode[];
+  key: string;
+  title: string;
+}
+
+interface ConverterFolderOption {
+  depth: number;
+  id: null | number;
+  name: string;
+}
+
+const converterResultFiles = ref<TaskResultFile[]>([]);
+const converterSummary = ref<ConverterSummary | null>(null);
+const converterSaveModalOpen = ref(false);
+const converterSaving = ref(false);
+const converterFolderPickerOpen = ref(false);
+const converterFoldersLoading = ref(false);
+const converterFolderTree = ref<ConverterFolderNode[]>([]);
+const converterSaveFileName = ref('');
+const converterSaveTargetFolderId = ref<null | number>(null);
+const converterSaveTargetFolderName = ref('根目录');
+
+const isRdsH5adConverter = computed(() => {
+  const scriptPath = tool.value?.script_path || '';
+  return scriptPath.includes('rds_h5ad_converter');
+});
+
+const converterMainFile = computed(() =>
+  converterResultFiles.value.find((file) =>
+    /_conver\.(h5ad|rds)$/i.test(file.name),
+  ),
+);
+
+const converterFolderOptions = computed<ConverterFolderOption[]>(() => {
+  const options: ConverterFolderOption[] = [
+    { depth: 0, id: null, name: '根目录（我的数据）' },
+  ];
+  const walk = (nodes: ConverterFolderNode[], depth: number) => {
+    for (const node of nodes) {
+      const id = Number(node.key);
+      if (Number.isFinite(id)) {
+        options.push({ depth, id, name: node.title });
+      }
+      if (node.children?.length) {
+        walk(node.children, depth + 1);
+      }
+    }
+  };
+  walk(converterFolderTree.value, 1);
+  return options;
+});
+
+const formatFileSize = (size?: number) => {
+  if (!size || size <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = size;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+};
+
+const resetConverterResultState = () => {
+  converterResultFiles.value = [];
+  converterSummary.value = null;
+  converterSaveModalOpen.value = false;
+  converterFolderPickerOpen.value = false;
+  converterSaveFileName.value = '';
+  converterSaveTargetFolderId.value = null;
+  converterSaveTargetFolderName.value = '根目录';
+};
+
+const fetchConverterSummary = async (currentTaskId: string) => {
+  try {
+    const accessStore = useAccessStore();
+    const response = await fetch(
+      getTaskFileUrl(Number(currentTaskId), '.conversion_summary.json'),
+      {
+        headers: {
+          Authorization: accessStore.accessToken
+            ? `Bearer ${accessStore.accessToken}`
+            : '',
+        },
+      },
+    );
+    if (!response.ok) {
+      converterSummary.value = null;
+      return;
+    }
+    converterSummary.value = (await response.json()) as ConverterSummary;
+  } catch {
+    converterSummary.value = null;
+  }
+};
+
+const fetchConverterResultDetails = async (currentTaskId = taskId.value) => {
+  if (!currentTaskId || !isRdsH5adConverter.value) return;
+  const files = await getTaskResultFiles(Number(currentTaskId));
+  converterResultFiles.value = files.filter(
+    (file) =>
+      file.name !== 'task.log' &&
+      file.name !== '.conversion_summary.json' &&
+      /_conver\.(h5ad|rds)$/i.test(file.name),
+  );
+  await fetchConverterSummary(currentTaskId);
+};
 
 // ========== 组件引用 ==========
 const dataFileSelectorRef = ref<InstanceType<typeof DataFileSelector>>();
@@ -539,6 +679,8 @@ const fetchTool = async () => {
 
 // 提交分析
 const submitAnalysis = async () => {
+  if (analyzing.value) return;
+
   // 验证必填文件
   const inputSchema = tool.value?.input_schema as null | {
     files?: Array<{ key: string; label?: string; required?: boolean }>;
@@ -591,9 +733,16 @@ const submitAnalysis = async () => {
 
   analyzing.value = true;
   showGuide.value = false;
+  hasResult.value = false;
+  outputDir.value = '';
   taskFailed.value = false;
   errorMessage.value = '';
-  message.loading('正在提交分析任务...', 0);
+  resetConverterResultState();
+  const replacingCurrentShortTask = shouldReplaceCurrentShortTask.value;
+  message.loading(
+    replacingCurrentShortTask ? '正在更新当前结果...' : '正在提交分析任务...',
+    0,
+  );
 
   try {
     // 获取表格数据内容
@@ -615,9 +764,18 @@ const submitAnalysis = async () => {
 
     const response = isRerunMode.value
       ? await rerunAnalysisTask(rerunTaskId.value!, requestData)
-      : await executeAnalysisTool(toolId.value, requestData);
+      : replacingCurrentShortTask
+        ? await replaceRunAnalysisTask(sessionTaskId.value!, requestData)
+        : await executeAnalysisTool(toolId.value, requestData);
 
     taskId.value = String(response.task_id);
+    if (
+      !response.is_long_running &&
+      !isRerunMode.value &&
+      !isHistoricalTaskView.value
+    ) {
+      sessionTaskId.value = response.task_id;
+    }
     message.destroy();
 
     // 长时间任务：跳转到任务中心
@@ -659,19 +817,28 @@ const submitAnalysis = async () => {
       outputDir.value = finalStatus.output_dir || '';
       hasResult.value = true;
       rerunTaskId.value = null;
-      message.success('分析完成！');
+      if (isRdsH5adConverter.value) {
+        await fetchConverterResultDetails(String(finalStatus.id));
+      }
+      message.success(replacingCurrentShortTask ? '结果已更新' : '分析完成！');
 
       // 回退兼容：如果没有 output_config，使用硬编码图表
-      if (!tool.value?.output_config) {
+      if (!tool.value?.output_config && !isRdsH5adConverter.value) {
         setTimeout(() => renderLegacyChart(), 100);
       }
     } else {
+      hasResult.value = false;
+      outputDir.value = '';
       taskFailed.value = true;
       errorMessage.value = finalStatus.error_message || '分析失败，请重试';
       message.error(finalStatus.error_message || '分析失败，请重试');
     }
   } catch (error: any) {
     message.destroy();
+    hasResult.value = false;
+    outputDir.value = '';
+    taskFailed.value = true;
+    errorMessage.value = error?.message || '分析失败，请重试';
     message.error(error?.message || '分析失败，请重试');
     console.error(error);
   } finally {
@@ -695,7 +862,11 @@ const renderLegacyChart = () => {
 watch(
   formParams,
   () => {
-    if (hasResult.value && !tool.value?.output_config) {
+    if (
+      hasResult.value &&
+      !tool.value?.output_config &&
+      !isRdsH5adConverter.value
+    ) {
       renderLegacyChart();
     }
   },
@@ -728,9 +899,94 @@ const previewResult = () => {
   // 切换到结果视图，显示空状态提示（引导用户操作）
   showGuide.value = false;
 };
+
+const downloadConverterMainFile = async () => {
+  if (!taskId.value || !converterMainFile.value) {
+    return message.warning('暂无可下载的转换结果');
+  }
+  const accessStore = useAccessStore();
+  const response = await fetch(
+    getTaskFileUrl(Number(taskId.value), converterMainFile.value.name),
+    {
+      headers: {
+        Authorization: accessStore.accessToken
+          ? `Bearer ${accessStore.accessToken}`
+          : '',
+      },
+    },
+  );
+  if (!response.ok) {
+    return message.error('下载失败，请重试');
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download =
+    converterMainFile.value.name.split('/').pop() ||
+    converterMainFile.value.name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return message.success('下载开始');
+};
+
+const selectConverterSaveFolder = (id: null | number, name: string) => {
+  converterSaveTargetFolderId.value = id;
+  converterSaveTargetFolderName.value = name;
+  converterFolderPickerOpen.value = false;
+};
+
+const openConverterSaveModal = async () => {
+  if (!converterMainFile.value) {
+    return message.warning('暂无可保存的转换结果');
+  }
+  converterSaveFileName.value =
+    converterMainFile.value.name.split('/').pop() || converterMainFile.value.name;
+  converterSaveTargetFolderId.value = null;
+  converterSaveTargetFolderName.value = '根目录';
+  converterSaveModalOpen.value = true;
+  converterFoldersLoading.value = true;
+  try {
+    const tree = (await getUserFolderTree()) as unknown as ConverterFolderNode[];
+    const root = tree[0];
+    converterFolderTree.value =
+      root?.key === 'root' ? (root.children ?? []) : tree;
+  } catch {
+    converterFolderTree.value = [];
+  } finally {
+    converterFoldersLoading.value = false;
+  }
+};
+
+const confirmConverterSave = async () => {
+  if (!taskId.value || !converterMainFile.value) return;
+  converterSaving.value = true;
+  try {
+    const saved = await saveTaskResultFile(Number(taskId.value), {
+      file_path: converterMainFile.value.name,
+      folder_id: converterSaveTargetFolderId.value,
+      filename: converterSaveFileName.value,
+    });
+    converterSaveModalOpen.value = false;
+    message.success(
+      `已保存到「${converterSaveTargetFolderName.value}」: ${saved.name}`,
+    );
+  } catch (error: any) {
+    message.error(`保存失败: ${error?.message || '未知错误'}`);
+  } finally {
+    converterSaving.value = false;
+  }
+};
+
 const downloadResult = async () => {
   if (!hasResult.value || !taskId.value) {
     return message.warning('请先提交分析');
+  }
+
+  if (isRdsH5adConverter.value) {
+    return downloadConverterMainFile();
   }
 
   // 获取 output_config 中的输出文件配置
@@ -849,8 +1105,16 @@ const handleExportParams = () => {
   message.success('参数导出成功');
 };
 
-// 从 URL 参数加载已完成任务的结果
-const restoreTaskInputData = async (taskIdFromUrl: number) => {
+type RestoreTaskInputDataOptions = {
+  restoreFiles?: boolean;
+};
+
+// 从 URL 参数加载历史任务输入；查看结果时可跳过文件恢复，避免重新解析大型 RDS/H5AD。
+const restoreTaskInputData = async (
+  taskIdFromUrl: number,
+  options: RestoreTaskInputDataOptions = {},
+) => {
+  const { restoreFiles = true } = options;
   const inputData = await getTaskInputData(taskIdFromUrl);
   if (inputData.input_params) {
     formParams.value = inputData.input_params as Record<string, unknown>;
@@ -862,6 +1126,10 @@ const restoreTaskInputData = async (taskIdFromUrl: number) => {
       Object.keys(inputData.file_contents).length > 0
     ) {
       dataFileSelectorRef.value?.setFileContents(inputData.file_contents);
+    }
+
+    if (!restoreFiles) {
+      return;
     }
 
     const fileUrls: Record<string, string> = {};
@@ -894,17 +1162,21 @@ const restoreTaskInputData = async (taskIdFromUrl: number) => {
 const loadTaskResult = async (taskIdFromUrl: number) => {
   try {
     const status = await getTaskStatus(taskIdFromUrl);
+    sessionTaskId.value = null;
     if (status.status === 'completed') {
       taskId.value = String(taskIdFromUrl);
       outputDir.value = status.output_dir || '';
       hasResult.value = true;
       showGuide.value = false;
+      activeTab.value = 'params';
 
-      // 加载任务输入数据（CSV 内容和参数）
-      try {
-        await restoreTaskInputData(taskIdFromUrl);
-      } catch (error) {
-        console.error('加载任务输入数据失败:', error);
+      // 查看历史结果直接使用任务状态中的参数快照，避免请求 input-data 导致大文件任务超时。
+      if (status.input_params) {
+        formParams.value = status.input_params as Record<string, unknown>;
+      }
+
+      if (isRdsH5adConverter.value) {
+        await fetchConverterResultDetails(String(status.id));
       }
 
       message.success('已加载任务结果');
@@ -921,6 +1193,7 @@ const loadTaskResult = async (taskIdFromUrl: number) => {
 const loadTaskForRerun = async (taskIdFromUrl: number) => {
   try {
     const status = await getTaskStatus(taskIdFromUrl);
+    sessionTaskId.value = null;
     if (status.status !== 'failed') {
       message.warning('只有失败任务可以调整参数并重跑');
       return;
@@ -1096,6 +1369,95 @@ onMounted(async () => {
               </div>
             </div>
 
+            <div
+              v-else-if="hasResult && isRdsH5adConverter"
+              class="converter-result"
+            >
+              <div v-if="converterMainFile" class="converter-file-card">
+                <div class="converter-file-main">
+                  <Icon icon="mdi:file-swap" class="converter-file-icon" />
+                  <div>
+                    <div class="converter-file-name">
+                      {{ converterMainFile.name }}
+                    </div>
+                    <div class="converter-file-size">
+                      {{ formatFileSize(converterMainFile.size) }}
+                    </div>
+                  </div>
+                </div>
+                <Space>
+                  <Button type="primary" @click="downloadConverterMainFile">
+                    <Icon icon="mdi:download" /> 下载
+                  </Button>
+                  <Button @click="openConverterSaveModal">
+                    <Icon icon="mdi:content-save-outline" />
+                    保存到我的数据
+                  </Button>
+                </Space>
+              </div>
+
+              <div v-else class="converter-empty">
+                <Icon icon="mdi:file-search-outline" />
+                <span>暂无可用的转换主文件</span>
+              </div>
+
+              <div v-if="converterSummary" class="converter-summary">
+                <h3>转换详情</h3>
+                <div class="converter-summary-grid">
+                  <div>
+                    <span>输入文件</span>
+                    <strong>{{ converterSummary.input_file_name }}</strong>
+                  </div>
+                  <div>
+                    <span>输出文件</span>
+                    <strong>{{ converterSummary.output_file_name }}</strong>
+                  </div>
+                  <div>
+                    <span>转换方向</span>
+                    <strong>{{ converterSummary.conversion_direction }}</strong>
+                  </div>
+                  <div>
+                    <span>细胞数</span>
+                    <strong>{{ converterSummary.n_cells ?? '-' }}</strong>
+                  </div>
+                  <div>
+                    <span>基因数</span>
+                    <strong>{{ converterSummary.n_features ?? '-' }}</strong>
+                  </div>
+                  <div>
+                    <span>输出大小</span>
+                    <strong>
+                      {{ formatFileSize(converterSummary.output_file_size) }}
+                    </strong>
+                  </div>
+                </div>
+                <div v-if="converterSummary.assays?.length" class="converter-tags">
+                  <span v-for="item in converterSummary.assays" :key="item">
+                    {{ item }}
+                  </span>
+                </div>
+                <div
+                  v-if="converterSummary.reductions?.length"
+                  class="converter-tags"
+                >
+                  <span v-for="item in converterSummary.reductions" :key="item">
+                    {{ item }}
+                  </span>
+                </div>
+                <ul
+                  v-if="converterSummary.warnings?.length"
+                  class="converter-warnings"
+                >
+                  <li
+                    v-for="warning in converterSummary.warnings"
+                    :key="warning"
+                  >
+                    {{ warning }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
             <!-- 动态结果渲染 -->
             <ResultRenderer
               v-else-if="hasResult && hasOutputConfig"
@@ -1189,11 +1551,74 @@ onMounted(async () => {
                     @submit="submitAnalysis"
                   />
                   <div v-else class="empty-schema">
+                    <Icon
+                      icon="mdi:tune-variant-off"
+                      class="empty-param-icon"
+                    />
                     <p>此工具暂无可配置参数</p>
+                    <p class="empty-param-hint">
+                      选择数据文件后可直接提交任务
+                    </p>
+                    <div class="empty-param-actions">
+                      <Button
+                        type="primary"
+                        :loading="analyzing"
+                        @click="submitAnalysis"
+                      >
+                        <Icon icon="mdi:play-circle-outline" />
+                        {{ analyzing ? '提交中...' : '提交任务' }}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </TabPane>
             </Tabs>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-if="converterSaveModalOpen"
+        class="converter-save-overlay"
+        @click.self="converterSaveModalOpen = false"
+      >
+        <div class="converter-save-modal">
+          <h3>保存到我的数据</h3>
+          <label>文件名</label>
+          <input v-model="converterSaveFileName" class="converter-save-input" />
+          <label>保存位置</label>
+          <button
+            class="converter-folder-button"
+            @click="converterFolderPickerOpen = !converterFolderPickerOpen"
+          >
+            <Icon icon="mdi:folder-outline" />
+            <span>{{ converterSaveTargetFolderName }}</span>
+            <Icon icon="mdi:chevron-down" />
+          </button>
+          <div v-if="converterFolderPickerOpen" class="converter-folder-list">
+            <div v-if="converterFoldersLoading" class="converter-folder-loading">
+              加载中...
+            </div>
+            <template v-else>
+              <button
+                v-for="folder in converterFolderOptions"
+                :key="folder.id ?? 'root'"
+                :style="{ paddingLeft: `${10 + folder.depth * 18}px` }"
+                @click="selectConverterSaveFolder(folder.id, folder.name)"
+              >
+                {{ folder.name }}
+              </button>
+            </template>
+          </div>
+          <div class="converter-save-actions">
+            <Button @click="converterSaveModalOpen = false">取消</Button>
+            <Button
+              type="primary"
+              :disabled="converterSaving || !converterSaveFileName.trim()"
+              @click="confirmConverterSave"
+            >
+              {{ converterSaving ? '保存中...' : '确认保存' }}
+            </Button>
           </div>
         </div>
       </div>
@@ -1472,6 +1897,214 @@ onMounted(async () => {
 .chart-container {
   width: 100%;
   height: 100%;
+}
+
+.converter-result {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.converter-file-card,
+.converter-summary,
+.converter-empty,
+.converter-save-modal {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.converter-file-card {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.converter-file-main {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.converter-file-icon {
+  flex: 0 0 auto;
+  font-size: 28px;
+  color: #2563eb;
+}
+
+.converter-file-name {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.converter-file-size {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.converter-empty {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 16px;
+  color: #64748b;
+}
+
+.converter-empty .iconify {
+  font-size: 22px;
+}
+
+.converter-summary {
+  padding: 16px;
+}
+
+.converter-summary h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.converter-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.converter-summary-grid div {
+  min-width: 0;
+}
+
+.converter-summary-grid span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.converter-summary-grid strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.converter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.converter-tags span {
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-radius: 6px;
+}
+
+.converter-warnings {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: #92400e;
+}
+
+.converter-save-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(15 23 42 / 45%);
+}
+
+.converter-save-modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  box-shadow: 0 20px 45px rgb(15 23 42 / 20%);
+}
+
+.converter-save-modal h3 {
+  margin: 0 0 16px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.converter-save-modal label {
+  display: block;
+  margin: 12px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.converter-save-input,
+.converter-folder-button {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.converter-save-input {
+  padding: 8px 10px;
+}
+
+.converter-folder-button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  text-align: left;
+  background: #fff;
+}
+
+.converter-folder-button span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.converter-folder-list {
+  max-height: 190px;
+  margin-top: 6px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.converter-folder-list button,
+.converter-folder-loading {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  text-align: left;
+  background: #fff;
+  border: 0;
+}
+
+.converter-folder-list button:hover {
+  background: #eff6ff;
+}
+
+.converter-save-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 .guide-content {
@@ -1772,6 +2405,22 @@ onMounted(async () => {
   background: #f8fafc;
   border: 1px dashed #e2e8f0;
   border-radius: 12px;
+}
+
+.empty-param-icon {
+  margin-bottom: 8px;
+  font-size: 28px;
+  color: #64748b;
+}
+
+.empty-param-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.empty-param-actions {
+  margin-top: 18px;
 }
 
 /* 错误状态样式 */

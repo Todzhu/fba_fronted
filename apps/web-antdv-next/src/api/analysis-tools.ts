@@ -261,6 +261,26 @@ export interface TaskStatusResponse {
   completed_at: null | string;
 }
 
+export interface TaskResultFile {
+  name: string;
+  size: number;
+  type: 'binary' | 'image' | 'pdf' | 'table';
+}
+
+export interface SaveTaskResultFileRequest {
+  file_path: string;
+  folder_id?: null | number;
+  filename?: null | string;
+}
+
+export interface SaveTaskResultFileResponse {
+  file_id: number;
+  name: string;
+  size: number;
+  storage_path: null | string;
+  mime_type: null | string;
+}
+
 export interface TaskInputFileRestoreInfo {
   path: string;
   kind: 'example_url' | 'platform_file' | 'unknown';
@@ -309,6 +329,19 @@ export async function rerunAnalysisTask(
 }
 
 /**
+ * 覆盖当前短任务并重新运行
+ */
+export async function replaceRunAnalysisTask(
+  taskId: number,
+  data: ExecuteToolRequest,
+) {
+  return requestClient.post<ExecuteToolResponse>(
+    `/api/v1/sys/analysis-tools/tasks/${taskId}/replace-run`,
+    data,
+  );
+}
+
+/**
  * 查询任务列表
  */
 export async function getTaskList(params?: TaskListParams) {
@@ -332,6 +365,23 @@ export async function getTaskStatus(taskId: number) {
  */
 export function getTaskFileUrl(taskId: number, filePath: string) {
   return `/api/v1/sys/analysis-tools/tasks/${taskId}/files/${filePath}`;
+}
+
+export async function getTaskResultFiles(taskId: number) {
+  return requestClient.get<TaskResultFile[]>(
+    `/api/v1/sys/analysis-tools/tasks/${taskId}/result-files`,
+  );
+}
+
+export async function saveTaskResultFile(
+  taskId: number,
+  data: SaveTaskResultFileRequest,
+) {
+  return requestClient.post<SaveTaskResultFileResponse>(
+    `/api/v1/sys/analysis-tools/tasks/${taskId}/save-result-file`,
+    data,
+    { timeout: 3 * 60 * 1000 },
+  );
 }
 
 /**
@@ -392,6 +442,8 @@ export interface InspectFileResponse {
   summary: ColumnSummary[];
 }
 
+const FILE_INSPECT_TIMEOUT = 3 * 60 * 1000;
+
 /**
  * 解析文件元数据（.rds/.h5ad）
  */
@@ -402,5 +454,6 @@ export async function inspectFile(params: {
   return requestClient.post<InspectFileResponse>(
     '/api/v1/sys/analysis-tools/inspect-file',
     params,
+    { timeout: FILE_INSPECT_TIMEOUT },
   );
 }

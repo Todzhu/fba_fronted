@@ -19,6 +19,24 @@ export interface LoginResult {
   session_uuid: string;
 }
 
+export interface RegisterEmailCaptchaParams {
+  email: string;
+  nickname?: string;
+}
+
+export interface RegisterParams {
+  nickname?: string;
+  email: string;
+  captcha: string;
+  password: string;
+  confirm_password: string;
+}
+
+export interface RegisterResult {
+  message: string;
+  email: string;
+}
+
 export type RefreshTokenResult = LoginResult;
 
 /**
@@ -33,6 +51,22 @@ export async function getCaptchaApi() {
  */
 export async function loginApi(data: LoginParams) {
   return requestClient.post<LoginResult>('/api/v1/auth/login', data);
+}
+
+/**
+ * 注册邮箱验证码
+ */
+export async function sendRegisterEmailCaptchaApi(
+  data: RegisterEmailCaptchaParams,
+) {
+  return requestClient.post('/api/v1/auth/register/email-captcha', data);
+}
+
+/**
+ * 注册
+ */
+export async function registerApi(data: RegisterParams) {
+  return requestClient.post<RegisterResult>('/api/v1/auth/register', data);
 }
 
 /**

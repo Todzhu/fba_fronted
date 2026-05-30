@@ -17,6 +17,8 @@ import {
   getUserInfoApi,
   loginApi,
   logoutApi,
+  registerApi,
+  sendRegisterEmailCaptchaApi,
 } from '#/api';
 import { $t } from '#/locales';
 import { useDictStore, useWebSocketStore } from '#/store';
@@ -28,6 +30,7 @@ export const useAuthStore = defineStore('auth', () => {
   const router = useRouter();
 
   const loginLoading = ref(false);
+  const registerLoading = ref(false);
 
   /**
    * 登陆验证码
@@ -77,8 +80,8 @@ export const useAuthStore = defineStore('auth', () => {
           onSuccess
             ? await onSuccess?.()
             : await router.push(
-              userInfo.homePath || preferences.app.defaultHomePath,
-            );
+                userInfo.homePath || preferences.app.defaultHomePath,
+              );
         }
 
         // 初始化WebSocket连接
@@ -102,6 +105,25 @@ export const useAuthStore = defineStore('auth', () => {
     return {
       userInfo,
     };
+  }
+
+  async function sendRegisterEmailCaptcha(email: string, nickname?: string) {
+    await sendRegisterEmailCaptchaApi({ email, nickname });
+  }
+
+  async function authRegister(params: Recordable<any>) {
+    try {
+      registerLoading.value = true;
+      return await registerApi({
+        nickname: params.nickname,
+        email: params.email,
+        captcha: params.captcha,
+        password: params.password,
+        confirm_password: params.confirm_password,
+      });
+    } finally {
+      registerLoading.value = false;
+    }
   }
 
   async function oauth2Login() {
@@ -144,15 +166,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   function $reset() {
     loginLoading.value = false;
+    registerLoading.value = false;
   }
 
   return {
     $reset,
+    authRegister,
     captcha,
     authLogin,
     oauth2Login,
     fetchUserInfo,
     loginLoading,
     logout,
+    registerLoading,
+    sendRegisterEmailCaptcha,
   };
 });

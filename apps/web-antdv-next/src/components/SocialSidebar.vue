@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 社交媒体侧边栏组件
- * - 主页(/index)：显示全部4个图标
+ * - 主页(/index)：显示全部3个图标
  * - 其他页面：仅显示微信图标 + "联系我" 标签
  */
 import { computed, ref } from 'vue';
@@ -55,12 +55,6 @@ const allSocialItems: SocialItem[] = [
     icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjE1JSIgZmlsbD0iI2ZmMDAwMCIvPjxwYXRoIGZpbGw9IiNmZmYiIGQ9Ik0yMTAgMTkwdjEzMmwxMTAtNjZ6Ii8+PC9zdmc+',
     type: 'link',
     url: 'https://youtube.com',
-  },
-  {
-    name: 'TikTok',
-    icon: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjE1JSIgZmlsbD0iIzAwMCIvPjxwYXRoIGZpbGw9IiMyNWYzZWUiIGQ9Ik0zMzEgMTY2YzI0IDE3IDUzIDI3IDg1IDI3di02OGMtNiAwLTEyLTEtMTgtMnYyNGMtMzIgMC02MS0xMC04NS0yN3YxMjRjMCA2Mi01MCAxMTItMTEyIDExMi0yMyAwLTQ0LTctNjItMTkgMjAgMjIgNDkgMzYgODEgMzYgNjIgMCAxMTItNTAgMTEyLTExMnoiLz48cGF0aCBmaWxsPSIjZmUyYzU1IiBkPSJNMzQ5IDE0MmMyMSAxNiA0NiAyNSA3NSAyNXYyYy0yOS0xLTU2LTEwLTc4LTI3djEyNGMwIDYyLTUwIDExMi0xMTIgMTEyLTM4IDAtNzItMTktOTItNDggMTggMTIgNDAgMjAgNjMgMjAgNjIgMCAxMTItNTAgMTEyLTExMnoiLz48cGF0aCBmaWxsPSIjZmZmIiBkPSJNMjg0IDI1N2MwLTYyIDUwLTExMiAxMTItMTEydjY4Yy0zMiAwLTYxLTEwLTg1LTI3djEyNGMwIDYyLTUwIDExMi0xMTIgMTEyLTYyIDAtMTEyLTUwLTExMi0xMTIgMC02MiA1MC0xMTIgMTEyLTExMiAxMCAwIDIwIDIgMjkgNHY3MGMtOS00LTIwLTYtMzAtNi0zNyAwLTY4IDMxLTY4IDY4czMxIDY4IDY4IDY4IDY4LTMxIDY4LTY4eiIvPjwvc3ZnPg==',
-    type: 'link',
-    url: 'https://tiktok.com',
   },
 ];
 

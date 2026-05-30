@@ -29,6 +29,7 @@ import {
 import { inspectFile } from '#/api/analysis-tools';
 
 import { baseRequestClient } from '#/api/request';
+import { getExampleDownloadFilename } from './DataFileSelector.helpers';
 import PlatformFileSelector from './PlatformFileSelector.vue';
 import SpreadsheetPreview from './SpreadsheetPreview.vue';
 
@@ -379,7 +380,7 @@ const downloadExample = async () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = example.name || 'example_data.csv';
+      link.download = getExampleDownloadFilename(example, response.headers);
       document.body.append(link);
       link.click();
       link.remove();
