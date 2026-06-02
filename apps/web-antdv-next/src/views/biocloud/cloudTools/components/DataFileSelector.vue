@@ -37,7 +37,7 @@ interface FileConfig {
   key: string;
   label?: string;
   required?: boolean;
-  extensions?: string[];
+  extensions?: string[] | string;
   description?: string;
 }
 
@@ -57,6 +57,7 @@ const props = defineProps<{
   exampleData?: ExampleDataConfig[] | null; // 后端配置的示例数据
   modelValue: Record<string, null | number>;
   schema: InputSchema | null;
+  trialExampleOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -64,6 +65,7 @@ const emit = defineEmits<{
   (e: 'nextStep'): void;
   (e: 'headersChange', headers: Record<string, string[]>): void;
   (e: 'metadataChange', metadata: Record<string, MetadataInfo>): void;
+  (e: 'restricted'): void;
 }>();
 
 // 文件配置列表 - 优先使用 example_data 生成 Tab，否则使用 input_schema.files
@@ -122,10 +124,19 @@ const MANAGED_BINARY_EXTENSIONS = new Set(['h5ad', 'rds']);
 const normalizeExtension = (extension: string): string =>
   extension.trim().replace(/^\./, '').toLowerCase();
 
+const normalizeExtensions = (extensions?: string[] | string): string[] => {
+  const values = Array.isArray(extensions)
+    ? extensions
+    : (extensions ?? '').split(',');
+  return values
+    .map((extension) => normalizeExtension(extension))
+    .filter(Boolean);
+};
+
 const requiresPlatformFileSelection = (config: FileConfig): boolean =>
-  config.extensions?.some((extension) =>
-    MANAGED_BINARY_EXTENSIONS.has(normalizeExtension(extension)),
-  ) ?? false;
+  normalizeExtensions(config.extensions).some((extension) =>
+    MANAGED_BINARY_EXTENSIONS.has(extension),
+  );
 
 // 判断是否为二进制文件
 const isBinaryFile = (filename: string): boolean => {
@@ -168,7 +179,7 @@ const isRoeInput = computed(() => {
 
 const footerHintText = computed(() => {
   if (isRoeInput.value) {
-    return 'ROE 分析使用单细胞 metadata 表作为输入：每行一个细胞，需包含细胞类型列和分组列；支持 CSV、TSV、TXT、XLS、XLSX，导入后请在参数页选择对应列名。';
+    return 'ROE 分析支持 Seurat RDS 和 AnnData H5AD 单细胞对象；选择文件后会自动读取 metadata，并在参数页选择细胞类型列和分组列。';
   }
 
   return '在线表格适合预览和少量编辑；较大的表格文件导入后可能会卡顿，建议先确认表头和关键列，再进入下一步。';
@@ -213,6 +224,21 @@ const metadataTablePagination = computed(() => ({
 watch([currentMetadataKey, () => currentMetadataSummary.value.length], () => {
   metadataPage.value = 1;
 });
+
+const METADATA_TYPE_LABELS: Record<string, string> = {
+  'categorical': '分类',
+  'numeric': '数值',
+  'other': '其他',
+};
+
+const formatMetadataTypeLabel = (type: string) =>
+  METADATA_TYPE_LABELS[type] || type;
+
+const getMetadataTypeClass = (type: string) => {
+  if (type === 'numeric') return 'is-numeric';
+  if (type === 'categorical') return 'is-categorical';
+  return 'is-other';
+};
 
 // 每个文件的表格数据和状态
 const fileDataMap = ref<
@@ -267,6 +293,8 @@ const DEFAULT_EXAMPLE: string[][] = [
   ['SLC4A10', '-1.98', '5.77E-10'],
 ];
 
+const shouldUseDefaultTabularExample = computed(() => !allBinaryMode.value);
+
 // 根据 key 获取对应的示例数据配置
 const getExampleByKey = (key: string): ExampleDataConfig | undefined => {
   return props.exampleData?.find((e) => e.key === key);
@@ -286,6 +314,11 @@ const loadAllExamples = async () => {
       }
       message.success('示例数据已加载');
     } else {
+      if (!shouldUseDefaultTabularExample.value) {
+        message.warning('请先配置 RDS/H5AD 示例数据文件');
+        return;
+      }
+
       // 没有配置时，只为第一个文件加载默认数据
       const firstKey = fileConfigs.value[0]?.key ?? 'data';
       fileDataMap.value[firstKey] = {
@@ -405,6 +438,11 @@ const downloadExample = async () => {
 
 // 导入文件（按指定 key）- 本地解析，提交时通过 file_contents 发送
 const handleImportForKey = async (key: string, file: File) => {
+  if (props.trialExampleOnly) {
+    emit('restricted');
+    return false;
+  }
+
   // 确保 fileDataMap[key] 存在
   if (!fileDataMap.value[key]) {
     fileDataMap.value[key] = {
@@ -586,6 +624,19 @@ const ensureFileData = (key: string) => {
   return fileDataMap.value[key]!;
 };
 
+const getAllowedExtensionsForKey = (key: string): string[] => {
+  const config = fileConfigs.value.find((file) => file.key === key);
+  return normalizeExtensions(config?.extensions);
+};
+
+const isAcceptedFileForKey = (key: string, fileName: string): boolean => {
+  const allowedExtensions = getAllowedExtensionsForKey(key);
+  if (allowedExtensions.length === 0) return true;
+
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  return allowedExtensions.includes(extension);
+};
+
 const setFileUrls = async (urls: Record<string, string>) => {
   for (const [key, fileUrl] of Object.entries(urls)) {
     if (!fileUrl) continue;
@@ -627,14 +678,37 @@ const platformSelectorOpen = ref(false);
 const currentSelectorKey = ref('');
 
 const openPlatformSelector = (key: string) => {
+  if (props.trialExampleOnly) {
+    emit('restricted');
+    return;
+  }
   currentSelectorKey.value = key;
   platformSelectorOpen.value = true;
 };
+
+const DEFAULT_PLATFORM_ACCEPT = '.rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5';
+
+const platformAccept = computed(() => {
+  const key = currentSelectorKey.value || fileConfigs.value[0]?.key || '';
+  const allowedExtensions = getAllowedExtensionsForKey(key);
+  if (allowedExtensions.length > 0) {
+    return allowedExtensions.map((extension) => `.${extension}`).join(',');
+  }
+  return allBinaryMode.value ? DEFAULT_PLATFORM_ACCEPT : undefined;
+});
 
 const handlePlatformFileSelect = async (file: any) => {
   if (!currentSelectorKey.value) return;
 
   const key = currentSelectorKey.value;
+  if (!isAcceptedFileForKey(key, file.name)) {
+    const allowedExtensions = getAllowedExtensionsForKey(key)
+      .map((extension) => `.${extension}`)
+      .join('、');
+    message.warning(`请选择 ${allowedExtensions} 格式文件`);
+    return;
+  }
+
   fileDataMap.value[key]!.fileName = file.name;
   fileDataMap.value[key]!.fileType = 'binary';
   fileDataMap.value[key]!.fileId = Number(file.id);
@@ -738,7 +812,13 @@ const fetchMetadata = async (
 // metadata 汇总表格列定义
 const metadataColumns = [
   { title: '列名', dataIndex: 'column', width: 140 },
-  { title: '类型', dataIndex: 'type', width: 80 },
+  {
+    title: '类型',
+    dataIndex: 'type',
+    width: 78,
+    align: 'center' as const,
+    className: 'metadata-type-cell',
+  },
   { title: '唯一值', dataIndex: 'unique', width: 70, align: 'center' as const },
   { title: '详情', dataIndex: 'detail' },
 ];
@@ -807,24 +887,25 @@ defineExpose({
         </div>
       </div>
 
-      <!-- 二进制文件状态卡片 -->
+      <!-- 二进制文件状态条 -->
       <div
-        class="binary-file-card"
-        :class="{ 'card-success': currentBinaryFileData?.fileName }"
+        class="selected-file-strip"
+        :class="{ 'is-selected': currentBinaryFileData?.fileName }"
       >
-        <Icon
-          :icon="
-            currentBinaryFileData?.fileName
-              ? 'mdi:check-circle'
-              : 'mdi:file-document-outline'
-          "
-          class="file-card-icon"
-        />
-        <div class="file-card-info">
-          <div class="file-card-name">
+        <span class="selected-file-icon">
+          <Icon
+            :icon="
+              currentBinaryFileData?.fileName
+                ? 'mdi:check'
+                : 'mdi:file-document-outline'
+            "
+          />
+        </span>
+        <div class="selected-file-main">
+          <div class="selected-file-name">
             {{ currentBinaryFileData?.fileName || '请选择数据文件' }}
           </div>
-          <div class="file-card-hint">
+          <div class="selected-file-hint">
             {{
               currentBinaryFileData?.fileName
                 ? '文件已选择，可以进行下一步'
@@ -832,6 +913,9 @@ defineExpose({
             }}
           </div>
         </div>
+        <span v-if="currentBinaryFileData?.fileName" class="selected-file-badge">
+          已选择
+        </span>
       </div>
 
       <!-- Metadata 汇总表格 -->
@@ -855,17 +939,15 @@ defineExpose({
           >
             <template #bodyCell="{ column: col, record }">
               <template v-if="col.dataIndex === 'type'">
-                <Tag
-                  :color="
-                    record.type === 'numeric'
-                      ? 'green'
-                      : record.type === 'categorical'
-                        ? 'blue'
-                        : 'orange'
-                  "
+                <span
+                  class="metadata-type-pill"
+                  :class="getMetadataTypeClass(record.type)"
                 >
-                  {{ record.type }}
-                </Tag>
+                  <span class="metadata-type-dot"></span>
+                  <span class="metadata-type-label">
+                    {{ formatMetadataTypeLabel(record.type) }}
+                  </span>
+                </span>
               </template>
               <template v-else-if="col.dataIndex === 'detail'">
                 <template v-if="record.type === 'numeric'">
@@ -957,49 +1039,53 @@ defineExpose({
       </div>
 
       <!-- 可编辑电子表格 / 二进制文件卡片 -->
-      <div class="spreadsheet-area">
-        <Spin :spinning="fileDataMap[activeTab]?.loading" tip="正在解析文件...">
-          <template v-for="config in fileConfigs" :key="config.key">
-            <!-- 二进制文件：卡片展示 -->
-            <div
-              v-if="
-                activeTab === config.key &&
-                fileDataMap[config.key]?.fileType === 'binary'
-              "
-              class="binary-file-card"
-            >
-              <Icon icon="mdi:file-document-outline" class="file-card-icon" />
-              <div class="file-card-info">
-                <div class="file-card-name">
-                  {{ fileDataMap[config.key]?.fileName }}
-                </div>
-                <div class="file-card-hint">
-                  该文件为特殊格式（如 RDS、H5AD），无法在线预览
-                </div>
-              </div>
-              <a
-                v-if="fileDataMap[config.key]?.fileUrl"
-                :href="fileDataMap[config.key]?.fileUrl"
-                download
+      <div class="table-preview-shell">
+        <div class="spreadsheet-area">
+          <Spin :spinning="fileDataMap[activeTab]?.loading" tip="正在解析文件...">
+            <template v-for="config in fileConfigs" :key="config.key">
+              <!-- 二进制文件：卡片展示 -->
+              <div
+                v-if="
+                  activeTab === config.key &&
+                  fileDataMap[config.key]?.fileType === 'binary'
+                "
+                class="binary-file-card"
               >
-                <Button type="primary">下载文件</Button>
-              </a>
-            </div>
+                <Icon icon="mdi:file-document-outline" class="file-card-icon" />
+                <div class="file-card-info">
+                  <div class="file-card-name">
+                    {{ fileDataMap[config.key]?.fileName }}
+                  </div>
+                  <div class="file-card-hint">
+                    该文件为特殊格式（如 RDS、H5AD），无法在线预览
+                  </div>
+                </div>
+                <a
+                  v-if="fileDataMap[config.key]?.fileUrl"
+                  :href="fileDataMap[config.key]?.fileUrl"
+                  download
+                >
+                  <Button type="primary">下载文件</Button>
+                </a>
+              </div>
 
-            <!-- 表格文件：电子表格 -->
-            <SpreadsheetPreview
-              v-else-if="activeTab === config.key"
-              :ref="
-                (el: any) => {
-                  if (el) spreadsheetRefs[config.key] = el;
-                }
-              "
-              :data="fileDataMap[config.key]?.data ?? []"
-              :show-toolbar="true"
-              @change="(data: string[][]) => handleDataChange(config.key, data)"
-            />
-          </template>
-        </Spin>
+              <!-- 表格文件：电子表格 -->
+              <SpreadsheetPreview
+                v-else-if="activeTab === config.key"
+                :ref="
+                  (el: any) => {
+                    if (el) spreadsheetRefs[config.key] = el;
+                  }
+                "
+                :data="fileDataMap[config.key]?.data ?? []"
+                :show-toolbar="true"
+                @change="
+                  (data: string[][]) => handleDataChange(config.key, data)
+                "
+              />
+            </template>
+          </Spin>
+        </div>
       </div>
     </template>
 
@@ -1016,11 +1102,7 @@ defineExpose({
     <!-- 平台文件选择器 -->
     <PlatformFileSelector
       v-model:open="platformSelectorOpen"
-      :accept="
-        allBinaryMode
-          ? '.rds,.rdata,.rda,.h5ad,.h5,.loom,.zarr,.hdf5'
-          : undefined
-      "
+      :accept="platformAccept"
       @select="handlePlatformFileSelect"
     />
   </div>
@@ -1107,19 +1189,38 @@ defineExpose({
   padding: 4px 16px; /* 减小上下内边距 */
 }
 
+/* 大表格预览需要明确边界，避免挤压底部操作区 */
+.table-preview-shell {
+  flex: 1 1 auto;
+  min-height: 320px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
 /* 电子表格区域 */
 .spreadsheet-area {
-  flex: 1;
-  min-height: 200px;
+  height: clamp(320px, 46vh, 520px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.spreadsheet-area :deep(.ant-spin-nested-loading),
+.spreadsheet-area :deep(.ant-spin-container) {
+  height: 100%;
 }
 
 /* 底部 */
 .footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   display: flex;
+  flex-shrink: 0;
   gap: 16px;
   align-items: flex-start;
   justify-content: space-between;
-  padding-top: 16px;
+  padding-top: 12px;
+  background: #ffffff;
   border-top: 1px dashed #e2e8f0;
 }
 
@@ -1173,6 +1274,79 @@ defineExpose({
   gap: 12px;
 }
 
+/* 二进制文件选择状态条 */
+.selected-file-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.selected-file-strip.is-selected {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.selected-file-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 18px;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+}
+
+.selected-file-strip.is-selected .selected-file-icon {
+  color: #047857;
+  background: #d1fae5;
+  border-color: #86efac;
+}
+
+.selected-file-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.selected-file-name {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-file-hint {
+  margin-top: 1px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.selected-file-strip.is-selected .selected-file-hint {
+  color: #047857;
+}
+
+.selected-file-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #047857;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+}
+
 /* 二进制文件卡片 */
 .binary-file-card {
   display: flex;
@@ -1184,25 +1358,6 @@ defineExpose({
   border: 1px dashed #cbd5e1;
   border-radius: 12px;
   transition: all 0.3s ease;
-}
-
-/* 成功状态：淡静雅致绿 */
-.binary-file-card.card-success {
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-}
-
-.binary-file-card.card-success .file-card-icon {
-  color: #10b981;
-}
-
-.binary-file-card.card-success .file-card-name {
-  color: #065f46;
-}
-
-.binary-file-card.card-success .file-card-hint {
-  color: #047857;
 }
 
 /* 表格区域内的卡片需要更大高度 */
@@ -1234,10 +1389,10 @@ defineExpose({
 
 /* ========== Metadata 汇总表格 ========== */
 .metadata-section {
-  margin-top: 20px;
+  margin-top: 14px;
   border: 1px solid #f1f5f9;
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.02),
     0 2px 4px -2px rgba(0, 0, 0, 0.02);
@@ -1248,7 +1403,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: 10px 14px;
   font-size: 13px;
   font-weight: 600;
   color: #475569;
@@ -1261,15 +1416,27 @@ defineExpose({
   background: #f8fafc !important;
   color: #64748b !important;
   font-weight: 500 !important;
-  padding: 10px 16px !important;
+  padding: 9px 14px !important;
   border-bottom: 1px solid #f1f5f9 !important;
 }
 
 /* Metadata 行极薄下边框与宽松留白 */
 .metadata-table :deep(.ant-table-tbody > tr > td) {
-  padding: 12px 16px !important;
+  padding: 10px 14px !important;
   border-bottom: 1px solid #f8fafc !important;
   color: #475569;
+}
+
+.metadata-table :deep(.metadata-type-cell) {
+  padding-right: 8px !important;
+  padding-left: 8px !important;
+  white-space: nowrap;
+}
+
+.metadata-table :deep(.ant-table-thead > tr > th.metadata-type-cell),
+.metadata-table :deep(.ant-table-tbody > tr > td.metadata-type-cell) {
+  padding-right: 8px !important;
+  padding-left: 8px !important;
 }
 
 .metadata-table :deep(.ant-pagination) {
@@ -1300,6 +1467,57 @@ defineExpose({
   color: #ea580c !important;
 }
 
+.metadata-type-pill {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 46px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  color: #475569;
+  white-space: nowrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.metadata-type-pill.is-categorical {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.metadata-type-pill.is-numeric {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+}
+
+.metadata-type-pill.is-other {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+.metadata-type-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 999px;
+}
+
+.metadata-type-label {
+  display: inline-block;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .detail-text {
   font-size: 12px;
   color: #64748b;
@@ -1308,7 +1526,7 @@ defineExpose({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 170px;
+  max-width: 220px;
 }
 
 .more-text {

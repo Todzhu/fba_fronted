@@ -10,7 +10,6 @@ import type {
   AnalysisTool,
   TaskInputFileRestoreInfo,
   TaskResultFile,
-  TaskStatusResponse,
 } from '#/api/analysis-tools';
 
 import { computed, onMounted, ref, toRaw, watch } from 'vue';
@@ -19,12 +18,13 @@ import { useRoute, useRouter } from 'vue-router';
 import { Page } from '@vben/common-ui';
 import { useTabs } from '@vben/hooks';
 import { EchartsUI, useEcharts } from '@vben/plugins/echarts';
-import { useAccessStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import { Icon } from '@iconify/vue';
 import {
   Button,
   message,
+  Modal,
   Space,
   Spin,
   TabPane,
@@ -48,10 +48,12 @@ import { getUserFolderTree } from '#/api/my-data';
 import DataFileSelector from './components/DataFileSelector.vue';
 import DynamicForm from './components/DynamicForm.vue';
 import ResultRenderer from './components/ResultRenderer.vue';
+import { pollTaskUntilDone } from './taskPolling';
 
 const route = useRoute();
 const router = useRouter();
 const { setTabTitle } = useTabs();
+const userStore = useUserStore();
 
 // 获取 API 基础 URL
 const apiBaseUrl = import.meta.env.VITE_GLOB_API_URL || '';
@@ -71,6 +73,26 @@ const tool = ref<AnalysisTool | null>(null);
 const loading = ref(false);
 const analyzing = ref(false);
 const activeTab = ref('data');
+const trialRestrictionMessage =
+  '当前账号暂未开通该功能。注册用户可使用示例数据体验分析。如需上传个人数据、保存结果到我的数据或提升每日分析次数，请联系管理员。';
+
+const isRegisteredTrialUser = computed(() => {
+  const roles = userStore.userInfo?.roles ?? [];
+  return roles.includes('注册用户');
+});
+
+const showTrialRestriction = () => {
+  Modal.info({
+    title: '当前账号暂未开通该功能',
+    content: trialRestrictionMessage,
+    okText: '我知道了',
+  });
+};
+
+const isTrialRestrictionError = (messageText: string) =>
+  messageText.includes('注册用户') ||
+  messageText.includes('暂未开通') ||
+  messageText.includes('今日示例分析次数已用完');
 
 // ========== 配置驱动计算属性 ==========
 const hasInputSchema = computed(() => {
@@ -516,8 +538,11 @@ const shouldReplaceCurrentShortTask = computed(
 
 interface ConverterSummary {
   input_file_name?: string;
+  input_file_size?: number;
   output_file_name?: string;
   conversion_direction?: string;
+  conversion_direction_label?: string;
+  source_file_name?: string;
   source_extension?: string;
   target_extension?: string;
   n_cells?: number;
@@ -543,6 +568,7 @@ interface ConverterFolderOption {
 
 const converterResultFiles = ref<TaskResultFile[]>([]);
 const converterSummary = ref<ConverterSummary | null>(null);
+const converterDownloading = ref(false);
 const converterSaveModalOpen = ref(false);
 const converterSaving = ref(false);
 const converterFolderPickerOpen = ref(false);
@@ -562,6 +588,38 @@ const converterMainFile = computed(() =>
     /_conver\.(h5ad|rds)$/i.test(file.name),
   ),
 );
+
+const converterDirectionLabels: Record<string, string> = {
+  h5ad_to_rds: 'H5AD -> RDS',
+  rds_to_h5ad: 'RDS -> H5AD',
+};
+
+const displayValueOrDash = (value?: null | string) => {
+  const trimmed = value?.trim();
+  return trimmed || '-';
+};
+
+const converterInputFileName = computed(() =>
+  displayValueOrDash(
+    converterSummary.value?.input_file_name ||
+      converterSummary.value?.source_file_name,
+  ),
+);
+
+const converterOutputFileName = computed(() =>
+  displayValueOrDash(
+    converterSummary.value?.output_file_name ||
+      converterMainFile.value?.name.split('/').pop(),
+  ),
+);
+
+const converterDirectionLabel = computed(() => {
+  const label = converterSummary.value?.conversion_direction_label;
+  if (label?.trim()) return label;
+
+  const direction = converterSummary.value?.conversion_direction;
+  return direction ? (converterDirectionLabels[direction] ?? direction) : '-';
+});
 
 const converterFolderOptions = computed<ConverterFolderOption[]>(() => {
   const options: ConverterFolderOption[] = [
@@ -593,6 +651,14 @@ const formatFileSize = (size?: number) => {
   }
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
 };
+
+const formatOptionalFileSize = (size?: number) =>
+  size && size > 0 ? formatFileSize(size) : '-';
+
+const converterOutputFileSize = computed(
+  () =>
+    converterSummary.value?.output_file_size ?? converterMainFile.value?.size,
+);
 
 const resetConverterResultState = () => {
   converterResultFiles.value = [];
@@ -752,11 +818,18 @@ const submitAnalysis = async () => {
     // 获取平台文件 ID
     const fileIds = dataFileSelectorRef.value?.getFileIds?.() ?? {};
 
-    // 合并 files 参数：优先使用平台文件 ID
-    const filesParam = { ...inputFiles.value, ...fileIds };
+    if (
+      isRegisteredTrialUser.value &&
+      (Object.keys(fileContents).length > 0 || Object.keys(fileIds).length > 0)
+    ) {
+      message.destroy();
+      analyzing.value = false;
+      showTrialRestriction();
+      return;
+    }
 
     const requestData = {
-      files: filesParam,
+      files: fileIds,
       file_contents: fileContents,
       file_urls: fileUrls,
       params: formParams.value,
@@ -800,17 +873,7 @@ const submitAnalysis = async () => {
     // 短时间任务：保持原有轮询逻辑
     message.loading('任务已提交，正在分析中...', 0);
 
-    // 轮询任务状态
-    const pollStatus = async (): Promise<TaskStatusResponse> => {
-      const status = await getTaskStatus(response.task_id);
-      if (status.status === 'pending' || status.status === 'running') {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        return pollStatus();
-      }
-      return status;
-    };
-
-    const finalStatus = await pollStatus();
+    const finalStatus = await pollTaskUntilDone(response.task_id, getTaskStatus);
     message.destroy();
 
     if (finalStatus.status === 'completed') {
@@ -839,7 +902,11 @@ const submitAnalysis = async () => {
     outputDir.value = '';
     taskFailed.value = true;
     errorMessage.value = error?.message || '分析失败，请重试';
-    message.error(error?.message || '分析失败，请重试');
+    if (isTrialRestrictionError(errorMessage.value)) {
+      showTrialRestriction();
+    } else {
+      message.error(errorMessage.value);
+    }
     console.error(error);
   } finally {
     analyzing.value = false;
@@ -904,32 +971,58 @@ const downloadConverterMainFile = async () => {
   if (!taskId.value || !converterMainFile.value) {
     return message.warning('暂无可下载的转换结果');
   }
-  const accessStore = useAccessStore();
-  const response = await fetch(
-    getTaskFileUrl(Number(taskId.value), converterMainFile.value.name),
-    {
-      headers: {
-        Authorization: accessStore.accessToken
-          ? `Bearer ${accessStore.accessToken}`
-          : '',
+
+  if (converterDownloading.value) return;
+
+  converterDownloading.value = true;
+  message.loading({
+    content: '正在下载转换文件，请稍候...',
+    key: 'converterDownload',
+    duration: 0,
+  });
+
+  try {
+    const accessStore = useAccessStore();
+    const response = await fetch(
+      getTaskFileUrl(Number(taskId.value), converterMainFile.value.name),
+      {
+        headers: {
+          Authorization: accessStore.accessToken
+            ? `Bearer ${accessStore.accessToken}`
+            : '',
+        },
       },
-    },
-  );
-  if (!response.ok) {
-    return message.error('下载失败，请重试');
+    );
+    if (!response.ok) {
+      return message.error({
+        content: '下载失败，请重试',
+        key: 'converterDownload',
+      });
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download =
+      converterMainFile.value.name.split('/').pop() ||
+      converterMainFile.value.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    return message.success({
+      content: '下载开始',
+      key: 'converterDownload',
+    });
+  } catch (error) {
+    console.error('Converter download failed:', error);
+    return message.error({
+      content: '下载失败，请重试',
+      key: 'converterDownload',
+    });
+  } finally {
+    converterDownloading.value = false;
   }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download =
-    converterMainFile.value.name.split('/').pop() ||
-    converterMainFile.value.name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-  return message.success('下载开始');
 };
 
 const selectConverterSaveFolder = (id: null | number, name: string) => {
@@ -941,6 +1034,10 @@ const selectConverterSaveFolder = (id: null | number, name: string) => {
 const openConverterSaveModal = async () => {
   if (!converterMainFile.value) {
     return message.warning('暂无可保存的转换结果');
+  }
+  if (isRegisteredTrialUser.value) {
+    showTrialRestriction();
+    return;
   }
   converterSaveFileName.value =
     converterMainFile.value.name.split('/').pop() || converterMainFile.value.name;
@@ -1296,7 +1393,12 @@ onMounted(async () => {
                 {{ hasResult ? '查看结果' : '结果预览' }}
               </Button>
               <div class="v-divider"></div>
-              <Button type="primary" size="small" @click="downloadResult">
+              <Button
+                type="primary"
+                size="small"
+                :loading="converterDownloading"
+                @click="downloadResult"
+              >
                 <Icon icon="mdi:download" /> 下载
               </Button>
             </Space>
@@ -1386,7 +1488,11 @@ onMounted(async () => {
                   </div>
                 </div>
                 <Space>
-                  <Button type="primary" @click="downloadConverterMainFile">
+                  <Button
+                    type="primary"
+                    :loading="converterDownloading"
+                    @click="downloadConverterMainFile"
+                  >
                     <Icon icon="mdi:download" /> 下载
                   </Button>
                   <Button @click="openConverterSaveModal">
@@ -1406,15 +1512,23 @@ onMounted(async () => {
                 <div class="converter-summary-grid">
                   <div>
                     <span>输入文件</span>
-                    <strong>{{ converterSummary.input_file_name }}</strong>
+                    <strong>{{ converterInputFileName }}</strong>
                   </div>
                   <div>
                     <span>输出文件</span>
-                    <strong>{{ converterSummary.output_file_name }}</strong>
+                    <strong>{{ converterOutputFileName }}</strong>
                   </div>
                   <div>
                     <span>转换方向</span>
-                    <strong>{{ converterSummary.conversion_direction }}</strong>
+                    <strong>{{ converterDirectionLabel }}</strong>
+                  </div>
+                  <div>
+                    <span>输入大小</span>
+                    <strong>
+                      {{
+                        formatOptionalFileSize(converterSummary.input_file_size)
+                      }}
+                    </strong>
                   </div>
                   <div>
                     <span>细胞数</span>
@@ -1427,7 +1541,7 @@ onMounted(async () => {
                   <div>
                     <span>输出大小</span>
                     <strong>
-                      {{ formatFileSize(converterSummary.output_file_size) }}
+                      {{ formatOptionalFileSize(converterOutputFileSize) }}
                     </strong>
                   </div>
                 </div>
@@ -1519,9 +1633,11 @@ onMounted(async () => {
                     v-model="inputFiles"
                     :schema="tool?.input_schema ?? null"
                     :example-data="tool?.example_data ?? null"
+                    :trial-example-only="isRegisteredTrialUser"
                     @headers-change="handleHeadersChange"
                     @metadata-change="handleMetadataChange"
                     @next-step="activeTab = 'params'"
+                    @restricted="showTrialRestriction"
                   />
                   <DataFileSelector
                     v-else
@@ -1531,9 +1647,11 @@ onMounted(async () => {
                       files: [{ key: 'data', label: '数据表', required: true }],
                     }"
                     :example-data="tool?.example_data ?? null"
+                    :trial-example-only="isRegisteredTrialUser"
                     @headers-change="handleHeadersChange"
                     @metadata-change="handleMetadataChange"
                     @next-step="activeTab = 'params'"
+                    @restricted="showTrialRestriction"
                   />
                 </div>
               </TabPane>
@@ -1627,7 +1745,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-@media (max-width: 1024px) {
+@media (max-width: 1180px) {
   .main-content {
     flex-direction: column;
     height: auto;
@@ -1724,7 +1842,7 @@ onMounted(async () => {
   flex: 1; /* Take remaining height */
   gap: 16px;
   min-height: 0; /* Important for nested scrolling */
-  padding: 0 160px 16px; /* Match CloudTools page padding */
+  padding: 0 clamp(16px, 4vw, 160px) 16px;
 }
 
 /* Control Panel (now Left) */
@@ -1769,15 +1887,15 @@ onMounted(async () => {
 }
 
 :deep(.config-tabs .ant-tabs-nav) {
-  padding: 0 16px;
+  padding: 0 12px;
   margin: 0;
   border-bottom: 1px solid #f1f5f9;
 }
 
 :deep(.config-tabs .ant-tabs-tab) {
-  padding: 16px 0;
-  margin: 0 16px 0 0;
-  font-size: 15px;
+  padding: 10px 0;
+  margin: 0 12px 0 0;
+  font-size: 14px;
   color: #64748b;
   transition: all 0.3s;
 }
@@ -1791,7 +1909,7 @@ onMounted(async () => {
 }
 
 :deep(.config-tabs .ant-tabs-tab-btn) {
-  padding: 6px 12px;
+  padding: 4px 10px;
   border-radius: 6px;
   transition: all 0.2s;
 }
@@ -1807,7 +1925,11 @@ onMounted(async () => {
 }
 
 .config-section {
-  padding: 20px 24px;
+  padding: 14px 16px;
+}
+
+.params-section {
+  padding: 10px 14px 12px;
 }
 
 .step-nav-area {
@@ -1837,6 +1959,7 @@ onMounted(async () => {
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-width: 0;
   overflow: hidden;
   background: #fff;
   border: 1px solid #e2e8f0;
@@ -1848,6 +1971,7 @@ onMounted(async () => {
 
 .panel-header {
   display: flex;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
@@ -1857,11 +1981,22 @@ onMounted(async () => {
 
 .panel-title-group {
   display: flex;
+  flex: 0 0 auto;
   gap: 8px;
   align-items: center;
+  min-width: max-content;
   font-size: 16px;
   font-weight: 600;
   color: #1e293b;
+  white-space: nowrap;
+}
+
+.panel-header :deep(.ant-space) {
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+  row-gap: 8px;
 }
 
 .panel-header-icon {
@@ -2469,7 +2604,7 @@ onMounted(async () => {
   border-radius: 8px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1180px) {
   .page-container {
     height: auto;
     min-height: 100vh;

@@ -61,6 +61,12 @@ export const STEP_ORDER: StepType[] = [
   'annotation',
 ];
 
+export const PIPELINE_STEP_ORDERS: Record<string, StepType[]> = {
+  scrna: STEP_ORDER,
+  scrna_subcluster: ['data_load', 'dim_cluster', 'find_marker', 'annotation'],
+  spatial: STEP_ORDER,
+};
+
 // 步骤标签
 export const STEP_LABELS: Record<string, string> = {
   data_load: '数据读取',

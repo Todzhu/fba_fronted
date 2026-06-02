@@ -2,12 +2,14 @@
 import type { FileItem as ApiFileItem } from '#/api/my-data';
 
 import { computed, onMounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 import { IconifyIcon } from '@vben/icons';
-import { useAccessStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@vben/stores';
 
 import { Breadcrumb, message, Modal } from 'ant-design-vue';
 
+import { useAuthStore } from '#/store';
 import AuthModal from '../landing/components/AuthModal.vue';
 
 import {
@@ -71,8 +73,23 @@ const currentPreviewFile = ref<FileItem | null>(null);
 
 // 登录状态
 const accessStore = useAccessStore();
+const userStore = useUserStore();
+const authStore = useAuthStore();
+const router = useRouter();
 const isLoggedIn = computed(() => !!accessStore.accessToken);
 const showAuthModal = ref(false);
+const checkingTrialAccess = ref(true);
+const trialMyDataMessage =
+  '当前账号可使用示例数据体验分析。如需上传和管理个人数据，请联系管理员开通权限。';
+const isRegisteredTrialUser = computed(() => {
+  const roles = userStore.userInfo?.roles ?? userStore.userRoles ?? [];
+  return roles.includes('注册用户');
+});
+
+const refreshCurrentUserInfo = async () => {
+  if (!isLoggedIn.value) return;
+  await authStore.fetchUserInfo();
+};
 
 // 存储用量统计
 const STORAGE_LIMIT = 10 * 1024 * 1024 * 1024; // 10GB
@@ -155,6 +172,12 @@ const fetchFiles = async () => {
     showAuthModal.value = true;
     return;
   }
+  if (isRegisteredTrialUser.value) {
+    allFiles.value = [];
+    totalFiles.value = 0;
+    selectedFiles.value = [];
+    return;
+  }
   loading.value = true;
   try {
     const params: { keyword?: string; page?: number; page_size?: number; parent_id?: number } = {
@@ -186,16 +209,27 @@ const fetchFiles = async () => {
 };
 
 // 登录成功后自动关闭弹窗并加载文件
-watch(isLoggedIn, (loggedIn) => {
+watch(isLoggedIn, async (loggedIn) => {
   if (loggedIn) {
     showAuthModal.value = false;
-    fetchFiles();
+    checkingTrialAccess.value = true;
+    await refreshCurrentUserInfo();
+    checkingTrialAccess.value = false;
+    if (!isRegisteredTrialUser.value) {
+      fetchFiles();
+      fetchStorageStats();
+    }
   }
 });
 
-onMounted(() => {
-  fetchFiles();
-  fetchStorageStats();
+onMounted(async () => {
+  checkingTrialAccess.value = true;
+  await refreshCurrentUserInfo();
+  checkingTrialAccess.value = false;
+  if (!isRegisteredTrialUser.value) {
+    fetchFiles();
+    fetchStorageStats();
+  }
 });
 
 // 拖拽上传
@@ -217,6 +251,10 @@ const handleDragLeave = () => {
 const handleDrop = (e: DragEvent) => {
   e.preventDefault();
   isDragging.value = false;
+  if (isRegisteredTrialUser.value) {
+    handleUpgradeStorage();
+    return;
+  }
   const droppedFiles = e.dataTransfer?.files;
   if (droppedFiles?.length) {
     handleUploadFiles(Array.from(droppedFiles));
@@ -246,6 +284,10 @@ const handleSelectionChange = (selection: FileItem[]) => {
 };
 
 const handleUpload = () => {
+  if (isRegisteredTrialUser.value) {
+    handleUpgradeStorage();
+    return;
+  }
   uploadModalOpen.value = true;
 };
 
@@ -292,6 +334,10 @@ const handleUploadFiles = async (filesToUpload: File[]) => {
 };
 
 const handleNewFolder = () => {
+  if (isRegisteredTrialUser.value) {
+    handleUpgradeStorage();
+    return;
+  }
   newFolderModalOpen.value = true;
 };
 
@@ -476,8 +522,8 @@ const handlePreview = (file: FileItem) => {
 
 const handleUpgradeStorage = () => {
   Modal.info({
-    title: '升级存储空间',
-    content: '如需升级存储空间，请联系管理员进行处理。',
+    title: '当前账号暂未开通该功能',
+    content: trialMyDataMessage,
     okText: '我知道了',
   });
 };
@@ -504,7 +550,38 @@ const handleUpgradeStorage = () => {
 
     <!-- Content Area -->
     <div class="mx-auto mt-6 max-w-7xl px-4 sm:px-6 lg:px-8">
-      <div class="content-layout">
+      <div
+        v-if="isRegisteredTrialUser"
+        class="rounded-2xl border border-slate-200 bg-white px-8 py-16 text-center shadow-sm"
+      >
+        <div
+          class="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-500"
+        >
+          <IconifyIcon icon="ant-design:lock-outlined" class="text-3xl" />
+        </div>
+        <h2 class="text-xl font-bold text-slate-900">个人数据空间暂未开通</h2>
+        <p class="mx-auto mt-3 max-w-xl text-sm leading-7 text-slate-500">
+          {{ trialMyDataMessage }}
+        </p>
+        <button
+          class="mt-6 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+          @click="router.push('/tools')"
+        >
+          去使用示例数据分析
+        </button>
+      </div>
+
+      <div
+        v-else-if="checkingTrialAccess"
+        class="rounded-2xl border border-slate-200 bg-white px-8 py-16 text-center shadow-sm"
+      >
+        <IconifyIcon
+          icon="ant-design:loading-outlined"
+          class="text-3xl text-blue-500"
+        />
+      </div>
+
+      <div v-else class="content-layout">
         <!-- 左侧边栏 -->
         <StorageSidebar
           :storage-used-str="storageUsedStr"

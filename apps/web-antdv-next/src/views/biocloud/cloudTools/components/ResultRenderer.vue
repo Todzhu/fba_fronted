@@ -26,6 +26,8 @@ import {
 
 import { getTaskFileUrl } from '#/api/analysis-tools';
 
+import { parseResultTable } from './resultTableParser';
+
 interface OutputItem {
   key: string;
   path: string;
@@ -98,7 +100,7 @@ const tryLoadHtmlReport = async (path = 'report.html') => {
 
 // 获取结果数据
 const fetchOutputData = async () => {
-  if ((!props.taskId && !props.outputDir)) return;
+  if (!props.taskId && !props.outputDir) return;
 
   loading.value = true;
   hasHtmlReport.value = false;
@@ -154,7 +156,7 @@ const fetchOutputData = async () => {
         }
         case 'table': {
           const text = await response.text();
-          outputData.value[output.key] = parseCSV(text || '');
+          outputData.value[output.key] = parseResultTable(text || '');
 
           break;
         }
@@ -172,31 +174,6 @@ const fetchOutputData = async () => {
   } finally {
     loading.value = false;
   }
-};
-
-// 解析 CSV
-const parseCSV = (text: string): { columns: any[]; data: any[] } => {
-  const lines = text.trim().split('\n');
-  if (lines.length === 0) return { columns: [], data: [] };
-
-  const headers = lines[0]!.split('\t');
-  const columns = headers.map((h) => ({
-    title: h,
-    dataIndex: h,
-    key: h,
-    ellipsis: true,
-  }));
-
-  const data = lines.slice(1).map((line, idx) => {
-    const values = line.split('\t');
-    const row: Record<string, number | string> = { key: idx };
-    headers.forEach((h, i) => {
-      row[h] = values[i] ?? '';
-    });
-    return row;
-  });
-
-  return { columns, data };
 };
 
 // 渲染 ECharts
@@ -243,8 +220,11 @@ onUnmounted(() => {
   <div class="result-renderer">
     <Spin :spinning="loading">
       <!-- 优先展示 HTML 报告 -->
-      <div v-if="hasHtmlReport" class="html-report-container w-full h-[800px]">
-        <iframe :src="htmlReportUrl" class="w-full h-full border-0 rounded-md"></iframe>
+      <div v-if="hasHtmlReport" class="html-report-container h-[800px] w-full">
+        <iframe
+          :src="htmlReportUrl"
+          class="h-full w-full rounded-md border-0"
+        ></iframe>
       </div>
 
       <template v-else-if="config?.outputs?.length">

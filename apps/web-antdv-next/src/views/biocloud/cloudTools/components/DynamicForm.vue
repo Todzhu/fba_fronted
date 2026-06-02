@@ -52,6 +52,7 @@ interface ParamSchema {
   properties?: Record<string, SchemaProperty>;
   required?: string[];
   order?: string[]; // 参数顺序
+  default_expanded_groups?: string[];
 }
 
 const props = withDefaults(
@@ -129,13 +130,74 @@ const groupedProperties = computed(() => {
   );
 });
 
-// 默认展开所有分组
+const defaultExpandedGroups = computed(
+  () => props.schema?.default_expanded_groups ?? [],
+);
+
+const MAX_EXPANDED_ITEMS = 8;
 const activeKeys = ref<string[]>([]);
+const collapseTouched = ref(false);
+
+const groupHasRequiredParam = (items: typeof properties.value): boolean => {
+  const requiredKeys = new Set(props.schema?.required ?? []);
+  return items.some((prop) => prop.required || requiredKeys.has(prop.key));
+};
+
+const getDefaultActiveKeys = (
+  groups: Array<[string, typeof properties.value]>,
+): string[] => {
+  const groupNames = new Set(groups.map(([name]) => name));
+  const configuredGroups = props.schema?.default_expanded_groups ?? [];
+  if (configuredGroups.length > 0) {
+    return configuredGroups.filter((name) => groupNames.has(name));
+  }
+
+  const totalItems = groups.reduce((sum, [, items]) => sum + items.length, 0);
+  if (groups.length <= 2 || totalItems <= MAX_EXPANDED_ITEMS) {
+    return groups.map(([name]) => name);
+  }
+
+  const requiredGroups = groups
+    .filter(([, items]) => groupHasRequiredParam(items))
+    .map(([name]) => name);
+  const firstGroup = groups[0]?.[0];
+  const firstOptionalGroup = groups.find(
+    ([name]) => !requiredGroups.includes(name),
+  )?.[0];
+
+  return Array.from(
+    new Set(
+      [firstGroup, ...requiredGroups, firstOptionalGroup].filter(
+        Boolean,
+      ) as string[],
+    ),
+  );
+};
+
+type CollapseKey = number | string;
+
+const normalizeActiveKeys = (keys: CollapseKey | CollapseKey[]) =>
+  (Array.isArray(keys) ? keys : [keys]).map(String);
+
+const handleCollapseChange = (keys: CollapseKey | CollapseKey[]) => {
+  collapseTouched.value = true;
+  activeKeys.value = normalizeActiveKeys(keys);
+};
 
 watch(
-  groupedProperties,
-  (groups) => {
-    activeKeys.value = groups.map(([name]) => name);
+  [groupedProperties, defaultExpandedGroups],
+  ([groups]) => {
+    const groupNames = groups.map(([name]) => name);
+    if (collapseTouched.value) {
+      const preservedKeys = activeKeys.value.filter((key) =>
+        groupNames.includes(key),
+      );
+      activeKeys.value =
+        preservedKeys.length > 0 ? preservedKeys : getDefaultActiveKeys(groups);
+      return;
+    }
+
+    activeKeys.value = getDefaultActiveKeys(groups);
   },
   { immediate: true },
 );
@@ -347,6 +409,25 @@ const getWidgetType = (prop: SchemaPropertyWithKey): string => {
   return 'text';
 };
 
+const getParamItemClass = (prop: SchemaPropertyWithKey) => {
+  const widgetType = getWidgetType(prop);
+  return [
+    'param-item',
+    'param-item--inline',
+    {
+      'param-item--wide':
+        ['metadata_pair_select', 'multi-select'].includes(widgetType) ||
+        prop.key === 'split_by' ||
+        hasPalettePreview(prop),
+      'param-item--comparison-column': prop.key === 'split_by',
+      'param-item--multi-select': widgetType === 'multi-select',
+      'param-item--pair-select': widgetType === 'metadata_pair_select',
+      'param-item--palette-preview': hasPalettePreview(prop),
+      'param-item--switch': widgetType === 'switch',
+    },
+  ];
+};
+
 // 重置表单
 const handleReset = () => {
   emit('reset');
@@ -374,15 +455,26 @@ const handleSubmit = () => {
     <Collapse
       v-model:active-key="activeKeys"
       :bordered="false"
+      class="compact-collapse"
       expand-icon-position="start"
+      @change="handleCollapseChange"
     >
       <CollapsePanel
         v-for="[groupName, items] in groupedProperties"
         :key="groupName"
-        :header="groupName"
       >
+        <template #header>
+          <div class="param-group-header">
+            <span>{{ groupName }}</span>
+            <span class="param-count">{{ items.length }}</span>
+          </div>
+        </template>
         <div class="param-grid">
-          <div v-for="prop in items" :key="prop.key" class="param-item">
+          <div
+            v-for="prop in items"
+            :key="prop.key"
+            :class="getParamItemClass(prop)"
+          >
             <!-- 标签 -->
             <div class="param-label">
               <span class="label-text">{{ prop.title || prop.key }}</span>
@@ -501,22 +593,25 @@ const handleSubmit = () => {
               </template>
 
               <!-- 多选下拉（metadata_value_select 运行时转为 multi-select） -->
-              <template
-                v-else-if="getWidgetType(prop) === 'multi-select'"
-              >
+              <template v-else-if="getWidgetType(prop) === 'multi-select'">
                 <Select
                   :value="
                     (modelValue[prop.key]
-                      ? (typeof modelValue[prop.key] === 'string'
-                          ? (modelValue[prop.key] as string).split(',').filter(Boolean)
-                          : modelValue[prop.key])
+                      ? typeof modelValue[prop.key] === 'string'
+                        ? (modelValue[prop.key] as string)
+                            .split(',')
+                            .filter(Boolean)
+                        : modelValue[prop.key]
                       : []) as any
                   "
                   mode="multiple"
                   class="select-input"
                   :placeholder="prop.description || '请先选择对应的列名'"
                   :disabled="!prop.enum || prop.enum.length === 0"
-                  @change="(val: any) => updateField(prop.key, (val as string[]).join(','))"
+                  @change="
+                    (val: any) =>
+                      updateField(prop.key, (val as string[]).join(','))
+                  "
                 >
                   <Select.Option
                     v-for="opt in prop.enum"
@@ -541,9 +636,7 @@ const handleSubmit = () => {
                     class="pair-select-input"
                     placeholder="选择分组 A"
                     :disabled="!prop.enum || prop.enum.length < 2"
-                    @change="
-                      (val: any) => updatePairValue(prop.key, 0, val)
-                    "
+                    @change="(val: any) => updatePairValue(prop.key, 0, val)"
                   >
                     <Select.Option
                       v-for="opt in prop.enum"
@@ -565,9 +658,7 @@ const handleSubmit = () => {
                     class="pair-select-input"
                     placeholder="选择分组 B"
                     :disabled="!prop.enum || prop.enum.length < 2"
-                    @change="
-                      (val: any) => updatePairValue(prop.key, 1, val)
-                    "
+                    @change="(val: any) => updatePairValue(prop.key, 1, val)"
                   >
                     <Select.Option
                       v-for="opt in prop.enum"
@@ -586,6 +677,7 @@ const handleSubmit = () => {
               <!-- 开关 -->
               <template v-else-if="getWidgetType(prop) === 'switch'">
                 <Switch
+                  size="small"
                   :checked="
                     (modelValue[prop.key] as boolean) ?? prop.default ?? false
                   "
@@ -696,17 +788,10 @@ const handleSubmit = () => {
 </template>
 
 <style scoped>
-/* 响应式：小屏幕单列 */
-@media (max-width: 768px) {
-  .param-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
 .dynamic-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
 /* 数据参数标签 */
@@ -734,59 +819,133 @@ const handleSubmit = () => {
 
 :deep(.ant-collapse-item) {
   border-bottom: none !important; /* 去掉冗杂细线 */
-  margin-bottom: 24px;
+  margin-bottom: 8px;
 }
 
 :deep(.ant-collapse-header) {
-  padding: 10px 16px !important;
-  margin-bottom: 16px;
-  font-size: 15px;
+  min-height: 34px;
+  padding: 6px 10px !important;
+  margin-bottom: 6px;
+  font-size: 14px;
   font-weight: 600;
   color: #1e293b !important;
   background: #f8fafc;
-  border-left: 4px solid #3b82f6;
-  border-radius: 4px;
+  border-left: 3px solid #3b82f6;
+  border-radius: 6px;
   align-items: center !important;
 }
 
+.param-group-header {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.param-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
 :deep(.ant-collapse-content-box) {
-  padding: 4px 8px !important;
+  padding: 0 4px 0 !important;
 }
 
 /* ========== 参数网格布局（响应式） ========== */
 .param-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px 28px; /* 增加一定间距提供呼吸感 */
+  grid-template-columns: repeat(auto-fit, minmax(252px, 1fr));
+  gap: 8px 12px;
+  align-items: start;
 }
 
 /* 单个参数项 */
 .param-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  gap: 6px 8px;
+  align-items: center;
+  min-height: 34px;
   padding: 0;
   background: transparent;
   border: none;
   border-radius: 0;
 }
 
+.param-item--inline {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.param-item--wide {
+  grid-column: 1 / -1;
+}
+
+.param-item--switch {
+  align-items: center;
+}
+
+.param-item--multi-select {
+  grid-template-columns: 1fr;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.param-item--multi-select .param-label {
+  padding-top: 0;
+}
+
+.param-item--multi-select :deep(.ant-select-selector) {
+  height: auto !important;
+  max-height: 92px;
+  overflow-y: auto;
+  align-items: flex-start;
+}
+
+.param-item--multi-select :deep(.ant-select-selection-overflow) {
+  row-gap: 4px;
+  overflow-y: auto;
+  align-content: flex-start;
+}
+
+.param-item--comparison-column,
+.param-item--pair-select {
+  grid-template-columns: 1fr;
+  gap: 6px;
+  align-items: stretch;
+}
+
 /* 标签样式升维 */
 .param-label {
   display: flex;
+  gap: 4px;
   align-items: center;
-  margin-bottom: 2px;
-  font-size: 13px;
+  min-width: 0;
+  min-height: 0;
+  margin-bottom: 0;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 1.25;
   color: #475569; /* 加深一点，提升可读性 */
 }
 
 .label-text {
-  margin-right: 4px;
+  min-width: 0;
+  margin-right: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .help-icon {
-  font-size: 14px;
+  flex: 0 0 auto;
+  font-size: 13px;
   color: #94a3b8;
   cursor: help;
   transition: color 0.2s ease;
@@ -818,12 +977,13 @@ const handleSubmit = () => {
   margin-right: 2px;
   margin-left: 4px;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 13px;
   color: #f43f5e; /* 更高级醒目的玫瑰红 */
 }
 
 /* 输入控件容器 */
 .param-control {
+  min-width: 0;
   width: 100%;
 }
 
@@ -831,7 +991,7 @@ const handleSubmit = () => {
 .slider-input-combo {
   display: flex;
   flex: 1;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
 }
 
@@ -840,13 +1000,14 @@ const handleSubmit = () => {
 }
 
 .number-input {
-  width: 80px;
+  width: 64px;
 }
 
 /* 其他输入控件 */
 .select-input {
   flex: 1;
-  min-width: 200px;
+  min-width: 0;
+  width: 100%;
 }
 
 .palette-select-option {
@@ -885,10 +1046,10 @@ const handleSubmit = () => {
   gap: 2px;
   align-items: center;
   width: 100%;
-  max-width: 260px;
-  height: 20px;
+  max-width: none;
+  height: 12px;
   padding: 2px;
-  margin-top: 6px;
+  margin-top: 2px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
@@ -912,12 +1073,22 @@ const handleSubmit = () => {
 
 .pair-select-input {
   min-width: 0;
+  width: 100%;
 }
 
 .pair-select-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 7px;
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
 }
 
 .number-input-only {
@@ -954,15 +1125,20 @@ const handleSubmit = () => {
 
 /* 底部操作按钮模块化重构 */
 .form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   align-items: center;
   justify-content: flex-end; /* 主要行动靠右 */
-  padding: 16px 20px;
-  margin-top: 24px;
-  background: #f8fafc;
-  border: 1px solid #f1f5f9;
-  border-radius: 12px;
+  padding: 8px 10px;
+  margin: 8px -4px 0;
+  background: rgb(248 250 252 / 96%);
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 -8px 18px rgb(15 23 42 / 8%);
+  backdrop-filter: blur(6px);
 }
 
 /* 重置推至最左侧边界 */
@@ -973,6 +1149,9 @@ const handleSubmit = () => {
 }
 
 .form-actions .ant-btn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
   border-radius: 8px;
 }
 
@@ -981,8 +1160,8 @@ const handleSubmit = () => {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   border: none;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-  height: 34px;
-  padding: 0 24px;
+  height: 30px;
+  padding: 0 16px;
   font-weight: 600;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1005,6 +1184,8 @@ const handleSubmit = () => {
 :deep(.ant-input),
 :deep(.ant-input-number),
 :deep(.ant-select-selector) {
+  min-height: 34px;
+  height: 34px;
   background-color: #f8fafc !important;
   border-color: #e2e8f0 !important;
   border-radius: 8px !important;
@@ -1025,7 +1206,39 @@ const handleSubmit = () => {
 
 /* 确保输入框内的值显示为正常深色（非 placeholder 样式） */
 :deep(.ant-input) {
+  height: 34px;
   color: #1e293b !important;
+}
+
+:deep(.ant-input-number-input) {
+  height: 32px !important;
+}
+
+:deep(.ant-select-single .ant-select-selector .ant-select-selection-item),
+:deep(
+  .ant-select-single .ant-select-selector .ant-select-selection-placeholder
+) {
+  line-height: 32px !important;
+}
+
+:deep(.ant-select-multiple .ant-select-selector) {
+  height: auto !important;
+  min-height: 34px;
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+}
+
+:deep(.ant-select-multiple .ant-select-selection-overflow) {
+  row-gap: 4px;
+  align-content: flex-start;
+}
+
+:deep(.ant-select-multiple .ant-select-selection-item) {
+  max-width: 100%;
+}
+
+:deep(.ant-slider) {
+  margin: 8px 4px;
 }
 
 :deep(.ant-input::placeholder) {
@@ -1042,5 +1255,23 @@ const handleSubmit = () => {
 
 :deep(.ant-switch-checked) {
   background-color: #3b82f6;
+}
+
+@media (max-width: 768px) {
+  .param-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .param-item--inline {
+    grid-template-columns: 1fr;
+  }
+
+  .param-label {
+    min-height: 18px;
+  }
+
+  .form-actions {
+    flex-wrap: wrap;
+  }
 }
 </style>

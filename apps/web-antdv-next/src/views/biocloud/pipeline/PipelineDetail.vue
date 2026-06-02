@@ -11,6 +11,8 @@ import type { ClusterMarkersTable } from '#/api/pipeline';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import { useUserStore } from '@vben/stores';
+
 import {
   ArrowLeft,
   BookOpen,
@@ -27,7 +29,7 @@ import {
   Tag,
   X,
 } from 'lucide-vue-next';
-import { message } from 'ant-design-vue';
+import { message, Modal } from 'ant-design-vue';
 
 import {
   generateDotplot as generateDotplotApi,
@@ -56,6 +58,7 @@ import StepStatsSummary from './components/StepStatsSummary.vue';
 
 const route = useRoute();
 const router = useRouter();
+const userStore = useUserStore();
 
 const pipeline = ref<null | Pipeline>(null);
 const loading = ref(false);
@@ -63,6 +66,28 @@ const activeStepIndex = ref(0);
 const running = ref(false);
 const activeContentTab = ref<'params' | 'results'>('params');
 const advancedParamsOpenByStep = ref<Record<number, boolean>>({});
+const trialRestrictionMessage =
+  '当前账号暂未开通该功能。注册用户可使用示例数据体验分析。如需上传个人数据、保存结果到我的数据或提升每日分析次数，请联系管理员。';
+const isRegisteredTrialUser = computed(() =>
+  (userStore.userInfo?.roles ?? []).includes('注册用户'),
+);
+
+const showTrialRestriction = (content = trialRestrictionMessage) => {
+  Modal.info({
+    title: '功能暂未开通',
+    content,
+    okText: '知道了',
+  });
+};
+
+const isTrialRestrictionError = (messageText?: string) => {
+  if (!messageText) return false;
+  return (
+    messageText.includes('注册用户') ||
+    messageText.includes('暂未开通') ||
+    messageText.includes('今日示例分析次数已用完')
+  );
+};
 
 // ========== 图片放大预览 ==========
 const lightboxUrl = ref('');
@@ -512,7 +537,12 @@ const handleAutoAnnotate = async () => {
     message.success(`已生成 ${Object.keys(result).length} 个 Cluster 的自动注释参考`);
   } catch (error) {
     console.error('自动注释失败:', error);
-    message.error('自动注释失败，请检查降维聚类步骤是否完成');
+    const errorMessage = (error as any)?.message || '';
+    if (isTrialRestrictionError(errorMessage)) {
+      showTrialRestriction(errorMessage);
+    } else {
+      message.error('自动注释失败，请检查降维聚类步骤是否完成');
+    }
   } finally {
     autoAnnotateLoading.value = false;
   }
@@ -635,6 +665,10 @@ const submitClusterAnnotation = async () => {
     startPolling(activeStepIndex.value);
   } catch (error) {
     console.error('提交注释失败:', error);
+    const errorMessage = (error as any)?.message || '';
+    if (isTrialRestrictionError(errorMessage)) {
+      showTrialRestriction(errorMessage);
+    }
     running.value = false;
   }
 };
@@ -663,6 +697,10 @@ const showFolderPicker = ref(false);
 // 打开保存弹窗
 const handleSaveToMyData = async () => {
   if (!pipeline.value) return;
+  if (isRegisteredTrialUser.value) {
+    showTrialRestriction();
+    return;
+  }
   saveFileName.value = `${pipeline.value.name}_annotated`;
   saveTargetFolderId.value = null;
   saveTargetFolderName.value = '根目录';
@@ -702,7 +740,12 @@ const confirmSaveToMyData = async () => {
     showSaveModal.value = false;
     message.success(`已保存到「${saveTargetFolderName.value}」: ${res.name}`);
   } catch (err: any) {
-    message.error(`保存失败: ${err?.message || '未知错误'}`);
+    const errorMessage = err?.message || '未知错误';
+    if (isTrialRestrictionError(errorMessage)) {
+      showTrialRestriction(errorMessage);
+    } else {
+      message.error(`保存失败: ${errorMessage}`);
+    }
   } finally {
     savingH5ad.value = false;
   }
@@ -825,6 +868,10 @@ const handleRunStep = async () => {
     startPolling(activeStepIndex.value);
   } catch (error) {
     console.error('运行步骤失败:', error);
+    const errorMessage = (error as any)?.message || '';
+    if (isTrialRestrictionError(errorMessage)) {
+      showTrialRestriction(errorMessage);
+    }
     running.value = false;
   }
 };

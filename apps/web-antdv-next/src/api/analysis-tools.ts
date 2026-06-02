@@ -1,5 +1,7 @@
 import { miniRequestClient, requestClient } from '#/api/request';
 
+const ANALYSIS_TASK_SUBMIT_TIMEOUT = 2 * 60 * 1000;
+
 export interface AnalysisTool {
   id: number;
   title: string;
@@ -312,6 +314,7 @@ export async function executeAnalysisTool(
   return requestClient.post<ExecuteToolResponse>(
     `/api/v1/sys/analysis-tools/${toolId}/execute`,
     data,
+    { timeout: ANALYSIS_TASK_SUBMIT_TIMEOUT },
   );
 }
 
@@ -325,6 +328,7 @@ export async function rerunAnalysisTask(
   return requestClient.post<ExecuteToolResponse>(
     `/api/v1/sys/analysis-tools/tasks/${taskId}/rerun`,
     data,
+    { timeout: ANALYSIS_TASK_SUBMIT_TIMEOUT },
   );
 }
 
@@ -338,6 +342,7 @@ export async function replaceRunAnalysisTask(
   return requestClient.post<ExecuteToolResponse>(
     `/api/v1/sys/analysis-tools/tasks/${taskId}/replace-run`,
     data,
+    { timeout: ANALYSIS_TASK_SUBMIT_TIMEOUT },
   );
 }
 

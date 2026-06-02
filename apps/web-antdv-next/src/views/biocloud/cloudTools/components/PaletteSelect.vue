@@ -146,7 +146,9 @@ const getGradientStyle = (colors: string[]) => {
 
 <style scoped>
 .palette-select {
-  min-width: 180px;
+  width: 100%;
+  min-width: 0;
+  max-width: 280px;
 }
 
 /* 下拉选项样式 */
